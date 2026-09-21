@@ -20,7 +20,7 @@ export function StatCard({
   valueClassName?: string;
 }) {
   return (
-    <Card className={cn("gap-0 py-5", className)}>
+    <Card className={cn("gap-0 py-5 transition-all duration-[250ms] hover:-translate-y-1.5 hover:shadow-soft-lg", className)}>
       <CardContent className="flex items-start justify-between gap-4">
         <div className="min-w-0 space-y-1.5">
           <p className="text-muted-foreground text-sm font-medium">{label}</p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -119,7 +120,13 @@ export function WritingTaskEditorDialog({
     onOpenChange(false);
   }
 
-  const canSave = title.trim() && prompt.trim() && assignedStudentIds.length > 0;
+  // Assigning students is deliberately NOT required to save: a teacher with
+  // zero students currently on their roster (or who just wants to draft the
+  // content first) must still be able to save — the task already starts as
+  // an unpublished DRAFT that's invisible to everyone regardless, exactly
+  // like an assignment with nobody picked yet. Students can be added later
+  // via Edit once the roster has someone.
+  const canSave = Boolean(title.trim() && prompt.trim());
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -239,7 +246,14 @@ export function WritingTaskEditorDialog({
               )}
             </div>
             {students.length === 0 ? (
-              <p className="text-muted-foreground text-sm">You don&apos;t have any students assigned to you yet.</p>
+              <p className="text-muted-foreground text-sm">
+                You don&apos;t have any students assigned to you yet — you can still save this assignment now and pick
+                students later from{" "}
+                <Link href="/teacher/students" className="text-accent hover:underline">
+                  Students
+                </Link>
+                .
+              </p>
             ) : (
               <div className="border-border/70 max-h-48 space-y-2 overflow-y-auto rounded-xl border p-3">
                 {students.map((student) => (
@@ -254,7 +268,9 @@ export function WritingTaskEditorDialog({
               </div>
             )}
             {students.length > 0 && assignedStudentIds.length === 0 && (
-              <p className="text-destructive text-xs">Assign at least one student.</p>
+              <p className="text-muted-foreground text-xs">
+                No students selected yet — this assignment won&apos;t be visible to anyone until you assign at least one.
+              </p>
             )}
           </div>
         </div>

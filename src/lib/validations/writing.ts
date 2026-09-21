@@ -55,7 +55,12 @@ export const createWritingTaskSchema = z
     visualDescription: z.string().trim().max(2000).optional(),
     targetBand: z.number().min(0, "Target band must be between 0 and 9.").max(9, "Target band must be between 0 and 9.").optional(),
     dueDate: z.coerce.date().optional(),
-    assignedStudentIds: z.array(z.string().trim().min(1)).min(1, "Assign at least one student."),
+    // No `.min(1)` here on purpose: a teacher with zero students currently
+    // assigned to them (or who just wants to draft the content first) must
+    // still be able to save the assignment — exactly like it already starts
+    // as an unpublished DRAFT with no students able to see it either way.
+    // Students can be assigned later via Edit once the roster has someone.
+    assignedStudentIds: z.array(z.string().trim().min(1)),
   })
   .refine((data) => categoryMatchesTaskNumber(data.taskNumber, data.category), {
     message: "That category doesn't belong to the selected task number.",

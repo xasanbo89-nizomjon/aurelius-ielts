@@ -159,6 +159,16 @@ model User {
   image       String?
   role        Role    @default(STUDENT)
 
+  /// Daily Login Streak (dashboard header) — consecutive CALENDAR days this
+  /// user has visited a dashboard page. Deliberately separate from the
+  /// Phase 15 StudyStreak model (StudentProfile-only, gated behind 5 minutes
+  /// of real study activity, tied to coin rewards): this one belongs on User
+  /// because both Students and Teachers see it in the shared dashboard
+  /// header, and it increments on mere visit, not on any study threshold.
+  currentLoginStreak Int       @default(0)
+  longestLoginStreak Int       @default(0)
+  lastLoginDate      DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

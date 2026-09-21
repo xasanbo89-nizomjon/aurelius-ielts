@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { requireTeacherProfile } from "@/lib/session";
-import { getTeacherNotifications } from "@/lib/notifications";
+import { recordLoginAndGetStreak } from "@/lib/login-streak";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { TEACHER_NAV_ITEMS } from "@/lib/nav-config";
 
@@ -10,11 +10,11 @@ import { TEACHER_NAV_ITEMS } from "@/lib/nav-config";
 export const dynamic = "force-dynamic";
 
 export default async function TeacherLayout({ children }: { children: ReactNode }) {
-  const { user, profile } = await requireTeacherProfile();
-  const notifications = await getTeacherNotifications(profile.id);
+  const { user } = await requireTeacherProfile();
+  const streakCount = await recordLoginAndGetStreak(user.id);
 
   return (
-    <DashboardShell navItems={TEACHER_NAV_ITEMS} role="TEACHER" user={user} notifications={notifications}>
+    <DashboardShell navItems={TEACHER_NAV_ITEMS} role="TEACHER" user={user} streakCount={streakCount}>
       {children}
     </DashboardShell>
   );

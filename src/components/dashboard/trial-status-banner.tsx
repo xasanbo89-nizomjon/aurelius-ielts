@@ -21,7 +21,7 @@ export function TrialStatusBanner({ summary }: { summary: SubscriptionSummary })
           <Lock className="size-4 shrink-0" aria-hidden="true" />
           Your free trial has ended — start or submit tests requires an upgrade.
         </p>
-        <Button asChild size="sm">
+        <Button asChild size="sm" className="transition-all duration-[250ms] hover:-translate-y-1">
           <Link href="/student/subscription?upgrade=1">Upgrade to Premium</Link>
         </Button>
       </div>
@@ -42,7 +42,12 @@ export function TrialStatusBanner({ summary }: { summary: SubscriptionSummary })
           <CalendarClock className="size-4 shrink-0" aria-hidden="true" />
           Trial: {summary.daysRemaining} day{summary.daysRemaining === 1 ? "" : "s"} remaining
         </p>
-        <Button asChild size="sm" variant={urgent ? "default" : "outline"}>
+        <Button
+          asChild
+          size="sm"
+          variant={urgent ? "default" : "outline"}
+          className="transition-all duration-[250ms] hover:-translate-y-1"
+        >
           <Link href="/student/subscription">View subscription</Link>
         </Button>
       </div>

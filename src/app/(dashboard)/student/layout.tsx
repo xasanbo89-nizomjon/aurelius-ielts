@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { requireStudentProfile } from "@/lib/session";
-import { getStudentNotifications } from "@/lib/notifications";
+import { recordLoginAndGetStreak } from "@/lib/login-streak";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { STUDENT_NAV_ITEMS } from "@/lib/nav-config";
 
@@ -10,11 +10,11 @@ import { STUDENT_NAV_ITEMS } from "@/lib/nav-config";
 export const dynamic = "force-dynamic";
 
 export default async function StudentLayout({ children }: { children: ReactNode }) {
-  const { user, profile } = await requireStudentProfile();
-  const notifications = await getStudentNotifications(profile.id, profile.teacherId);
+  const { user } = await requireStudentProfile();
+  const streakCount = await recordLoginAndGetStreak(user.id);
 
   return (
-    <DashboardShell navItems={STUDENT_NAV_ITEMS} role="STUDENT" user={user} notifications={notifications}>
+    <DashboardShell navItems={STUDENT_NAV_ITEMS} role="STUDENT" user={user} streakCount={streakCount}>
       {children}
     </DashboardShell>
   );

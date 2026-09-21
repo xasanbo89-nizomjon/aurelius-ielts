@@ -1,24 +1,23 @@
 import type { ReactNode } from "react";
 
 import type { NavItem } from "@/lib/nav-config";
-import type { NotificationFeed } from "@/lib/notifications";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
-import { NotificationsMenu } from "@/components/layout/notifications-menu";
+import { DailyStreakBadge } from "@/components/layout/daily-streak-badge";
 import { UserMenu } from "@/components/layout/user-menu";
 
 export function DashboardShell({
   navItems,
   role,
   user,
-  notifications,
+  streakCount,
   children,
 }: {
   navItems: NavItem[];
   role: "STUDENT" | "TEACHER";
   user: { name?: string | null; email?: string | null; image?: string | null };
-  notifications: NotificationFeed;
+  streakCount: number;
   children: ReactNode;
 }) {
   return (
@@ -44,7 +43,7 @@ export function DashboardShell({
         <header className="bg-background/85 border-border/70 sticky top-0 z-30 flex h-18 items-center gap-1.5 border-b px-4 backdrop-blur-sm sm:px-6 sm:gap-2 lg:px-10">
           <MobileSidebar items={navItems} />
           <div className="min-w-0 flex-1" />
-          <NotificationsMenu {...notifications} />
+          <DailyStreakBadge streakCount={streakCount} />
           <UserMenu name={user.name} email={user.email} image={user.image} role={role} />
         </header>
 

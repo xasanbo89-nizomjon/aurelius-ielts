@@ -22,7 +22,7 @@ export function SkillCard({
       href={href}
       className="group focus-visible:ring-ring/50 block h-full rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
-      <Card className="h-full gap-5 py-6 transition-all group-hover:-translate-y-0.5 group-hover:shadow-soft-lg">
+      <Card className="h-full gap-5 py-6 transition-all duration-[250ms] group-hover:-translate-y-1.5 group-hover:shadow-soft-lg">
         <div className="flex items-start justify-between px-6">
           <span className="bg-secondary text-accent flex size-11 items-center justify-center rounded-xl">
             <Icon className="size-5.5" strokeWidth={1.75} />
