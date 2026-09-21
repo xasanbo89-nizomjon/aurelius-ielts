@@ -50,10 +50,10 @@ export function WritingAnalysisView({ analysis, content }: { analysis: WritingAn
       </Card>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <SubBandCard label="Grammar" value={analysis.grammarBand} />
-        <SubBandCard label="Vocabulary" value={analysis.vocabularyBand} />
-        <SubBandCard label="Coherence" value={analysis.coherenceBand} />
         <SubBandCard label="Task Response" value={analysis.taskResponseBand} />
+        <SubBandCard label="Coherence & Cohesion" value={analysis.coherenceBand} />
+        <SubBandCard label="Lexical Resource" value={analysis.vocabularyBand} />
+        <SubBandCard label="Grammatical Range & Accuracy" value={analysis.grammarBand} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

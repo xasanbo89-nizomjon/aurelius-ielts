@@ -55,6 +55,7 @@ export const createWritingTaskSchema = z
     visualDescription: z.string().trim().max(2000).optional(),
     targetBand: z.number().min(0, "Target band must be between 0 and 9.").max(9, "Target band must be between 0 and 9.").optional(),
     dueDate: z.coerce.date().optional(),
+    assignedStudentIds: z.array(z.string().trim().min(1)).min(1, "Assign at least one student."),
   })
   .refine((data) => categoryMatchesTaskNumber(data.taskNumber, data.category), {
     message: "That category doesn't belong to the selected task number.",
@@ -62,13 +63,17 @@ export const createWritingTaskSchema = z
   });
 export type CreateWritingTaskInput = z.infer<typeof createWritingTaskSchema>;
 
-/** A draft can be nearly empty while the student is still writing — no minimum content length. */
+/**
+ * Architecture Fix — a student may only ever respond to a real teacher-
+ * assigned task. `taskId` is required and is the ONLY thing the client
+ * supplies about the assignment; taskType/category/prompt are always looked
+ * up server-side from the real WritingTask row (see src/lib/ai/writing.ts),
+ * never trusted from the client. A draft can be nearly empty while the
+ * student is still writing — no minimum content length.
+ */
 export const writingDraftSchema = z.object({
   submissionId: z.string().trim().min(1).optional(),
-  taskId: z.string().trim().min(1).optional(),
-  taskType: writingTaskTypeSchema,
-  category: writingTaskCategorySchema.optional(),
-  prompt: z.string().trim().min(10, "Add the task prompt you're responding to.").max(2000),
+  taskId: z.string().trim().min(1, "Choose an assignment first."),
   content: z.string().trim().max(8000),
 });
 export type WritingDraftInput = z.infer<typeof writingDraftSchema>;

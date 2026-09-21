@@ -86,6 +86,18 @@ export async function getStudentRoster(
   return { students, total, isRootView };
 }
 
+export type StudentOption = { id: string; name: string | null; email: string };
+
+/** Every real student assigned to this teacher — options for assignment pickers (e.g. Writing Assignments). */
+export async function listStudentsForTeacher(teacherId: string): Promise<StudentOption[]> {
+  const students = await prisma.studentProfile.findMany({
+    where: { teacherId },
+    orderBy: { user: { name: "asc" } },
+    select: { id: true, user: { select: { name: true, email: true } } },
+  });
+  return students.map((student) => ({ id: student.id, name: student.user.name, email: student.user.email }));
+}
+
 export type TeacherOption = { id: string; name: string | null; email: string };
 
 /** Every real teacher account — options for the root admin's Assign Teacher control. */

@@ -1,93 +1,45 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { CalendarClock, Loader2, Target } from "lucide-react";
 import { toast } from "sonner";
 
 import { saveDraftAction, submitEssayAction } from "@/actions/writing.actions";
-import type { WritingTaskOption } from "@/lib/writing-tasks";
+import type { AssignedWritingTask } from "@/lib/writing-tasks";
 import type { DraftForEdit } from "@/lib/ai/writing";
-import type { WritingTaskCategoryValue } from "@/lib/validations/writing";
-import { WRITING_TASK_CATEGORY_LABELS } from "@/lib/labels";
+import { WRITING_TASK_CATEGORY_LABELS, WRITING_TASK_NUMBER_LABELS } from "@/lib/labels";
 import { useStudyHeartbeat } from "@/hooks/use-study-heartbeat";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
-type TaskTypeValue = "Task 1" | "Task 2";
-
-function taskTypeForTask(task: WritingTaskOption): TaskTypeValue {
-  return task.taskNumber === "TASK_1" ? "Task 1" : "Task 2";
-}
-
-export function WritingSubmissionForm({
-  tasks,
-  draft,
-  initialTaskId,
-}: {
-  tasks: WritingTaskOption[];
-  draft: DraftForEdit | null;
-  /** Preselects a task bank entry, e.g. arriving from "Open" on /student/writing/tasks. Ignored once a draft is loaded (the draft's own task wins). */
-  initialTaskId?: string;
-}) {
+/**
+ * Architecture Fix — a student responds to a real, teacher-assigned task
+ * only. No task/category picker, no editable prompt: the assignment's
+ * title/prompt/category/deadline are read-only, exactly as the teacher set
+ * them. The server independently re-derives all of this from `task.id`
+ * anyway (see src/lib/ai/writing.ts saveDraft/submitEssay) — this component
+ * never sends assignment metadata, only the essay content.
+ */
+export function WritingSubmissionForm({ task, draft }: { task: AssignedWritingTask; draft: DraftForEdit | null }) {
   const router = useRouter();
   useStudyHeartbeat("WRITING");
 
-  const initialTask = draft?.taskId
-    ? tasks.find((t) => t.id === draft.taskId)
-    : initialTaskId
-      ? tasks.find((t) => t.id === initialTaskId)
-      : undefined;
-  const [mode, setMode] = useState<"bank" | "custom">(
-    draft ? (initialTask ? "bank" : "custom") : initialTask || tasks.length > 0 ? "bank" : "custom"
-  );
-  const [selectedTaskId, setSelectedTaskId] = useState(initialTask?.id ?? tasks[0]?.id ?? "");
-  const [customTaskType, setCustomTaskType] = useState<TaskTypeValue>((draft?.taskType as TaskTypeValue) ?? "Task 2");
-  const [customCategory, setCustomCategory] = useState<WritingTaskCategoryValue | "">((draft?.category as WritingTaskCategoryValue) ?? "");
-  const [customPrompt, setCustomPrompt] = useState(!initialTask ? (draft?.prompt ?? "") : "");
   const [content, setContent] = useState(draft?.content ?? "");
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const selectedTask = tasks.find((t) => t.id === selectedTaskId);
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
-
-  const effective = useMemo(() => {
-    if (mode === "bank" && selectedTask) {
-      return {
-        taskId: selectedTask.id,
-        taskType: taskTypeForTask(selectedTask),
-        category: selectedTask.category as WritingTaskCategoryValue,
-        prompt: selectedTask.prompt,
-      };
-    }
-    return {
-      taskId: undefined,
-      taskType: customTaskType,
-      category: customCategory || undefined,
-      prompt: customPrompt,
-    };
-  }, [mode, selectedTask, customTaskType, customCategory, customPrompt]);
+  const busy = saving || submitting;
 
   function buildInput() {
-    return {
-      submissionId: draft?.id,
-      taskId: effective.taskId,
-      taskType: effective.taskType,
-      category: effective.category,
-      prompt: effective.prompt,
-      content,
-    };
+    return { submissionId: draft?.id, taskId: task.id, content };
   }
 
   async function handleSaveDraft() {
-    if (!effective.prompt.trim()) {
-      toast.error(mode === "bank" ? "Choose a task first." : "Add the task prompt you're responding to.");
-      return;
-    }
     setSaving(true);
     const result = await saveDraftAction(buildInput());
     setSaving(false);
@@ -101,10 +53,6 @@ export function WritingSubmissionForm({
   }
 
   async function handleSubmit() {
-    if (!effective.prompt.trim()) {
-      toast.error(mode === "bank" ? "Choose a task first." : "Add the task prompt you're responding to.");
-      return;
-    }
     if (content.trim().length < 50) {
       toast.error("Your response should be at least 50 characters.");
       return;
@@ -127,90 +75,33 @@ export function WritingSubmissionForm({
     router.push(`/student/writing/${result.submissionId}`);
   }
 
-  const busy = saving || submitting;
-
   return (
     <div className="max-w-2xl space-y-5">
-      {tasks.length > 0 && (
-        <Tabs value={mode} onValueChange={(value) => setMode(value as "bank" | "custom")}>
-          <TabsList>
-            <TabsTrigger value="bank">Choose from task bank</TabsTrigger>
-            <TabsTrigger value="custom">Custom prompt</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      )}
-
-      {mode === "bank" && tasks.length > 0 ? (
-        <div className="space-y-1.5">
-          <Label htmlFor="task">Task</Label>
-          <Select value={selectedTaskId} onValueChange={setSelectedTaskId}>
-            <SelectTrigger id="task">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {tasks.map((task) => (
-                <SelectItem key={task.id} value={task.id}>
-                  {taskTypeForTask(task)} — {WRITING_TASK_CATEGORY_LABELS[task.category]} — {task.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {selectedTask && (
-            <div className="border-border/70 bg-secondary/30 space-y-1 rounded-xl border p-3 text-sm">
-              <p className="whitespace-pre-wrap">{selectedTask.prompt}</p>
-              {selectedTask.visualDescription && (
-                <p className="text-muted-foreground text-xs">Visual: {selectedTask.visualDescription}</p>
-              )}
-            </div>
+      <Card>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-display text-lg font-medium tracking-tight">{task.title}</h2>
+            <Badge variant="outline">{WRITING_TASK_NUMBER_LABELS[task.taskNumber]}</Badge>
+            <Badge variant="outline">{WRITING_TASK_CATEGORY_LABELS[task.category]}</Badge>
+          </div>
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">{task.prompt}</p>
+          {task.visualDescription && (
+            <p className="text-muted-foreground text-xs">Visual: {task.visualDescription}</p>
           )}
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="taskType">Task</Label>
-              <Select value={customTaskType} onValueChange={(value) => setCustomTaskType(value as TaskTypeValue)}>
-                <SelectTrigger id="taskType">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Task 1">Task 1</SelectItem>
-                  <SelectItem value="Task 2">Task 2</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="category">Category (optional)</Label>
-              <Select value={customCategory} onValueChange={(value) => setCustomCategory(value as WritingTaskCategoryValue)}>
-                <SelectTrigger id="category">
-                  <SelectValue placeholder="No category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(customTaskType === "Task 1"
-                    ? (["GRAPH", "TABLE", "PROCESS", "MAP"] as const)
-                    : (["OPINION", "DISCUSSION", "PROBLEM_SOLUTION", "ADVANTAGES_DISADVANTAGES"] as const)
-                  ).map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {WRITING_TASK_CATEGORY_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            {task.dueDate && (
+              <span className="flex items-center gap-1">
+                <CalendarClock className="size-3.5" aria-hidden="true" /> Due {task.dueDate.toLocaleDateString()}
+              </span>
+            )}
+            {task.targetBand != null && (
+              <span className="flex items-center gap-1">
+                <Target className="size-3.5" aria-hidden="true" /> Target band {task.targetBand.toFixed(1)}
+              </span>
+            )}
           </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="prompt">Task prompt</Label>
-            <Textarea
-              id="prompt"
-              rows={4}
-              placeholder="Paste the exact question or task you're responding to…"
-              value={customPrompt}
-              onChange={(event) => setCustomPrompt(event.target.value)}
-            />
-          </div>
-        </>
-      )}
+        </CardContent>
+      </Card>
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">

@@ -116,7 +116,7 @@ function CompletedTaskCard({ task }: { task: StudentTaskWithProgress }) {
 
 export default async function WritingTasksPage() {
   const { profile } = await requireStudentProfile();
-  const tasks = await listWritingTasksForStudentWithProgress(profile.id, profile.teacherId);
+  const tasks = await listWritingTasksForStudentWithProgress(profile.id);
 
   const active = tasks.filter((t) => t.latest === null || t.latest.status === "DRAFT");
   const completed = tasks.filter((t) => t.attempts.some((a) => a.status === "SUBMITTED"));

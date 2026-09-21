@@ -7,6 +7,7 @@ import type { WritingTaskStatus } from "@prisma/client";
 
 import { deleteWritingTaskAction, setWritingTaskStatusAction } from "@/actions/writing-tasks.actions";
 import { WRITING_TASK_CATEGORY_LABELS, WRITING_TASK_NUMBER_LABELS, WRITING_TASK_STATUS_LABELS, WRITING_TASK_STATUS_VARIANTS } from "@/lib/labels";
+import type { StudentOption } from "@/lib/teacher-students";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,9 +26,10 @@ import { WritingTaskEditorDialog, type ExistingWritingTask } from "@/components/
 export type WritingTaskRow = ExistingWritingTask & {
   status: WritingTaskStatus;
   submissionCount: number;
+  assignedStudentNames: string[];
 };
 
-export function WritingTasksManager({ tasks }: { tasks: WritingTaskRow[] }) {
+export function WritingTasksManager({ tasks, students }: { tasks: WritingTaskRow[]; students: StudentOption[] }) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<WritingTaskRow | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<WritingTaskRow | null>(null);
@@ -64,18 +66,18 @@ export function WritingTasksManager({ tasks }: { tasks: WritingTaskRow[] }) {
     <section className="space-y-4">
       <div className="flex items-center justify-end">
         <Button size="sm" onClick={openCreate}>
-          <Plus className="size-4" /> New task
+          <Plus className="size-4" /> New assignment
         </Button>
       </div>
 
       {tasks.length === 0 ? (
         <EmptyState
           icon={PenLine}
-          title="No writing tasks yet"
-          description="Create Task 1 or Task 2 prompts for your students' task bank."
+          title="No writing assignments yet"
+          description="Create a Task 1 or Task 2 assignment and choose which students it goes to."
           action={
             <Button size="sm" onClick={openCreate}>
-              <Plus className="size-4" /> New task
+              <Plus className="size-4" /> New assignment
             </Button>
           }
         />
@@ -86,6 +88,7 @@ export function WritingTasksManager({ tasks }: { tasks: WritingTaskRow[] }) {
               <TableHead>Title</TableHead>
               <TableHead>Task</TableHead>
               <TableHead>Category</TableHead>
+              <TableHead>Assigned</TableHead>
               <TableHead>Due</TableHead>
               <TableHead>Submissions</TableHead>
               <TableHead>Status</TableHead>
@@ -98,6 +101,13 @@ export function WritingTasksManager({ tasks }: { tasks: WritingTaskRow[] }) {
                 <TableCell className="font-medium">{task.title}</TableCell>
                 <TableCell className="text-muted-foreground">{WRITING_TASK_NUMBER_LABELS[task.taskNumber]}</TableCell>
                 <TableCell className="text-muted-foreground">{WRITING_TASK_CATEGORY_LABELS[task.category]}</TableCell>
+                <TableCell className="text-muted-foreground max-w-40 truncate" title={task.assignedStudentNames.join(", ")}>
+                  {task.assignedStudentNames.length === 0
+                    ? "—"
+                    : task.assignedStudentNames.length === 1
+                      ? task.assignedStudentNames[0]
+                      : `${task.assignedStudentNames.length} students`}
+                </TableCell>
                 <TableCell className="text-muted-foreground">{task.dueDate ? task.dueDate.toLocaleDateString() : "—"}</TableCell>
                 <TableCell className="text-muted-foreground">{task.submissionCount}</TableCell>
                 <TableCell>
@@ -147,14 +157,14 @@ export function WritingTasksManager({ tasks }: { tasks: WritingTaskRow[] }) {
         </Table>
       )}
 
-      <WritingTaskEditorDialog open={editorOpen} onOpenChange={setEditorOpen} existingTask={editing} />
+      <WritingTaskEditorDialog open={editorOpen} onOpenChange={setEditorOpen} existingTask={editing} students={students} />
 
       <Dialog open={!!deleteTarget} onOpenChange={(next) => !next && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete {deleteTarget?.title}?</DialogTitle>
             <DialogDescription>
-              This can&apos;t be undone. Tasks with real student submissions can&apos;t be deleted — archive them instead.
+              This can&apos;t be undone. Assignments with real student submissions can&apos;t be deleted — archive them instead.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

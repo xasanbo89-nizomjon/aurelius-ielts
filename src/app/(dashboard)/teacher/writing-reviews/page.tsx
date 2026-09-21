@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PenLine } from "lucide-react";
+import { Clock, PenLine, TrendingUp, Users } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getDailyWritingActionLimit } from "@/lib/ai/writing";
+import { getSubmissionStatusCounts, getStudentWritingProgress } from "@/lib/teacher-writing-analytics";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { StatCard } from "@/components/dashboard/stat-card";
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { SearchInput } from "@/components/ui/search-input";
@@ -36,7 +39,7 @@ export default async function TeacherWritingReviewsPage({
     },
   };
 
-  const [submissions, total, dailyLimit] = await Promise.all([
+  const [submissions, total, dailyLimit, statusCounts, studentProgress] = await Promise.all([
     prisma.writingSubmission.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -49,6 +52,8 @@ export default async function TeacherWritingReviewsPage({
     }),
     prisma.writingSubmission.count({ where }),
     getDailyWritingActionLimit(profile.id),
+    getSubmissionStatusCounts(profile.id),
+    getStudentWritingProgress(profile.id),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -67,7 +72,54 @@ export default async function TeacherWritingReviewsPage({
         actions={<SearchInput name="q" placeholder="Search by student…" defaultValue={q} />}
       />
 
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <StatCard
+          label="Pending Submissions"
+          value={String(statusCounts.pending)}
+          icon={Clock}
+          caption={statusCounts.pending === 0 ? "All caught up" : "Awaiting your review"}
+        />
+        <StatCard
+          label="Reviewed Submissions"
+          value={String(statusCounts.reviewed)}
+          icon={TrendingUp}
+          caption="Total you've given feedback on"
+        />
+      </div>
+
       <WritingAiSettingsCard dailyLimit={dailyLimit} />
+
+      {studentProgress.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Users className="text-accent size-4.5" aria-hidden="true" /> Student Progress
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-0 pt-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Student</TableHead>
+                  <TableHead>Assigned</TableHead>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead>Average Band</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {studentProgress.map((student) => (
+                  <TableRow key={student.studentId}>
+                    <TableCell className="font-medium">{student.name ?? student.email}</TableCell>
+                    <TableCell className="text-muted-foreground">{student.assignedCount}</TableCell>
+                    <TableCell className="text-muted-foreground">{student.submittedCount}</TableCell>
+                    <TableCell>{student.averageBand != null ? student.averageBand.toFixed(1) : "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {submissions.length === 0 ? (
         <EmptyState

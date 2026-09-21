@@ -4,7 +4,16 @@ import type { WritingTaskCategory, WritingTaskNumber, WritingTaskStatus } from "
 import { prisma } from "@/lib/prisma";
 import type { CreateWritingTaskInput, WritingTaskStatusValue } from "@/lib/validations/writing";
 
+/** Never trusts client-supplied student ids blindly — a teacher may only ever assign their OWN students, same single-tenant rule as everywhere else in this codebase. */
+async function assertOwnStudents(teacherId: string, studentIds: string[]): Promise<void> {
+  const owned = await prisma.studentProfile.count({ where: { id: { in: studentIds }, teacherId } });
+  if (owned !== studentIds.length) {
+    throw new Error("One or more selected students aren't assigned to you.");
+  }
+}
+
 export async function createWritingTask(teacherId: string, input: CreateWritingTaskInput) {
+  await assertOwnStudents(teacherId, input.assignedStudentIds);
   return prisma.writingTask.create({
     data: {
       title: input.title,
@@ -15,24 +24,45 @@ export async function createWritingTask(teacherId: string, input: CreateWritingT
       targetBand: input.targetBand ?? null,
       dueDate: input.dueDate ?? null,
       createdById: teacherId,
+      assignments: { create: input.assignedStudentIds.map((studentId) => ({ studentId })) },
     },
   });
 }
 
+/** Updates the task's own fields, then syncs its assignment rows to exactly match the new student list (adds the newly-assigned, removes the unassigned) — never a wholesale delete-and-recreate, so a student's real submissions against this task are never disturbed. */
 export async function updateWritingTask(taskId: string, teacherId: string, input: CreateWritingTaskInput): Promise<void> {
-  const result = await prisma.writingTask.updateMany({
+  await assertOwnStudents(teacherId, input.assignedStudentIds);
+  const task = await prisma.writingTask.findFirst({
     where: { id: taskId, createdById: teacherId },
-    data: {
-      title: input.title,
-      taskNumber: input.taskNumber,
-      category: input.category,
-      prompt: input.prompt,
-      visualDescription: input.visualDescription || null,
-      targetBand: input.targetBand ?? null,
-      dueDate: input.dueDate ?? null,
-    },
+    select: { id: true, assignments: { select: { studentId: true } } },
   });
-  if (result.count === 0) throw new Error("Writing task not found.");
+  if (!task) throw new Error("Writing task not found.");
+
+  const currentStudentIds = new Set(task.assignments.map((a) => a.studentId));
+  const nextStudentIds = new Set(input.assignedStudentIds);
+  const toAdd = input.assignedStudentIds.filter((id) => !currentStudentIds.has(id));
+  const toRemove = [...currentStudentIds].filter((id) => !nextStudentIds.has(id));
+
+  await prisma.$transaction([
+    prisma.writingTask.update({
+      where: { id: taskId },
+      data: {
+        title: input.title,
+        taskNumber: input.taskNumber,
+        category: input.category,
+        prompt: input.prompt,
+        visualDescription: input.visualDescription || null,
+        targetBand: input.targetBand ?? null,
+        dueDate: input.dueDate ?? null,
+      },
+    }),
+    ...(toRemove.length > 0
+      ? [prisma.writingTaskAssignment.deleteMany({ where: { taskId, studentId: { in: toRemove } } })]
+      : []),
+    ...(toAdd.length > 0
+      ? [prisma.writingTaskAssignment.createMany({ data: toAdd.map((studentId) => ({ taskId, studentId })) })]
+      : []),
+  ]);
 }
 
 const VALID_STATUS_TRANSITIONS: Record<WritingTaskStatus, WritingTaskStatus[]> = {
@@ -67,30 +97,52 @@ export async function listWritingTasksForTeacher(teacherId: string) {
   return prisma.writingTask.findMany({
     where: { createdById: teacherId },
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { submissions: true } } },
+    include: {
+      _count: { select: { submissions: true } },
+      assignments: { select: { studentId: true, student: { select: { user: { select: { name: true, email: true } } } } } },
+    },
   });
 }
 
 export async function getWritingTaskForTeacher(taskId: string, teacherId: string) {
-  return prisma.writingTask.findFirst({ where: { id: taskId, createdById: teacherId } });
+  return prisma.writingTask.findFirst({
+    where: { id: taskId, createdById: teacherId },
+    include: { assignments: { select: { studentId: true } } },
+  });
 }
 
-export type WritingTaskOption = {
+export type AssignedWritingTask = {
   id: string;
   title: string;
   taskNumber: WritingTaskNumber;
   category: WritingTaskCategory;
   prompt: string;
   visualDescription: string | null;
+  targetBand: number | null;
+  dueDate: Date | null;
 };
 
-/** Published tasks from the student's own teacher only — same single-tenant visibility rule as Articles/Updates. */
-export async function listPublishedWritingTasksForStudent(teacherId: string | null): Promise<WritingTaskOption[]> {
-  if (!teacherId) return [];
-  return prisma.writingTask.findMany({
-    where: { createdById: teacherId, status: "PUBLISHED" },
-    orderBy: [{ taskNumber: "asc" }, { category: "asc" }, { createdAt: "desc" }],
-    select: { id: true, title: true, taskNumber: true, category: true, prompt: true, visualDescription: true },
+/**
+ * The single authoritative lookup behind every real student action on a
+ * task (opening the editor, saving a draft, submitting) — Architecture Fix:
+ * a student can only ever see/act on a task that is BOTH published AND
+ * explicitly assigned to them, never merely "published" the way the old
+ * task-bank model worked. Returns null for anything else (wrong student,
+ * unpublished, archived, doesn't exist) — the caller never needs to know why.
+ */
+export async function getAssignedTaskForStudent(taskId: string, studentId: string): Promise<AssignedWritingTask | null> {
+  return prisma.writingTask.findFirst({
+    where: { id: taskId, status: "PUBLISHED", assignments: { some: { studentId } } },
+    select: {
+      id: true,
+      title: true,
+      taskNumber: true,
+      category: true,
+      prompt: true,
+      visualDescription: true,
+      targetBand: true,
+      dueDate: true,
+    },
   });
 }
 
@@ -124,20 +176,16 @@ export type StudentTaskWithProgress = {
 };
 
 /**
- * Every published task from the student's teacher, joined with this
- * student's real attempts at each one — what /student/writing/tasks (Active
- * vs Completed) is built from. A student can attempt the same task more than
- * once; every real WritingSubmission row is preserved as its own attempt.
+ * Every task actually assigned to this student (published AND targeted to
+ * them specifically — see getAssignedTaskForStudent), joined with their real
+ * attempts at each one — what /student/writing/tasks (Active vs Completed)
+ * is built from. A student can attempt the same task more than once; every
+ * real WritingSubmission row is preserved as its own attempt.
  */
-export async function listWritingTasksForStudentWithProgress(
-  studentId: string,
-  teacherId: string | null
-): Promise<StudentTaskWithProgress[]> {
-  if (!teacherId) return [];
-
+export async function listWritingTasksForStudentWithProgress(studentId: string): Promise<StudentTaskWithProgress[]> {
   const tasks = await prisma.writingTask.findMany({
-    where: { createdById: teacherId, status: "PUBLISHED" },
-    orderBy: [{ taskNumber: "asc" }, { category: "asc" }, { createdAt: "desc" }],
+    where: { status: "PUBLISHED", assignments: { some: { studentId } } },
+    orderBy: [{ dueDate: "asc" }, { taskNumber: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
       title: true,

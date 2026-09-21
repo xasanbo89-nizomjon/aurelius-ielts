@@ -83,3 +83,54 @@ export async function getTeacherWritingAnalytics(teacherId: string): Promise<Tea
 
   return { totalSubmissions, averageClassBand, mostCommonMistakes, progressOverview };
 }
+
+export type SubmissionStatusCounts = { pending: number; reviewed: number };
+
+/** Real status counts for the teacher's Writing Reviews queue — PENDING/IN_REVIEW bucketed as "pending" (awaiting the teacher), REVIEWED as "reviewed". Drafts are private and never counted. */
+export async function getSubmissionStatusCounts(teacherId: string): Promise<SubmissionStatusCounts> {
+  const [pending, reviewed] = await Promise.all([
+    prisma.writingSubmission.count({ where: { student: { teacherId }, status: { in: ["PENDING", "IN_REVIEW"] } } }),
+    prisma.writingSubmission.count({ where: { student: { teacherId }, status: "REVIEWED" } }),
+  ]);
+  return { pending, reviewed };
+}
+
+export type StudentWritingProgress = {
+  studentId: string;
+  name: string | null;
+  email: string;
+  assignedCount: number;
+  submittedCount: number;
+  averageBand: number | null;
+};
+
+/** Per-student real progress: how many assignments they've been given, how many they've actually submitted, and their real average AI-estimated band — scoped to this teacher's own roster only. */
+export async function getStudentWritingProgress(teacherId: string): Promise<StudentWritingProgress[]> {
+  const students = await prisma.studentProfile.findMany({
+    where: { teacherId },
+    orderBy: { user: { name: "asc" } },
+    select: {
+      id: true,
+      user: { select: { name: true, email: true } },
+      writingTaskAssignments: { select: { taskId: true } },
+      writingSubmissions: {
+        where: { status: { not: "DRAFT" } },
+        select: { analysis: { select: { estimatedBand: true } } },
+      },
+    },
+  });
+
+  return students.map((student) => {
+    const bands = student.writingSubmissions
+      .map((submission) => submission.analysis?.estimatedBand)
+      .filter((band): band is number => band != null);
+    return {
+      studentId: student.id,
+      name: student.user.name,
+      email: student.user.email,
+      assignedCount: student.writingTaskAssignments.length,
+      submittedCount: student.writingSubmissions.length,
+      averageBand: bands.length > 0 ? Math.round((bands.reduce((sum, band) => sum + band, 0) / bands.length) * 10) / 10 : null,
+    };
+  });
+}

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { createWritingTaskAction, updateWritingTaskAction } from "@/actions/writing-tasks.actions";
 import { TASK_1_CATEGORIES, TASK_2_CATEGORIES, type WritingTaskCategoryValue } from "@/lib/validations/writing";
 import { WRITING_TASK_CATEGORY_LABELS } from "@/lib/labels";
+import type { StudentOption } from "@/lib/teacher-students";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type TaskNumberValue = "TASK_1" | "TASK_2";
 
@@ -32,6 +34,7 @@ export type ExistingWritingTask = {
   visualDescription: string | null;
   targetBand: number | null;
   dueDate: Date | null;
+  assignedStudentIds: string[];
 };
 
 /** yyyy-mm-dd for an <input type="date"> value — local calendar date, not UTC-shifted. */
@@ -47,10 +50,12 @@ export function WritingTaskEditorDialog({
   open,
   onOpenChange,
   existingTask,
+  students,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existingTask?: ExistingWritingTask;
+  students: StudentOption[];
 }) {
   const [title, setTitle] = useState("");
   const [taskNumber, setTaskNumber] = useState<TaskNumberValue>("TASK_2");
@@ -59,6 +64,7 @@ export function WritingTaskEditorDialog({
   const [visualDescription, setVisualDescription] = useState("");
   const [targetBand, setTargetBand] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const categoryOptions = taskNumber === "TASK_1" ? TASK_1_CATEGORIES : TASK_2_CATEGORIES;
@@ -72,6 +78,7 @@ export function WritingTaskEditorDialog({
     setVisualDescription(existingTask?.visualDescription ?? "");
     setTargetBand(existingTask?.targetBand != null ? String(existingTask.targetBand) : "");
     setDueDate(toDateInputValue(existingTask?.dueDate ?? null));
+    setAssignedStudentIds(existingTask?.assignedStudentIds ?? []);
   }, [open, existingTask]);
 
   function handleTaskNumberChange(value: TaskNumberValue) {
@@ -80,6 +87,10 @@ export function WritingTaskEditorDialog({
     if (!(validCategories as readonly string[]).includes(category)) {
       setCategory(validCategories[0]);
     }
+  }
+
+  function toggleStudent(studentId: string, checked: boolean) {
+    setAssignedStudentIds((prev) => (checked ? [...prev, studentId] : prev.filter((id) => id !== studentId)));
   }
 
   async function handleSubmit() {
@@ -92,6 +103,7 @@ export function WritingTaskEditorDialog({
       visualDescription: visualDescription.trim() || undefined,
       targetBand: targetBand.trim() ? Number(targetBand) : undefined,
       dueDate: dueDate.trim() ? new Date(`${dueDate}T00:00:00`) : undefined,
+      assignedStudentIds,
     };
     const result = existingTask
       ? await updateWritingTaskAction(existingTask.id, input)
@@ -103,17 +115,19 @@ export function WritingTaskEditorDialog({
       return;
     }
 
-    toast.success(existingTask ? "Task updated." : "Task created as a draft.");
+    toast.success(existingTask ? "Assignment updated." : "Assignment created as a draft.");
     onOpenChange(false);
   }
+
+  const canSave = title.trim() && prompt.trim() && assignedStudentIds.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{existingTask ? "Edit writing task" : "New writing task"}</DialogTitle>
+          <DialogTitle>{existingTask ? "Edit writing assignment" : "New writing assignment"}</DialogTitle>
           <DialogDescription>
-            Publish it separately when you&apos;re ready for students to see it in their task bank.
+            Publish it separately when you&apos;re ready for the assigned students to see it.
           </DialogDescription>
         </DialogHeader>
 
@@ -197,9 +211,51 @@ export function WritingTaskEditorDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="task-due-date">Due date (optional)</Label>
+              <Label htmlFor="task-due-date">Deadline</Label>
               <Input id="task-due-date" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label>Assigned students</Label>
+              {students.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="text-accent text-xs font-medium hover:underline"
+                    onClick={() => setAssignedStudentIds(students.map((s) => s.id))}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    className="text-muted-foreground text-xs font-medium hover:underline"
+                    onClick={() => setAssignedStudentIds([])}
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </div>
+            {students.length === 0 ? (
+              <p className="text-muted-foreground text-sm">You don&apos;t have any students assigned to you yet.</p>
+            ) : (
+              <div className="border-border/70 max-h-48 space-y-2 overflow-y-auto rounded-xl border p-3">
+                {students.map((student) => (
+                  <label key={student.id} className="flex cursor-pointer items-center gap-2.5 text-sm">
+                    <Checkbox
+                      checked={assignedStudentIds.includes(student.id)}
+                      onCheckedChange={(checked) => toggleStudent(student.id, checked === true)}
+                    />
+                    <span className="min-w-0 truncate">{student.name ?? student.email}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            {students.length > 0 && assignedStudentIds.length === 0 && (
+              <p className="text-destructive text-xs">Assign at least one student.</p>
+            )}
           </div>
         </div>
 
@@ -207,7 +263,7 @@ export function WritingTaskEditorDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting || !title.trim() || !prompt.trim()}>
+          <Button onClick={handleSubmit} disabled={submitting || !canSave}>
             {submitting && <Loader2 className="size-4 animate-spin" />}
             Save
           </Button>

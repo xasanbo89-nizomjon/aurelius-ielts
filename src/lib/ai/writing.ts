@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import type { WritingTaskCategory } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { getAssignedTaskForStudent } from "@/lib/writing-tasks";
 import { generateWritingAnalysis } from "@/lib/ai/services/writing-analysis";
 import { generateWritingRewrite } from "@/lib/ai/services/writing-rewrite";
 import { generateSentenceImprovement } from "@/lib/ai/services/sentence-improver";
@@ -210,8 +211,22 @@ export async function createSubmission(studentId: string, input: SubmitWritingIn
 
 export type SaveDraftResult = { success: true; submissionId: string } | { success: false; error: string };
 
-/** Creates a new draft, or updates an existing one — only ever while it's still DRAFT status; a submitted essay is immutable. */
+/** Maps the real WritingTask row to the (taskType, category, prompt) fields WritingSubmission stores — the ONLY source of truth for what a student is responding to, never the client. */
+function taskFields(task: { taskNumber: "TASK_1" | "TASK_2"; category: WritingTaskCategory; prompt: string }) {
+  return { taskType: task.taskNumber === "TASK_1" ? "Task 1" : "Task 2", category: task.category, prompt: task.prompt };
+}
+
+/**
+ * Creates a new draft, or updates an existing one — only ever while it's
+ * still DRAFT status; a submitted essay is immutable. Architecture Fix: the
+ * task's real title/prompt/category are always looked up server-side from a
+ * WritingTask this student is actually assigned to — the client only ever
+ * supplies `taskId` and the essay `content`, never the assignment metadata.
+ */
 export async function saveDraft(studentId: string, input: WritingDraftInput): Promise<SaveDraftResult> {
+  const task = await getAssignedTaskForStudent(input.taskId, studentId);
+  if (!task) return { success: false, error: "This assignment isn't available to you." };
+  const { taskType, category, prompt } = taskFields(task);
   const wordCount = countWords(input.content);
 
   if (input.submissionId) {
@@ -221,37 +236,24 @@ export async function saveDraft(studentId: string, input: WritingDraftInput): Pr
 
     await prisma.writingSubmission.update({
       where: { id: existing.id },
-      data: {
-        taskId: input.taskId ?? null,
-        taskType: input.taskType,
-        category: input.category ?? null,
-        prompt: input.prompt,
-        content: input.content,
-        wordCount,
-      },
+      data: { taskId: task.id, taskType, category, prompt, content: input.content, wordCount },
     });
     return { success: true, submissionId: existing.id };
   }
 
   const created = await prisma.writingSubmission.create({
-    data: {
-      studentId,
-      taskId: input.taskId ?? null,
-      taskType: input.taskType,
-      category: input.category ?? null,
-      prompt: input.prompt,
-      content: input.content,
-      wordCount,
-      status: "DRAFT",
-    },
+    data: { studentId, taskId: task.id, taskType, category, prompt, content: input.content, wordCount, status: "DRAFT" },
   });
   return { success: true, submissionId: created.id };
 }
 
 export type SubmitEssayResult = { success: true; submissionId: string; analysisWarning?: string } | { success: false; error: string };
 
-/** Submits a brand-new essay OR promotes an existing draft to PENDING, then immediately runs AI analysis. */
+/** Submits a brand-new essay OR promotes an existing draft to PENDING, then immediately runs AI analysis. Same server-derived task fields as saveDraft — never trusts client-supplied assignment metadata. */
 export async function submitEssay(studentId: string, input: SubmitEssayInput): Promise<SubmitEssayResult> {
+  const task = await getAssignedTaskForStudent(input.taskId, studentId);
+  if (!task) return { success: false, error: "This assignment isn't available to you." };
+  const { taskType, category, prompt } = taskFields(task);
   const wordCount = countWords(input.content);
   const now = new Date();
 
@@ -263,31 +265,12 @@ export async function submitEssay(studentId: string, input: SubmitEssayInput): P
 
     await prisma.writingSubmission.update({
       where: { id: existing.id },
-      data: {
-        taskId: input.taskId ?? null,
-        taskType: input.taskType,
-        category: input.category ?? null,
-        prompt: input.prompt,
-        content: input.content,
-        wordCount,
-        status: "PENDING",
-        submittedAt: now,
-      },
+      data: { taskId: task.id, taskType, category, prompt, content: input.content, wordCount, status: "PENDING", submittedAt: now },
     });
     submissionId = existing.id;
   } else {
     const created = await prisma.writingSubmission.create({
-      data: {
-        studentId,
-        taskId: input.taskId ?? null,
-        taskType: input.taskType,
-        category: input.category ?? null,
-        prompt: input.prompt,
-        content: input.content,
-        wordCount,
-        status: "PENDING",
-        submittedAt: now,
-      },
+      data: { studentId, taskId: task.id, taskType, category, prompt, content: input.content, wordCount, status: "PENDING", submittedAt: now },
     });
     submissionId = created.id;
   }

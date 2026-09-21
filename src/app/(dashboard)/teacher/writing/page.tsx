@@ -3,6 +3,7 @@ import { FileCheck, Gauge, TrendingUp } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { listWritingTasksForTeacher } from "@/lib/writing-tasks";
+import { listStudentsForTeacher } from "@/lib/teacher-students";
 import { getTeacherWritingAnalytics } from "@/lib/teacher-writing-analytics";
 import { GRAMMAR_ISSUE_CATEGORY_LABELS } from "@/lib/labels";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -14,9 +15,10 @@ export const metadata: Metadata = { title: "Writing" };
 
 export default async function TeacherWritingPage() {
   const { profile } = await requireTeacherProfile();
-  const [tasks, analytics] = await Promise.all([
+  const [tasks, analytics, students] = await Promise.all([
     listWritingTasksForTeacher(profile.id),
     getTeacherWritingAnalytics(profile.id),
+    listStudentsForTeacher(profile.id),
   ]);
 
   const maxMistakeCount = analytics.mostCommonMistakes[0]?.count ?? 0;
@@ -26,7 +28,7 @@ export default async function TeacherWritingPage() {
     <>
       <PageHeader
         title="Writing"
-        description="Task 1 and Task 2 prompts for your students' task bank, plus real writing performance across your class."
+        description="Create Task 1 and Task 2 assignments for specific students, plus real writing performance across your class."
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -43,10 +45,10 @@ export default async function TeacherWritingPage() {
           caption={analytics.averageClassBand == null ? "No analyzed essays yet" : "Across all analyzed essays"}
         />
         <StatCard
-          label="Tasks Published"
+          label="Assignments Published"
           value={String(tasks.filter((t) => t.status === "PUBLISHED").length)}
           icon={TrendingUp}
-          caption={`${tasks.length} total in your task bank`}
+          caption={`${tasks.length} total assignments`}
         />
       </div>
 
@@ -101,7 +103,7 @@ export default async function TeacherWritingPage() {
       </div>
 
       <section className="space-y-4">
-        <h2 className="font-display text-xl font-medium tracking-tight">Task Bank</h2>
+        <h2 className="font-display text-xl font-medium tracking-tight">Writing Assignments</h2>
         <WritingTasksManager
           tasks={tasks.map((task) => ({
             id: task.id,
@@ -114,7 +116,10 @@ export default async function TeacherWritingPage() {
             dueDate: task.dueDate,
             status: task.status,
             submissionCount: task._count.submissions,
+            assignedStudentIds: task.assignments.map((a) => a.studentId),
+            assignedStudentNames: task.assignments.map((a) => a.student.user.name ?? a.student.user.email),
           }))}
+          students={students}
         />
       </section>
     </>

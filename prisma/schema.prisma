@@ -211,6 +211,7 @@ model StudentProfile {
   coinTransactions       CoinTransaction[]
   studyStreak            StudyStreak?
   achievementUnlocks     AchievementUnlock[]
+  writingTaskAssignments WritingTaskAssignment[]
 
   @@map("student_profiles")
 }
@@ -568,9 +569,10 @@ model WritingAiActionLog {
 // AI Writing Center (Phase 13)
 // ---------------------------------------------------------------------------
 
-/// A teacher-curated Writing Task 1/Task 2 prompt — the task bank. Entirely
-/// optional for a student to use: WritingSubmission.taskId stays null for a
-/// student's own free-typed prompt, exactly like every pre-Phase-13 row.
+/// A teacher-authored Writing Assignment (Architecture Fix — students never
+/// create their own writing tasks; every real submission must trace back to
+/// one of these, assigned by a teacher to specific students via
+/// WritingTaskAssignment below).
 model WritingTask {
   id String @id @default(cuid())
 
@@ -589,7 +591,7 @@ model WritingTask {
   status WritingTaskStatus @default(DRAFT)
   /// Optional guidance band this task targets, e.g. 6.5 — shown to students, never used to alter AI scoring.
   targetBand Float?
-  /// Optional class-wide due date. Purely informational (drives "overdue" styling on the student task list) — never blocks a late submission.
+  /// The assignment deadline. Purely informational (drives "overdue" styling on the student task list) — never blocks a late submission.
   dueDate    DateTime?
 
   createdById String
@@ -599,9 +601,31 @@ model WritingTask {
   updatedAt DateTime @updatedAt
 
   submissions WritingSubmission[]
+  assignments WritingTaskAssignment[]
 
   @@index([createdById, status])
   @@map("writing_tasks")
+}
+
+/// Architecture Fix — the real enforcement of "Teacher chooses assigned
+/// students": a task is only ever visible to (and submittable by) a student
+/// with a row here. Replaces the old "PUBLISHED = visible to every student"
+/// model with real per-student targeting, set explicitly by the teacher when
+/// creating or editing the assignment.
+model WritingTaskAssignment {
+  id String @id @default(cuid())
+
+  taskId String
+  task   WritingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@unique([taskId, studentId])
+  @@index([studentId])
+  @@map("writing_task_assignments")
 }
 
 /// Phase 14 — Practice Mode. A cached, targeted fill-in-the-blank drill for
