@@ -1,0 +1,1385 @@
+// Prisma schema for the IELTS AI Learning Platform
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  STUDENT
+  TEACHER
+}
+
+enum SkillType {
+  LISTENING
+  READING
+  WRITING
+  SPEAKING
+}
+
+enum TestType {
+  LISTENING
+  READING
+  WRITING
+  SPEAKING
+  FULL_MOCK
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE_NOT_GIVEN
+  FILL_IN_BLANK
+  MATCHING
+  SHORT_ANSWER
+  SENTENCE_COMPLETION
+  SUMMARY_COMPLETION
+}
+
+enum SubmissionStatus {
+  /// An unsubmitted, still-editable essay — never analyzed, never visible to a teacher.
+  DRAFT
+  PENDING
+  IN_REVIEW
+  REVIEWED
+}
+
+enum WritingTaskNumber {
+  TASK_1
+  TASK_2
+}
+
+enum WritingTaskCategory {
+  GRAPH
+  TABLE
+  PROCESS
+  MAP
+  OPINION
+  DISCUSSION
+  PROBLEM_SOLUTION
+  ADVANTAGES_DISADVANTAGES
+}
+
+enum WritingTaskStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  SUBMITTED
+  COMPLETED
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PromoCodeType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum ArticleDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum VocabularyStatus {
+  UNKNOWN
+  LEARNING
+  KNOWN
+}
+
+enum StudyActivityType {
+  READING
+  LISTENING
+  VOCABULARY
+  WRITING
+  ARTICLE
+}
+
+enum CoinTransactionType {
+  STUDY_TIME
+  STREAK_BONUS
+  ACHIEVEMENT
+  REDEMPTION
+}
+
+enum AchievementCode {
+  FIRST_READING_TEST
+  FIRST_ARTICLE_COMPLETED
+  VOCAB_100_WORDS
+  WRITING_10_TASKS
+  STREAK_30_DAYS
+}
+
+// ---------------------------------------------------------------------------
+// Auth — identity lives in Firebase Authentication; this table is the
+// application-side profile row, linked back to Firebase by uid.
+// ---------------------------------------------------------------------------
+
+model User {
+  id          String  @id @default(cuid())
+  /// The Firebase Authentication uid — the single source of truth for identity.
+  firebaseUid String  @unique
+  name        String?
+  email       String  @unique
+  image       String?
+  role        Role    @default(STUDENT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  studentProfile StudentProfile?
+  teacherProfile TeacherProfile?
+
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Profiles
+// ---------------------------------------------------------------------------
+
+model StudentProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teacherId String?
+  teacher   TeacherProfile? @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  targetBandScore Float?
+  /// Phase 15 — Student Profile fields, all optional (a student may never fill them in).
+  countryGoal     String?
+  universityGoal  String?
+  personalGoal    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  results               Result[]
+  writingSubmissions    WritingSubmission[]
+  speakingSubmissions   SpeakingSubmission[]
+  assignments           Assignment[]
+  subscriptions         Subscription[]
+  payments              Payment[]
+  aiExplanationRequests AiExplanationRequest[]
+  studyPlans            StudyPlan[]
+  writingAiActionLogs   WritingAiActionLog[]
+  promoCodeRedemptions  PromoCodeRedemption[]
+  articleViews          ArticleView[]
+  readingProgress       ReadingProgress[]
+  vocabulary            StudentVocabulary[]
+  vocabularyAiActionLogs VocabularyAiActionLog[]
+  trialAuditLogs        TrialAuditLog[]
+  writingFeedback        WritingFeedback?
+  writingPractice        WritingPractice?
+  studyActivities        StudyActivity[]
+  coinWallet             CoinWallet?
+  coinTransactions       CoinTransaction[]
+  studyStreak            StudyStreak?
+  achievementUnlocks     AchievementUnlock[]
+
+  @@map("student_profiles")
+}
+
+model TeacherProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bio       String?
+  expertise String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students             StudentProfile[]
+  mockTests            MockTest[]
+  assignments          Assignment[]
+  promoCodes           PromoCode[]
+  reviewedWritings     WritingSubmission[]   @relation("WritingReviewer")
+  reviewedSpeakings    SpeakingSubmission[]  @relation("SpeakingReviewer")
+  bandConversionRanges BandConversionRange[]
+  updates              Update[]
+  aiSettings           AiSettings?
+  grantedTeacherAccess TeacherAllowlist[]
+  articles             Article[]
+  trialAuditLogs       TrialAuditLog[]
+  writingTasks         WritingTask[]
+
+  @@map("teacher_profiles")
+}
+
+// ---------------------------------------------------------------------------
+// Test content
+// ---------------------------------------------------------------------------
+
+model MockTest {
+  id              String   @id @default(cuid())
+  title           String
+  description     String?  @db.Text
+  type            TestType
+  isPublished     Boolean  @default(false)
+  /// Retired tests stay out of the student-facing catalog but keep their
+  /// historical results intact. Independent of isPublished so a test can
+  /// never be simultaneously "live" and "archived".
+  isArchived      Boolean  @default(false)
+  /// Recommended time limit shown before starting and used to drive the
+  /// in-exam countdown. Null means untimed.
+  durationMinutes Int?
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  passages    Passage[]
+  questions   Question[]
+  results     Result[]
+  assignments Assignment[]
+
+  @@map("mock_tests")
+}
+
+model Passage {
+  id         String   @id @default(cuid())
+  mockTestId String
+  mockTest   MockTest @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+
+  title         String
+  content       String  @db.Text
+  /// Legacy: an externally-pasted audio link, from before file upload
+  /// existed. Kept only for backward compatibility — the passage editor no
+  /// longer writes this field.
+  audioUrl      String?
+  /// The uploaded audio file's servable path — a relative local path
+  /// (`/uploads/...`) or an absolute Firebase Storage URL, set by the
+  /// upload flow (src/lib/uploads/audio-storage.ts). Preferred over
+  /// `audioUrl` whenever both are present.
+  audioPath     String?
+  audioFileName String?
+  audioMimeType String?
+  audioSize     Int?
+  orderIndex    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questions  Question[]
+  highlights Highlight[]
+  notes      Note[]
+
+  @@map("passages")
+}
+
+model Question {
+  id         String   @id @default(cuid())
+  mockTestId String
+  mockTest   MockTest @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+  passageId  String?
+  passage    Passage? @relation(fields: [passageId], references: [id], onDelete: Cascade)
+
+  type          QuestionType
+  prompt        String       @db.Text
+  options       Json?
+  correctAnswer Json?
+  orderIndex    Int          @default(0)
+  points        Int          @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  answers               Answer[]
+  aiExplanations        AiExplanation[]
+  aiExplanationRequests AiExplanationRequest[]
+
+  @@map("questions")
+}
+
+// ---------------------------------------------------------------------------
+// Attempts & results
+// ---------------------------------------------------------------------------
+
+model Result {
+  id         String         @id @default(cuid())
+  studentId  String
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  mockTestId String
+  mockTest   MockTest       @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+
+  skill              SkillType
+  rawScore           Float?
+  bandScore          Float?
+  startedAt          DateTime  @default(now())
+  completedAt        DateTime?
+  /// Wall-clock seconds between startedAt and completedAt, captured once at
+  /// submission time so it never needs recomputing.
+  durationSeconds    Int?
+  /// Question ids the student flagged for review during this attempt.
+  flaggedQuestionIds Json      @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  answers    Answer[]
+  highlights Highlight[]
+  notes      Note[]
+
+  @@map("results")
+}
+
+model Answer {
+  id         String   @id @default(cuid())
+  resultId   String
+  result     Result   @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  response      Json
+  isCorrect     Boolean?
+  pointsAwarded Int?
+
+  createdAt DateTime @default(now())
+
+  @@unique([resultId, questionId])
+  @@map("answers")
+}
+
+/// A student's highlighted span of passage text, scoped to one attempt
+/// (Result). Reading-only — cleared along with the attempt.
+model Highlight {
+  id        String  @id @default(cuid())
+  resultId  String
+  result    Result  @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  passageId String
+  passage   Passage @relation(fields: [passageId], references: [id], onDelete: Cascade)
+
+  text        String @db.Text
+  startOffset Int
+  endOffset   Int
+
+  createdAt DateTime @default(now())
+
+  @@map("highlights")
+}
+
+/// A student's free-text scratch note, scoped to one attempt (Result) and
+/// optionally to a specific passage.
+model Note {
+  id        String   @id @default(cuid())
+  resultId  String
+  result    Result   @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  passageId String?
+  passage   Passage? @relation(fields: [passageId], references: [id], onDelete: Cascade)
+
+  content String @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("notes")
+}
+
+model WritingSubmission {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  /// Kept exactly as-is ("Task 1" / "Task 2") for backward compatibility —
+  /// every existing row and read path already relies on these two literal
+  /// strings. `category` (Phase 13) is the new, additive subtype dimension.
+  taskType  String
+  prompt    String @db.Text
+  content   String @db.Text
+  wordCount Int?
+
+  /// Optional link into the teacher-curated task bank (Phase 13) — null for
+  /// a student's own free-typed prompt, exactly like every pre-Phase-13 row.
+  taskId   String?
+  task     WritingTask?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  category WritingTaskCategory?
+
+  status SubmissionStatus @default(PENDING)
+
+  bandScore    Float?
+  feedback     String?         @db.Text
+  reviewedById String?
+  reviewedBy   TeacherProfile? @relation("WritingReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+
+  /// Set the moment a DRAFT becomes a real submission (PENDING). Null for a
+  /// still-unsubmitted draft. Existing pre-Phase-13 rows were never drafts,
+  /// so this stays null for them too — `status` remains the authoritative
+  /// "is this submitted" signal, this is purely a display/analytics timestamp.
+  submittedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  analysis             WritingAnalysis?
+  rewrites             WritingRewrite[]
+  sentenceImprovements SentenceImprovement[]
+
+  @@map("writing_submissions")
+}
+
+// ---------------------------------------------------------------------------
+// AI: Writing Checker & Rewriter (Phase 7) / AI Writing Center (Phase 13)
+// ---------------------------------------------------------------------------
+
+/// The AI's one-time analysis of a submission. At most one per submission —
+/// the essay is immutable once submitted, so re-analyzing the same text
+/// would be a wasted, identical OpenAI call; a revised essay is a new
+/// WritingSubmission instead.
+model WritingAnalysis {
+  id           String            @id @default(cuid())
+  submissionId String            @unique
+  submission   WritingSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  estimatedBand Float
+  /// The 4 official IELTS Writing criteria, scored individually (Phase 13)
+  /// — nullable so pre-Phase-13 analyses (which only ever asked the model
+  /// for one overall band) don't need fabricated backfill values.
+  grammarBand      Float?
+  vocabularyBand   Float?
+  coherenceBand    Float?
+  taskResponseBand Float?
+
+  /// GrammarIssue[] — see src/lib/ai/writing.ts
+  grammarIssues Json
+  /// VocabularyAnalysis — see src/lib/ai/writing.ts
+  vocabulary    Json
+
+  coherenceCohesion String @db.Text
+  taskAchievement   String @db.Text
+  /// string[], ranked by impact.
+  keyImprovements   Json
+  /// string[] (Phase 13) — defaults to an empty array for pre-Phase-13 rows, never fabricated.
+  strengths  Json @default("[]")
+  /// string[] (Phase 13)
+  weaknesses Json @default("[]")
+
+  /// The OpenAI model that produced this analysis, kept for audit/debug.
+  model String
+
+  createdAt DateTime @default(now())
+
+  @@map("writing_analyses")
+}
+
+/// A full rewrite of the essay at a specific target band (7, 8, or 9). At
+/// most one per (submission, targetBand) — clicking the same button twice
+/// reuses the stored one instead of calling OpenAI again.
+model WritingRewrite {
+  id           String            @id @default(cuid())
+  submissionId String
+  submission   WritingSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  targetBand Int
+  content    String @db.Text
+  notes      String @db.Text
+
+  model String
+
+  createdAt DateTime @default(now())
+
+  @@unique([submissionId, targetBand])
+  @@map("writing_rewrites")
+}
+
+/// AI feedback on one student-selected sentence. At most one per
+/// (submission, sentence) — cached by a hash of the exact sentence text so
+/// re-selecting the same sentence never re-calls OpenAI.
+model SentenceImprovement {
+  id           String            @id @default(cuid())
+  submissionId String
+  submission   WritingSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  originalSentence String @db.Text
+  sentenceHash     String
+
+  weaknessExplanation String @db.Text
+  improvedVersion     String @db.Text
+  /// string[]
+  strongerVocabulary  Json
+  structureNote       String @db.Text
+
+  model String
+
+  createdAt DateTime @default(now())
+
+  @@unique([submissionId, sentenceHash])
+  @@map("sentence_improvements")
+}
+
+/// One row per AI writing action (analysis, rewrite, or sentence
+/// improvement) — what the configurable daily rate limit counts against.
+/// Cache hits (servedFromCache: true) are logged but don't cost anything, so
+/// they don't count against the limit — same pattern as Explain More.
+model WritingAiActionLog {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  action          String
+  servedFromCache Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@map("writing_ai_action_logs")
+}
+
+// ---------------------------------------------------------------------------
+// AI Writing Center (Phase 13)
+// ---------------------------------------------------------------------------
+
+/// A teacher-curated Writing Task 1/Task 2 prompt — the task bank. Entirely
+/// optional for a student to use: WritingSubmission.taskId stays null for a
+/// student's own free-typed prompt, exactly like every pre-Phase-13 row.
+model WritingTask {
+  id String @id @default(cuid())
+
+  title      String
+  taskNumber WritingTaskNumber
+  category   WritingTaskCategory
+  prompt     String              @db.Text
+  /// For Task 1 visual tasks (Graph/Table/Process/Map) — a text description
+  /// of the chart/diagram/map to describe, since there's no image-upload
+  /// pipeline in this phase. Null for Task 2.
+  visualDescription String? @db.Text
+  /// Phase 14 — supersedes the old `isPublished` boolean with a real
+  /// 3-state lifecycle (Create -> Publish -> Archive), matching the Root
+  /// Teacher Writing Tasks workflow. Only PUBLISHED tasks are ever visible
+  /// to students, exactly like isPublished: true was before.
+  status WritingTaskStatus @default(DRAFT)
+  /// Optional guidance band this task targets, e.g. 6.5 — shown to students, never used to alter AI scoring.
+  targetBand Float?
+  /// Optional class-wide due date. Purely informational (drives "overdue" styling on the student task list) — never blocks a late submission.
+  dueDate    DateTime?
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submissions WritingSubmission[]
+
+  @@index([createdById, status])
+  @@map("writing_tasks")
+}
+
+/// Phase 14 — Practice Mode. A cached, targeted fill-in-the-blank drill for
+/// the student's single weakest recurring area, generated from the same
+/// weakest-area signal as WritingFeedback (Phase 13's AI Recommendation) —
+/// never a redundant separate weakness-detection pass. One row per student,
+/// regenerated only when the weakest area changes or genuinely new analyzed
+/// submissions exist since basedOnSubmissionCount was last computed.
+model WritingPractice {
+  id String @id @default(cuid())
+
+  studentId String         @unique
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  weaknessArea String
+  instructions String @db.Text
+  /// PracticeItem[] — { sentence: string; answer: string } — see src/lib/ai/prompts/writing-practice.ts
+  items Json
+
+  /// How many analyzed submissions this was computed from — same staleness-detection pattern as WritingFeedback.
+  basedOnSubmissionCount Int
+
+  /// The OpenAI model that produced this practice set, kept for audit/debug.
+  model String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("writing_practice")
+}
+
+/// The "AI Recommendations" widget (Phase 13, section 9) — a cached,
+/// periodically-regenerated personalized recommendation, one row per
+/// student. Distinct from WritingAnalysis (per-essay): this looks ACROSS a
+/// student's real analyzed-submission history to find their weakest
+/// recurring area. Regenerated only when there's at least one new analyzed
+/// submission since `basedOnSubmissionCount` was last computed — real
+/// caching, never a redundant OpenAI call on every dashboard view.
+model WritingFeedback {
+  id String @id @default(cuid())
+
+  studentId String         @unique
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  weakestArea    String
+  recommendation String @db.Text
+  /// How many analyzed submissions this was computed from — lets the next
+  /// read detect staleness and regenerate only once real new data exists.
+  basedOnSubmissionCount Int
+
+  /// The OpenAI model that produced this recommendation, kept for audit/debug.
+  model String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("writing_feedback")
+}
+
+model SpeakingSubmission {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  part     Int
+  prompt   String @db.Text
+  audioUrl String
+
+  status SubmissionStatus @default(PENDING)
+
+  bandScore    Float?
+  feedback     String?         @db.Text
+  reviewedById String?
+  reviewedBy   TeacherProfile? @relation("SpeakingReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("speaking_submissions")
+}
+
+// ---------------------------------------------------------------------------
+// Teaching workflow
+// ---------------------------------------------------------------------------
+
+model Assignment {
+  id         String         @id @default(cuid())
+  teacherId  String
+  teacher    TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  mockTestId String?
+  mockTest   MockTest?      @relation(fields: [mockTestId], references: [id], onDelete: SetNull)
+
+  title   String
+  notes   String?          @db.Text
+  status  AssignmentStatus @default(ASSIGNED)
+  dueDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("assignments")
+}
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+model SubscriptionPlan {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  currency    String          @default("USD")
+  interval    BillingInterval
+  features    Json?
+  isActive    Boolean         @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id        String            @id @default(cuid())
+  studentId String
+  student   StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// Null for a free trial — a trial isn't tied to any priced plan. Only
+  /// set once a student is actually on a real paid SubscriptionPlan.
+  planId    String?
+  plan      SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  status    SubscriptionStatus @default(TRIAL)
+  startDate DateTime           @default(now())
+  endDate   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments Payment[]
+
+  @@map("subscriptions")
+}
+
+model PromoCode {
+  id             String        @id @default(cuid())
+  /// Always system-generated, always "AZ" + 6 random uppercase
+  /// letters/digits — enforced in app code (src/lib/promo-codes.ts) and by
+  /// a CHECK constraint at the database level (see migration).
+  code           String        @unique
+  type           PromoCodeType
+  /// The discount percentage for PERCENTAGE codes (the only type this
+  /// phase's UI creates — FIXED_AMOUNT remains schema-supported but unused).
+  value          Float
+  /// Extra trial days granted on redemption. 0 means "discount only".
+  bonusTrialDays Int           @default(0)
+  maxUses        Int?
+  usedCount      Int           @default(0)
+  expiresAt      DateTime?
+  isActive       Boolean       @default(true)
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments    Payment[]
+  redemptions PromoCodeRedemption[]
+
+  @@map("promo_codes")
+}
+
+/// One row per (promoCode, student) redemption — the real record of "who
+/// redeemed what, and what they actually got," and what usedCount/analytics
+/// are computed from. The unique constraint is the real enforcement of
+/// "a student can't redeem the same code twice."
+model PromoCodeRedemption {
+  id          String         @id @default(cuid())
+  promoCodeId String
+  promoCode   PromoCode      @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  /// Snapshots of the promo code's terms at redemption time, so this row
+  /// stays meaningful even if the code is edited or deleted later.
+  discountPercent Float?
+  bonusTrialDays  Int    @default(0)
+
+  redeemedAt DateTime @default(now())
+
+  @@unique([promoCodeId, studentId])
+  @@map("promo_code_redemptions")
+}
+
+model Payment {
+  id             String         @id @default(cuid())
+  studentId      String
+  student        StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  subscription   Subscription?  @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  promoCodeId    String?
+  promoCode      PromoCode?     @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+
+  amount            Float
+  currency          String        @default("USD")
+  status            PaymentStatus @default(PENDING)
+  provider          String?
+  providerPaymentId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("payments")
+}
+
+// ---------------------------------------------------------------------------
+// Analytics: band conversion, updates
+// ---------------------------------------------------------------------------
+
+/// A teacher-maintained raw-score → band lookup range, e.g. "23-26 -> 6.0".
+/// Scoped per teacher (via the test's author) so each teacher can tune their
+/// own tests' conversion scale. This is a plain lookup table, not a formula
+/// or model — "score conversion, not AI estimation".
+model BandConversionRange {
+  id       String    @id @default(cuid())
+  skill    SkillType
+  minScore Int
+  maxScore Int
+  band     Float
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([createdById, skill, minScore, maxScore])
+  @@map("band_conversion_ranges")
+}
+
+enum UpdateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// A "What's New" post. Students only ever see PUBLISHED updates from their
+/// own teacher.
+model Update {
+  id          String       @id @default(cuid())
+  title       String
+  content     String       @db.Text
+  status      UpdateStatus @default(DRAFT)
+  publishedAt DateTime?
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("updates")
+}
+
+// ---------------------------------------------------------------------------
+// AI: Explain More (Phase 5) — the first OpenAI-powered feature. Server-side
+// only; nothing here is ever reachable from the browser except through the
+// Server Action that fronts it.
+// ---------------------------------------------------------------------------
+
+/// A generated explanation for one question + one specific student response,
+/// cached so identical requests never call OpenAI twice — whether that's the
+/// same student reopening the review page or a different student who made
+/// the exact same mistake on the same question.
+model AiExplanation {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 of the normalized student response this explanation was
+  /// generated for — the cache key together with questionId.
+  responseHash String
+
+  whyCorrectExplanation   String @db.Text
+  whyIncorrectExplanation String @db.Text
+  keywordEvidence         String @db.Text
+  examStrategy            String @db.Text
+  similarMistakeWarning   String @db.Text
+
+  /// The OpenAI model that produced this explanation, kept for audit/debug.
+  model String
+
+  createdAt DateTime @default(now())
+
+  requests AiExplanationRequest[]
+
+  @@unique([questionId, responseHash])
+  @@map("ai_explanations")
+}
+
+/// One row per "Explain More" click — the real request history (which
+/// student, which question, when), regardless of whether it was served from
+/// cache or freshly generated. This is what daily rate limiting counts
+/// against and what teacher analytics ("most requested explanations")
+/// aggregates.
+model AiExplanationRequest {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  explanationId String
+  explanation   AiExplanation @relation(fields: [explanationId], references: [id], onDelete: Cascade)
+
+  /// True when this request reused a cached AiExplanation rather than calling
+  /// OpenAI. Cache hits are logged for history/analytics but don't cost
+  /// anything, so they don't count against the daily rate limit.
+  servedFromCache Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@map("ai_explanation_requests")
+}
+
+/// A generated personalized study plan snapshot (Phase 6 — AI Study Coach).
+/// Grounded in real analytics captured at generation time; never
+/// regenerated silently — the student explicitly asks for a new one, so
+/// each row is a real, distinct snapshot in the student's history.
+model StudyPlan {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  /// Snapshots of the real numbers the plan was generated from, so a past
+  /// plan still makes sense to read even after later attempts change them.
+  estimatedBand Float?
+  targetBand    Float?
+
+  summary    String @db.Text
+  /// StudyPlanDay[] — see src/lib/ai/study-coach.ts
+  weeklyPlan Json
+  /// RoadmapMilestone[] — see src/lib/ai/study-coach.ts
+  roadmap    Json
+
+  /// The OpenAI model that produced this plan, kept for audit/debug.
+  model String
+
+  createdAt DateTime @default(now())
+
+  @@map("study_plans")
+}
+
+/// Per-teacher configurable AI settings. One row per teacher, created on
+/// first edit — a missing row just means "use the default."
+model AiSettings {
+  id String @id @default(cuid())
+
+  teacherId String         @unique
+  teacher   TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  /// "Explain More" requests a single student can generate fresh per day.
+  dailyExplanationLimit   Int @default(20)
+  /// AI writing actions (analysis, rewrite, or sentence improvement) a
+  /// single student can generate fresh per day.
+  dailyWritingActionLimit Int @default(10)
+  /// Fresh AI Vocabulary Assistant generations (word intelligence + Explain
+  /// Word combined) a single student can trigger per day. Cache hits never
+  /// count against this.
+  dailyVocabularyAiLimit  Int @default(50)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Teacher access control
+// ---------------------------------------------------------------------------
+
+/// Database-backed authorization list for who is allowed to become/be a
+/// TEACHER — the only role-granting mechanism besides the single hardcoded
+/// root admin email (see src/lib/teacher-access.ts). Never a hardcoded
+/// array in code; managed entirely through the Teacher Management page.
+model TeacherAllowlist {
+  id    String @id @default(cuid())
+  email String @unique
+
+  addedById String
+  addedBy   TeacherProfile @relation(fields: [addedById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("teacher_allowlist")
+}
+
+// ---------------------------------------------------------------------------
+// Trial Management (Bonus feature) — root-teacher-only trial reset/extend
+// ---------------------------------------------------------------------------
+
+enum TrialAuditAction {
+  TRIAL_RESET_90
+  TRIAL_EXTEND_30
+}
+
+/// One row per root-teacher trial action — created once, never updated or
+/// deleted (no delete/deleteMany call for this model exists anywhere in the
+/// codebase; this is the real enforcement of "audit logs must never be
+/// deleted"). Both FKs are nullable with onDelete: SetNull specifically so
+/// the audit ROW itself always survives even if the student or root
+/// account it references is ever removed — the row is the permanent
+/// record, not a live reference.
+model TrialAuditLog {
+  id String @id @default(cuid())
+
+  rootTeacherId String?
+  rootTeacher   TeacherProfile? @relation(fields: [rootTeacherId], references: [id], onDelete: SetNull)
+  studentId     String?
+  student       StudentProfile? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  action             TrialAuditAction
+  previousExpiryDate DateTime?
+  newExpiryDate      DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
+  @@index([createdAt])
+  @@map("trial_audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Articles & Vocabulary (Phase 11)
+// ---------------------------------------------------------------------------
+
+/// A teacher-authored reading article. `content` is long-form text (paragraph
+/// breaks preserved on render) — the same plain-text-not-HTML convention
+/// already used for `Passage.content`, chosen here specifically because the
+/// reader needs to tokenize every individual word for the highlight/lookup
+/// feature, which a stored HTML tree would make far harder to do safely.
+model Article {
+  id             String            @id @default(cuid())
+  title          String
+  description    String?           @db.Text
+  content        String            @db.Text
+  coverImagePath String?
+  category       String
+  difficulty     ArticleDifficulty
+  status         ArticleStatus     @default(DRAFT)
+  publishedAt    DateTime?
+
+  /// Derived from `content` at save time (word count / 200wpm) — a real,
+  /// deterministic computation, not an estimate typed in by the teacher.
+  wordCount      Int
+  readingMinutes Int
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  views            ArticleView[]
+  readingProgress  ReadingProgress[]
+  vocabularyEvents StudentVocabulary[]
+
+  @@index([createdById, status])
+  @@map("articles")
+}
+
+/// One row per article open by a student — a real view event, not a
+/// counter. "Total views" sums these rows; "Total readers" counts distinct
+/// students among them.
+model ArticleView {
+  id        String         @id @default(cuid())
+  articleId String
+  article   Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  viewedAt DateTime @default(now())
+
+  @@index([articleId])
+  @@index([studentId])
+  @@map("article_views")
+}
+
+/// A shared dictionary entry for one normalized English word. Left empty
+/// (translation/definition/example all null) until something actually
+/// populates it — today that's nothing (see src/lib/ai/word-assistant.ts,
+/// architecture only, no OpenAI calls yet), so a freshly-clicked word
+/// honestly shows "not available yet" rather than an invented definition.
+/// One row is shared by every student who looks the word up.
+model VocabularyWord {
+  id   String @id @default(cuid())
+  /// Lowercased and trimmed — the lookup key, so "Resume" and "resume" share one entry.
+  word String @unique
+
+  uzbekTranslation  String?
+  englishDefinition String? @db.Text
+  exampleSentence   String? @db.Text
+
+  /// Phase 12.3 — AI Vocabulary Assistant. Generated once, by the AI Word
+  /// Assistant (src/lib/ai/vocabulary-assistant.ts), the first time any
+  /// student opens this word's details — shared by every student who has
+  /// it saved, exactly like the fields above. `aiGeneratedAt` null means
+  /// none of this has been generated yet; it's never partially filled.
+  /// string[]
+  synonyms         Json?
+  /// string[] — genuinely empty for words with no natural opposite, never a fabricated one.
+  opposites        Json?
+  /// string[]
+  relatedWords     Json?
+  /// { form: string; word: string }[] — e.g. [{form:"noun",word:"achievement"}, ...]
+  wordFamily       Json?
+  ipaPronunciation String?
+  stressPattern    String?
+  /// string[3]
+  simpleExamples   Json?
+  /// string[2]
+  ieltsExamples    Json?
+  ieltsDifficulty  ArticleDifficulty?
+  /// The OpenAI model that produced the fields above, kept for audit/debug.
+  aiModel          String?
+  aiGeneratedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  studentEntries StudentVocabulary[]
+  explanation    AiWordExplanation?
+  aiActionLogs   VocabularyAiActionLog[]
+
+  @@map("vocabulary_words")
+}
+
+/// The "Explain Word" deep-dive (Phase 12.3) — meaning/usage/common
+/// mistakes/when-to-use/when-not-to-use. One per word, shared across every
+/// student, generated on-demand the first time any student clicks
+/// "Explain Word" — same cache-once-reuse-forever philosophy as the
+/// VocabularyWord fields above and as AiExplanation elsewhere in this app.
+model AiWordExplanation {
+  id               String         @id @default(cuid())
+  vocabularyWordId String         @unique
+  vocabularyWord   VocabularyWord @relation(fields: [vocabularyWordId], references: [id], onDelete: Cascade)
+
+  meaning        String @db.Text
+  usage          String @db.Text
+  commonMistakes String @db.Text
+  whenToUse      String @db.Text
+  whenNotToUse   String @db.Text
+
+  /// The OpenAI model that produced this explanation, kept for audit/debug.
+  model     String
+  createdAt DateTime @default(now())
+
+  @@map("ai_word_explanations")
+}
+
+enum VocabularyAiAction {
+  WORD_INTELLIGENCE
+  EXPLAIN_WORD
+}
+
+/// One row per AI Vocabulary Assistant request — what the daily rate limit
+/// counts against (servedFromCache: false only) and the real data source
+/// for /student/vocabulary/history ("last viewed" = WORD_INTELLIGENCE rows,
+/// "recently explained" = EXPLAIN_WORD rows). Cache hits are logged too —
+/// they're real activity, they just don't cost anything or count against
+/// the quota — same pattern as AiExplanationRequest.
+model VocabularyAiActionLog {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  vocabularyWordId String?
+  vocabularyWord   VocabularyWord?    @relation(fields: [vocabularyWordId], references: [id], onDelete: SetNull)
+  action           VocabularyAiAction
+  servedFromCache  Boolean            @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId, createdAt])
+  @@map("vocabulary_ai_action_logs")
+}
+
+/// One row per (student, word) — the permanent record of every word a
+/// student has ever tagged Unknown/Learning/Known, across every article.
+/// This is what the personal vocabulary book, review and future
+/// AI-powered tools are built on. The unique constraint is the real
+/// enforcement of "no duplicate words per student."
+model StudentVocabulary {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  vocabularyWordId String
+  vocabularyWord   VocabularyWord @relation(fields: [vocabularyWordId], references: [id], onDelete: Cascade)
+
+  /// The article this word was first tagged in — kept for context only.
+  /// Nullable/SetNull because the word entry itself must outlive the
+  /// article (an unpublished/deleted article shouldn't erase a student's
+  /// vocabulary progress).
+  articleId String?
+  article   Article? @relation(fields: [articleId], references: [id], onDelete: SetNull)
+
+  status VocabularyStatus @default(UNKNOWN)
+
+  addedAt        DateTime @default(now())
+  lastReviewedAt DateTime @default(now())
+
+  @@unique([studentId, vocabularyWordId])
+  @@index([studentId, status])
+  @@map("student_vocabulary")
+}
+
+/// "Continue where they stopped" — one row per (student, article), upserted
+/// as the student scrolls. `lastPosition` is a 0-based character offset
+/// into `Article.content`.
+model ReadingProgress {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  articleId String
+  article   Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  lastPosition    Int       @default(0)
+  percentComplete Int       @default(0)
+  completedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, articleId])
+  @@map("reading_progress")
+}
+
+// ---------------------------------------------------------------------------
+// Student Profile, Goals, Coins & Rewards (Phase 15)
+// ---------------------------------------------------------------------------
+
+/// One row per (student, activity type, calendar day). Heartbeat pings
+/// (Vocabulary/Writing/Article — src/lib/study-activity.ts) and the real
+/// exam-attempt duration (Reading/Listening, hooked from
+/// src/lib/exam/attempts.ts submitAttempt) both add real, server-computed
+/// seconds here — never a client-supplied duration. The single source of
+/// truth "today's / weekly / monthly study time" and the coin economy are
+/// both computed from.
+model StudyActivity {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  type StudyActivityType
+  /// Truncated to local midnight — the calendar day this row belongs to.
+  activityDate DateTime
+  durationSeconds Int @default(0)
+  /// The server timestamp of the last heartbeat — the anchor the NEXT
+  /// heartbeat's real elapsed-time credit is computed from. Stays null for
+  /// Reading/Listening rows (those are written once, from a real completed
+  /// Result's own durationSeconds, never via heartbeat).
+  lastHeartbeatAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, type, activityDate])
+  @@index([studentId, activityDate])
+  @@map("study_activities")
+}
+
+/// One wallet per student — the running balance and lifetime-earned total.
+/// Never written to directly outside src/lib/coins.ts; every change flows
+/// through a CoinTransaction so a balance is always backed by a real,
+/// auditable record.
+model CoinWallet {
+  id String @id @default(cuid())
+
+  studentId String         @unique
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  balance        Int @default(0)
+  lifetimeEarned Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("coin_wallets")
+}
+
+/// The permanent record of every coin change (earn or spend).
+/// `idempotencyKey` is the real enforcement of "no duplicate rewards" — a
+/// database unique constraint, not just application-level care — so the same
+/// study-day / streak-milestone / achievement / redemption can never be
+/// double-counted even under a race or a retried request.
+model CoinTransaction {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  type CoinTransactionType
+  /// Positive for every earn type; negative for REDEMPTION.
+  amount      Int
+  description String
+
+  idempotencyKey String @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId, createdAt])
+  @@map("coin_transactions")
+}
+
+/// Consecutive-day study streak. A day only counts once real StudyActivity
+/// crosses a minimum genuine-engagement threshold (see
+/// MIN_DAILY_SECONDS_FOR_STREAK in src/lib/streaks.ts) — never just "any page view".
+model StudyStreak {
+  id String @id @default(cuid())
+
+  studentId String         @unique
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  currentStreak Int @default(0)
+  longestStreak Int @default(0)
+  /// The last calendar day (truncated) that counted toward the streak.
+  lastActiveDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("study_streaks")
+}
+
+/// The fixed catalog of system achievements — seeded once (idempotent
+/// upsert-by-code in src/lib/achievements.ts), never student-created. Real
+/// unlock conditions are checked against real counts; nothing here is ever
+/// awarded speculatively.
+model Achievement {
+  id String @id @default(cuid())
+
+  code        AchievementCode @unique
+  title       String
+  description String
+  coinReward  Int
+
+  createdAt DateTime @default(now())
+
+  unlocks AchievementUnlock[]
+
+  @@map("achievements")
+}
+
+/// One row per (student, achievement) ever unlocked — the permanent
+/// achievement history. The unique constraint is the real enforcement of
+/// "never award the same achievement twice".
+model AchievementUnlock {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  unlockedAt DateTime @default(now())
+
+  @@unique([studentId, achievementId])
+  @@map("achievement_unlocks")
+}

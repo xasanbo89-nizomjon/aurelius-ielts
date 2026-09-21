@@ -20,6 +20,10 @@
 # production
 /build
 
+# user-uploaded files (local disk fallback for listening audio — real
+# uploads shouldn't be committed; see src/lib/uploads/audio-storage.ts)
+/public/uploads/
+
 # misc
 .DS_Store
 *.pem

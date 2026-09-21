@@ -1,0 +1,258 @@
+import "server-only";
+import type { VocabularyStatus } from "@prisma/client";
+
+import { prisma } from "@/lib/prisma";
+import { normalizeWord } from "@/lib/vocabulary-word";
+
+export { normalizeWord };
+
+export type WordDetails = {
+  word: string;
+  uzbekTranslation: string | null;
+  englishDefinition: string | null;
+  exampleSentence: string | null;
+  /** null means this student has never saved this word at all — distinct from status "UNKNOWN". */
+  status: VocabularyStatus | null;
+};
+
+/**
+ * Read-only lookup for the word-click popup. Never fabricates a
+ * translation/definition/example — a word with no dictionary entry yet
+ * (see VocabularyWord in schema.prisma) honestly returns nulls, which the
+ * UI renders as "not available yet". Nothing is saved by looking a word up
+ * — only saveWord()/updateWordStatus() persist anything.
+ */
+export async function getWordDetails(studentId: string, rawWord: string): Promise<WordDetails> {
+  const word = normalizeWord(rawWord);
+
+  const [dictionaryEntry, studentEntry] = await Promise.all([
+    prisma.vocabularyWord.findUnique({ where: { word } }),
+    prisma.studentVocabulary.findFirst({
+      where: { studentId, vocabularyWord: { word } },
+      select: { status: true },
+    }),
+  ]);
+
+  return {
+    word,
+    uzbekTranslation: dictionaryEntry?.uzbekTranslation ?? null,
+    englishDefinition: dictionaryEntry?.englishDefinition ?? null,
+    exampleSentence: dictionaryEntry?.exampleSentence ?? null,
+    status: studentEntry?.status ?? null,
+  };
+}
+
+function toDetails(
+  word: string,
+  dictionaryEntry: { uzbekTranslation: string | null; englishDefinition: string | null; exampleSentence: string | null },
+  status: VocabularyStatus
+): WordDetails {
+  return {
+    word,
+    uzbekTranslation: dictionaryEntry.uzbekTranslation,
+    englishDefinition: dictionaryEntry.englishDefinition,
+    exampleSentence: dictionaryEntry.exampleSentence,
+    status,
+  };
+}
+
+export type SaveWordResult = WordDetails & {
+  /** True when the word was already in this student's notebook — saveWord never creates a second row. */
+  alreadySaved: boolean;
+};
+
+/**
+ * The core "save a word from an Article" action (requirement #1). Ensures a
+ * shared VocabularyWord dictionary entry exists (creating an empty one —
+ * translation fields stay null until something real populates them), then
+ * creates this student's StudentVocabulary row.
+ *
+ * Duplicate prevention is real, not just a DB backstop: if the word is
+ * already saved, this is a no-op that returns the existing entry unchanged
+ * — it never creates a second row and never silently overwrites a status
+ * the student already chose. To change the status of an already-saved
+ * word, call updateWordStatus() instead.
+ */
+export async function saveWord(
+  studentId: string,
+  rawWord: string,
+  status: VocabularyStatus,
+  articleId?: string
+): Promise<SaveWordResult> {
+  const word = normalizeWord(rawWord);
+  if (!word) throw new Error("Enter a valid word.");
+
+  const dictionaryEntry = await prisma.vocabularyWord.upsert({
+    where: { word },
+    create: { word },
+    update: {},
+  });
+
+  const existing = await prisma.studentVocabulary.findUnique({
+    where: { studentId_vocabularyWordId: { studentId, vocabularyWordId: dictionaryEntry.id } },
+  });
+
+  if (existing) {
+    return { ...toDetails(word, dictionaryEntry, existing.status), alreadySaved: true };
+  }
+
+  const created = await prisma.studentVocabulary.create({
+    data: { studentId, vocabularyWordId: dictionaryEntry.id, status, articleId },
+  });
+
+  return { ...toDetails(word, dictionaryEntry, created.status), alreadySaved: false };
+}
+
+/**
+ * Changes the status of a word already in this student's notebook —
+ * requirement #2 (🔴 Difficult / 🟡 Learning / 🔵 Known). Deliberately
+ * distinct from saveWord(): this only ever updates an existing row (a
+ * student re-classifying a word they've already saved, from the reader or
+ * the vocabulary book) and throws a clear error if the word was never
+ * saved, rather than silently creating one.
+ */
+export async function updateWordStatus(
+  studentId: string,
+  rawWord: string,
+  status: VocabularyStatus
+): Promise<WordDetails> {
+  const word = normalizeWord(rawWord);
+  if (!word) throw new Error("Enter a valid word.");
+
+  const dictionaryEntry = await prisma.vocabularyWord.findUnique({ where: { word } });
+  if (!dictionaryEntry) throw new Error("This word hasn't been saved to your vocabulary yet.");
+
+  const result = await prisma.studentVocabulary.updateMany({
+    where: { studentId, vocabularyWordId: dictionaryEntry.id },
+    data: { status, lastReviewedAt: new Date() },
+  });
+  if (result.count === 0) throw new Error("This word hasn't been saved to your vocabulary yet.");
+
+  return toDetails(word, dictionaryEntry, status);
+}
+
+/**
+ * Removes a word from this student's notebook. Only ever deletes their own
+ * StudentVocabulary row — the shared VocabularyWord dictionary entry stays,
+ * since it's global data other students may already rely on.
+ */
+export async function deleteWord(studentId: string, rawWord: string): Promise<void> {
+  const word = normalizeWord(rawWord);
+  if (!word) throw new Error("Enter a valid word.");
+
+  const dictionaryEntry = await prisma.vocabularyWord.findUnique({ where: { word } });
+  if (!dictionaryEntry) throw new Error("This word isn't in your vocabulary.");
+
+  const result = await prisma.studentVocabulary.deleteMany({
+    where: { studentId, vocabularyWordId: dictionaryEntry.id },
+  });
+  if (result.count === 0) throw new Error("This word isn't in your vocabulary.");
+}
+
+/**
+ * Preloads this student's saved statuses for exactly the words that appear
+ * in one article — scoped, not the student's entire vocabulary — used to
+ * color-code the reader on first render.
+ */
+export async function getVocabularyStatusesForWords(
+  studentId: string,
+  words: string[]
+): Promise<Record<string, VocabularyStatus>> {
+  const normalized = [...new Set(words.map(normalizeWord).filter(Boolean))];
+  if (normalized.length === 0) return {};
+
+  const rows = await prisma.studentVocabulary.findMany({
+    where: { studentId, vocabularyWord: { word: { in: normalized } } },
+    select: { status: true, vocabularyWord: { select: { word: true } } },
+  });
+
+  return Object.fromEntries(rows.map((row) => [row.vocabularyWord.word, row.status]));
+}
+
+const DEFAULT_VOCAB_PAGE_SIZE = 30;
+
+/**
+ * Requirement: getStudentVocabulary() — every saved word, scoped to this
+ * student, optionally filtered/searched (by word OR translation). The
+ * notebook page (a bounded, personal dataset) passes a generous `pageSize`
+ * to fetch everything in one shot for real-time client-side search/filter/
+ * sort — still capped, never truly unbounded.
+ */
+export async function getStudentVocabulary(
+  studentId: string,
+  options: { search?: string; status?: VocabularyStatus; page?: number; pageSize?: number } = {}
+) {
+  const pageSize = options.pageSize ?? DEFAULT_VOCAB_PAGE_SIZE;
+  const page = Math.max(1, options.page ?? 1);
+  const where = {
+    studentId,
+    ...(options.status ? { status: options.status } : {}),
+    ...(options.search
+      ? {
+          vocabularyWord: {
+            OR: [
+              { word: { contains: options.search.toLowerCase() } },
+              { uzbekTranslation: { contains: options.search, mode: "insensitive" as const } },
+            ],
+          },
+        }
+      : {}),
+  };
+
+  const [entries, total] = await Promise.all([
+    prisma.studentVocabulary.findMany({
+      where,
+      orderBy: { addedAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: { vocabularyWord: true },
+    }),
+    prisma.studentVocabulary.count({ where }),
+  ]);
+
+  return { entries, total, page, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+}
+
+export type VocabularyStats = {
+  total: number;
+  unknown: number;
+  learning: number;
+  known: number;
+  recentlyLearned: { word: string; lastReviewedAt: Date }[];
+  /** The single most recently *saved* word (any status) — null for an empty notebook. */
+  mostRecentWord: { word: string; addedAt: Date } | null;
+};
+
+/** Every count here is a real groupBy/query against StudentVocabulary — no placeholder numbers. */
+export async function getStudentVocabularyStats(studentId: string): Promise<VocabularyStats> {
+  const [grouped, recentlyLearned, mostRecent] = await Promise.all([
+    prisma.studentVocabulary.groupBy({ by: ["status"], where: { studentId }, _count: { _all: true } }),
+    prisma.studentVocabulary.findMany({
+      where: { studentId, status: "KNOWN" },
+      orderBy: { lastReviewedAt: "desc" },
+      take: 5,
+      include: { vocabularyWord: { select: { word: true } } },
+    }),
+    prisma.studentVocabulary.findFirst({
+      where: { studentId },
+      orderBy: { addedAt: "desc" },
+      include: { vocabularyWord: { select: { word: true } } },
+    }),
+  ]);
+
+  const byStatus = Object.fromEntries(grouped.map((g) => [g.status, g._count._all])) as Partial<
+    Record<VocabularyStatus, number>
+  >;
+
+  return {
+    total: grouped.reduce((sum, g) => sum + g._count._all, 0),
+    unknown: byStatus.UNKNOWN ?? 0,
+    learning: byStatus.LEARNING ?? 0,
+    known: byStatus.KNOWN ?? 0,
+    recentlyLearned: recentlyLearned.map((entry) => ({
+      word: entry.vocabularyWord.word,
+      lastReviewedAt: entry.lastReviewedAt,
+    })),
+    mostRecentWord: mostRecent ? { word: mostRecent.vocabularyWord.word, addedAt: mostRecent.addedAt } : null,
+  };
+}
