@@ -34,6 +34,9 @@ export const matchingAnswerSchema = z.record(z.string(), z.string());
 
 export const sentenceCompletionOptionsSchema = z.object({
   maxWords: z.number().int().positive().optional(),
+  /// Optional drag-and-drop word bank — when set, the student can drag a
+  /// word into the blank instead of (or in addition to) typing it.
+  wordBank: z.array(z.string()).optional(),
 });
 export const sentenceCompletionAnswerSchema = z.string();
 
@@ -47,6 +50,10 @@ export const summaryCompletionAnswerSchema = z.record(z.string(), z.string());
 
 export const fillInBlankOptionsSchema = z.object({
   maxWords: z.number().int().positive().optional(),
+  /// Optional drag-and-drop word bank — same as sentenceCompletion's. Also
+  /// what a "table completion" / "diagram labeling" question uses: the
+  /// prompt text describes the table/diagram cell, and this is its blank.
+  wordBank: z.array(z.string()).optional(),
 });
 export const fillInBlankAnswerSchema = z.string();
 

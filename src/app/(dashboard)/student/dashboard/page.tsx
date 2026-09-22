@@ -43,7 +43,7 @@ import { RecentVocabulary } from "@/components/dashboard/recent-vocabulary";
 import { WordOfTheDay } from "@/components/dashboard/word-of-the-day";
 import { Button } from "@/components/ui/button";
 
-export const metadata: Metadata = { title: "Overview" };
+export const metadata: Metadata = { title: "Home" };
 
 export default async function StudentDashboardPage() {
   const { user, profile } = await requireStudentProfile();

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { QuestionType } from "@prisma/client";
-import { ChevronLeft, ChevronRight, Flag, List, Loader2, NotebookPen } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, List, Loader2, Maximize2, Minimize2, NotebookPen } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -18,8 +18,11 @@ import { cn } from "@/lib/utils";
 import { isResponseAnswered } from "@/lib/exam/grading";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ExamTimer } from "@/components/exam/exam-timer";
 import { QuestionNavigator, type NavigatorQuestionState } from "@/components/exam/question-navigator";
+import { YourAnswersPanel, type AnswerSummaryQuestion } from "@/components/exam/your-answers-panel";
+import { ListeningPartNav, type ListeningPart } from "@/components/exam/listening-part-nav";
 import { SubmitConfirmationDialog } from "@/components/exam/submit-confirmation-dialog";
 import { PassagePanel } from "@/components/exam/passage-panel";
 import { NotesDrawer, type ExamNote } from "@/components/exam/notes-drawer";
@@ -82,8 +85,10 @@ export function ExamRunner({
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [submitting, startSubmitTransition] = useTransition();
   const [pendingSaves, setPendingSaves] = useState(0);
+  const [focusMode, setFocusMode] = useState(false);
 
   const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const examContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handler(event: BeforeUnloadEvent) {
@@ -117,7 +122,36 @@ export function ExamRunner({
     [sortedQuestions, answers, flags]
   );
 
+  const answerSummaryQuestions: AnswerSummaryQuestion[] = useMemo(
+    () =>
+      sortedQuestions.map((question, index) => ({
+        id: question.id,
+        number: index + 1,
+        type: question.type,
+        prompt: question.prompt,
+        options: question.options,
+        value: answers[question.id],
+      })),
+    [sortedQuestions, answers]
+  );
+
   const answeredCount = navigatorItems.filter((item) => item.answered).length;
+  const completionPercent = sortedQuestions.length > 0 ? Math.round((answeredCount / sortedQuestions.length) * 100) : 0;
+
+  const listeningParts: ListeningPart[] = useMemo(
+    () =>
+      sortedPassages.map((passage, index) => {
+        const partQuestions = sortedQuestions.filter((q) => q.passageId === passage.id);
+        return {
+          id: passage.id,
+          index,
+          title: passage.title || `Part ${index + 1}`,
+          questionCount: partQuestions.length,
+          answeredCount: partQuestions.filter((q) => isResponseAnswered(answers[q.id])).length,
+        };
+      }),
+    [sortedPassages, sortedQuestions, answers]
+  );
 
   const initialRemainingSeconds = useMemo(() => {
     if (durationMinutes == null) return null;
@@ -151,6 +185,15 @@ export function ExamRunner({
     void toggleFlagAction(resultId, questionId);
   }
 
+  /** Finds the first real focusable answer control inside a question's container — works generically across every question type (text inputs, selects, radios) without type-specific logic. */
+  function focusQuestionInput(questionId: string) {
+    const container = document.getElementById(`question-${questionId}`);
+    const control = container?.querySelector<HTMLElement>(
+      'input:not([type="hidden"]), textarea, [role="combobox"], [role="radio"]'
+    );
+    control?.focus();
+  }
+
   function goToQuestion(questionId: string) {
     const question = sortedQuestions.find((q) => q.id === questionId);
     if (!question) return;
@@ -159,7 +202,29 @@ export function ExamRunner({
     setNavOpen(false);
     requestAnimationFrame(() => {
       document.getElementById(`question-${questionId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      focusQuestionInput(questionId);
     });
+  }
+
+  // Listening: auto-focus the first answer box of a part the moment it loads (new part navigation, or the very first part on load) — a real IELTS Listening habit, since audio starts before the student has clicked anything.
+  useEffect(() => {
+    if (testType !== "LISTENING") return;
+    const firstQuestion = currentQuestions[0];
+    if (!firstQuestion) return;
+    const frame = requestAnimationFrame(() => focusQuestionInput(firstQuestion.id));
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only when the part itself changes (sectionIndex), reading currentQuestions fresh via closure each time
+  }, [testType, sectionIndex]);
+
+  async function toggleFocusMode() {
+    const next = !focusMode;
+    setFocusMode(next);
+    try {
+      if (next) await examContainerRef.current?.requestFullscreen?.();
+      else if (document.fullscreenElement) await document.exitFullscreen();
+    } catch {
+      // Fullscreen is a best-effort enhancement — hiding the side panel below still works even if the browser refuses it.
+    }
   }
 
   async function handleHighlight(text: string, start: number, end: number) {
@@ -262,28 +327,47 @@ export function ExamRunner({
   );
 
   return (
-    <div className="bg-background flex h-svh flex-col">
-      <header className="border-border/70 flex h-16 shrink-0 items-center gap-2 border-b px-4 sm:gap-3 sm:px-6">
+    <div ref={examContainerRef} className="bg-background flex h-svh flex-col">
+      <header className="border-border/70 relative flex h-16 shrink-0 items-center gap-2 border-b px-4 sm:gap-3 sm:px-6">
         <h1 className="font-display min-w-0 flex-1 truncate text-base font-medium sm:text-lg">{testTitle}</h1>
         {pendingSaves > 0 && (
           <span className="text-muted-foreground hidden items-center gap-1.5 text-xs sm:flex">
             <Loader2 className="size-3 animate-spin" /> Saving…
           </span>
         )}
-        <ExamTimer durationSeconds={initialRemainingSeconds} onExpire={handleExpire} />
+        {testType === "LISTENING" ? (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+            <ExamTimer durationSeconds={initialRemainingSeconds} onExpire={handleExpire} />
+          </div>
+        ) : (
+          <ExamTimer durationSeconds={initialRemainingSeconds} onExpire={handleExpire} />
+        )}
         {testType === "READING" && (
           <Button variant="outline" size="sm" onClick={() => setNotesOpen(true)}>
             <NotebookPen className="size-4" />
             <span className="hidden sm:inline">Notes</span>
           </Button>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="hidden lg:inline-flex"
+          onClick={toggleFocusMode}
+          aria-pressed={focusMode}
+          aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
+        >
+          {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          <span className="hidden xl:inline">{focusMode ? "Exit Focus" : "Focus Mode"}</span>
+        </Button>
         <Button variant="outline" size="sm" className="lg:hidden" onClick={() => setNavOpen(true)}>
           <List className="size-4" />
           <span className="hidden sm:inline">Questions</span>
         </Button>
-        <Button size="sm" onClick={() => setSubmitDialogOpen(true)}>
-          Submit
-        </Button>
+        {testType === "READING" && (
+          <Button size="sm" onClick={() => setSubmitDialogOpen(true)}>
+            Submit
+          </Button>
+        )}
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -319,46 +403,87 @@ export function ExamRunner({
             </div>
           </>
         ) : (
-          <div className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
+          <div className="flex-1 overflow-y-auto">
             {currentPassage?.audioUrl && (
-              <div className="mb-6">
+              <div className="border-border/70 bg-background/95 sticky top-0 z-10 border-b px-6 py-4 backdrop-blur-sm sm:px-8">
                 <AudioPlayer src={currentPassage.audioUrl} label={currentPassage.title} />
               </div>
             )}
-            {questionsList}
+            <div className="mx-auto w-full max-w-3xl px-6 py-6 sm:px-8 sm:py-8">{questionsList}</div>
           </div>
         )}
 
-        <aside className="border-border/70 hidden w-72 shrink-0 overflow-y-auto border-l p-5 lg:block">
-          <QuestionNavigator
-            questions={navigatorItems}
-            currentQuestionId={currentQuestions[0]?.id ?? ""}
-            onSelect={goToQuestion}
-          />
-        </aside>
+        {!focusMode && (
+          <aside className="border-border/70 hidden w-72 shrink-0 overflow-y-auto border-l p-5 lg:block">
+            <Tabs defaultValue="navigator">
+              <TabsList className="w-full">
+                <TabsTrigger value="navigator">Navigator</TabsTrigger>
+                <TabsTrigger value="answers">Your Answers</TabsTrigger>
+              </TabsList>
+              <TabsContent value="navigator">
+                <QuestionNavigator
+                  questions={navigatorItems}
+                  currentQuestionId={currentQuestions[0]?.id ?? ""}
+                  onSelect={goToQuestion}
+                />
+              </TabsContent>
+              <TabsContent value="answers">
+                <YourAnswersPanel
+                  questions={answerSummaryQuestions}
+                  currentQuestionId={currentQuestions[0]?.id ?? ""}
+                  onSelect={goToQuestion}
+                />
+              </TabsContent>
+            </Tabs>
+          </aside>
+        )}
       </div>
 
-      <footer className="border-border/70 flex h-16 shrink-0 items-center justify-between border-t px-4 sm:px-6">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setSectionIndex((i) => Math.max(0, i - 1))}
-          disabled={sectionIndex === 0}
-        >
-          <ChevronLeft className="size-4" /> Previous
-        </Button>
-        <span className="text-muted-foreground text-sm">
-          Section {sectionIndex + 1} of {sortedPassages.length}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setSectionIndex((i) => Math.min(sortedPassages.length - 1, i + 1))}
-          disabled={sectionIndex >= sortedPassages.length - 1}
-        >
-          Next <ChevronRight className="size-4" />
-        </Button>
-      </footer>
+      {testType === "LISTENING" ? (
+        <footer className="border-border/70 bg-background/95 flex shrink-0 flex-col gap-2.5 border-t px-4 py-3 backdrop-blur-sm sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <ListeningPartNav parts={listeningParts} currentIndex={sectionIndex} onSelect={setSectionIndex} />
+            <div className="flex shrink-0 items-center gap-3">
+              <div className="hidden items-center gap-2 sm:flex">
+                <div className="bg-secondary h-1.5 w-24 overflow-hidden rounded-full">
+                  <div
+                    className="bg-success h-full rounded-full transition-all duration-500"
+                    style={{ width: `${completionPercent}%` }}
+                  />
+                </div>
+                <span className="text-muted-foreground w-9 shrink-0 text-xs font-medium tabular-nums">
+                  {completionPercent}%
+                </span>
+              </div>
+              <Button size="sm" onClick={() => setSubmitDialogOpen(true)}>
+                Submit
+              </Button>
+            </div>
+          </div>
+        </footer>
+      ) : (
+        <footer className="border-border/70 flex h-16 shrink-0 items-center justify-between border-t px-4 sm:px-6">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSectionIndex((i) => Math.max(0, i - 1))}
+            disabled={sectionIndex === 0}
+          >
+            <ChevronLeft className="size-4" /> Previous
+          </Button>
+          <span className="text-muted-foreground text-sm">
+            Section {sectionIndex + 1} of {sortedPassages.length}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSectionIndex((i) => Math.min(sortedPassages.length - 1, i + 1))}
+            disabled={sectionIndex >= sortedPassages.length - 1}
+          >
+            Next <ChevronRight className="size-4" />
+          </Button>
+        </footer>
+      )}
 
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
         <SheetContent side="right">
@@ -367,11 +492,26 @@ export function ExamRunner({
             <SheetDescription className="sr-only">Jump to any question</SheetDescription>
           </SheetHeader>
           <div className="overflow-y-auto p-5">
-            <QuestionNavigator
-              questions={navigatorItems}
-              currentQuestionId={currentQuestions[0]?.id ?? ""}
-              onSelect={goToQuestion}
-            />
+            <Tabs defaultValue="navigator">
+              <TabsList className="w-full">
+                <TabsTrigger value="navigator">Navigator</TabsTrigger>
+                <TabsTrigger value="answers">Your Answers</TabsTrigger>
+              </TabsList>
+              <TabsContent value="navigator">
+                <QuestionNavigator
+                  questions={navigatorItems}
+                  currentQuestionId={currentQuestions[0]?.id ?? ""}
+                  onSelect={goToQuestion}
+                />
+              </TabsContent>
+              <TabsContent value="answers">
+                <YourAnswersPanel
+                  questions={answerSummaryQuestions}
+                  currentQuestionId={currentQuestions[0]?.id ?? ""}
+                  onSelect={goToQuestion}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         </SheetContent>
       </Sheet>

@@ -2,6 +2,8 @@
 
 import { Fragment, useCallback, useRef, useState } from "react";
 
+import { ReadingSpeedControl } from "@/components/exam/reading-speed-control";
+
 export type PassageHighlight = { id: string; startOffset: number; endOffset: number };
 
 function getOffsetsWithinContainer(container: HTMLElement, range: Range) {
@@ -29,6 +31,7 @@ export function PassagePanel({
   onAddNote: (selectedText: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [toolbar, setToolbar] = useState<{ x: number; y: number; text: string; start: number; end: number } | null>(
     null
   );
@@ -78,7 +81,10 @@ export function PassagePanel({
   if (cursor < content.length) segments.push({ text: content.slice(cursor) });
 
   return (
-    <div className="relative h-full overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
+    <div ref={scrollContainerRef} className="relative h-full overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
+      <div className="mb-4">
+        <ReadingSpeedControl containerRef={scrollContainerRef} />
+      </div>
       {toolbar && (
         <div
           style={{ left: toolbar.x, top: toolbar.y }}
