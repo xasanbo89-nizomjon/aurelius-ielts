@@ -6,12 +6,16 @@ import { validateAudioFile } from "@/lib/uploads/audio-constraints";
 
 export type UploadedAudio = UploadedFile;
 
+/** The Supabase Storage bucket listening audio is uploaded into — public, so students can stream directly from its URL. */
+export const LISTENING_AUDIO_BUCKET = "listening-audio";
+
 /**
- * Uploads a listening-test audio file and returns its playable path plus
- * the metadata `Passage.audioFileName`/`audioMimeType`/`audioSize` need.
- * Tries Firebase Storage first; on a read-only-filesystem host (Vercel) a
- * failure there is a real config problem and throws a clear error instead
- * of attempting a local disk write — see src/lib/uploads/storage.ts.
+ * Uploads a listening-test audio file to the public `listening-audio`
+ * Supabase Storage bucket and returns its playable public URL plus the
+ * metadata `Passage.audioFileName`/`audioMimeType`/`audioSize` need. On a
+ * read-only-filesystem host (Vercel) an upload failure is a real config
+ * problem and throws a clear error instead of attempting a local disk write
+ * — see src/lib/uploads/storage.ts.
  */
 export async function uploadListeningAudio(teacherId: string, file: File): Promise<UploadedAudio> {
   const validation = validateAudioFile({ name: file.name, size: file.size, type: file.type });
@@ -20,8 +24,8 @@ export async function uploadListeningAudio(teacherId: string, file: File): Promi
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const objectPath = `listening-audio/${teacherId}/${randomUUID()}${validation.extension}`;
-  const servedPath = await uploadBuffer(objectPath, buffer, validation.contentType);
+  const objectPath = `${teacherId}/${randomUUID()}${validation.extension}`;
+  const servedPath = await uploadBuffer(LISTENING_AUDIO_BUCKET, objectPath, buffer, validation.contentType);
 
   return { path: servedPath, fileName: file.name, mimeType: validation.contentType, size: file.size };
 }

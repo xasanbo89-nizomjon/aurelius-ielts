@@ -298,9 +298,11 @@ model Passage {
   /// longer writes this field.
   audioUrl      String?
   /// The uploaded audio file's servable path — a relative local path
-  /// (`/uploads/...`) or an absolute Firebase Storage URL, set by the
-  /// upload flow (src/lib/uploads/audio-storage.ts). Preferred over
-  /// `audioUrl` whenever both are present.
+  /// (`/uploads/...`) in dev, or an absolute public Supabase Storage URL
+  /// (bucket "listening-audio") in production, set by the upload flow
+  /// (src/lib/uploads/audio-storage.ts). Preferred over `audioUrl` whenever
+  /// both are present. `updatedAt` doubles as the upload timestamp — it
+  /// bumps whenever this field is written.
   audioPath     String?
   audioFileName String?
   audioMimeType String?
