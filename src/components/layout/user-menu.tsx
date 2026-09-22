@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { Loader2, LogOut, User as UserIcon } from "lucide-react";
 
@@ -40,7 +39,6 @@ export function UserMenu({
   image?: string | null;
   role: "STUDENT" | "TEACHER";
 }) {
-  const router = useRouter();
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -48,8 +46,13 @@ export function UserMenu({
     setSigningOut(true);
     await clearSessionAction();
     await signOut(getFirebaseAuth());
-    router.push("/");
-    router.refresh();
+    // A hard navigation, not router.push()/router.refresh(): those are soft,
+    // client-side transitions that can serve "/" from Next's Router Cache —
+    // including a payload prefetched *while still signed in*, whose baked-in
+    // server redirect sends the user right back to their dashboard. Only a
+    // real full-page load (what Ctrl+R already does) is guaranteed to hit
+    // the server fresh and see the session cookie that was just cleared.
+    window.location.href = "/";
   }
 
   return (
