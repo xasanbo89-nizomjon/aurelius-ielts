@@ -77,9 +77,36 @@ export async function saveWord(
 }
 
 /**
- * Changes the status of a word — 🔴 Unknown / 🟡 Partially Known / 🟢
- * Viewed (requirement #3). An upsert, not a plain update: every word
- * clicked in an Article is now auto-saved (see saveWord/ArticleReader), but
+ * Phase 19 — logs one vocabulary lookup EVENT (VocabularyLookup), always
+ * creating a new row, never deduplicated — deliberately distinct from
+ * saveWord() above, which only ever creates the per-word status row once.
+ * This is what lets "Total Searches" differ from "Unique Words": clicking
+ * the same word five times is five real searches over one saved word.
+ */
+export async function logVocabularyLookup(
+  studentId: string,
+  rawWord: string,
+  difficultyColor: VocabularyStatus,
+  articleId?: string
+): Promise<void> {
+  const word = normalizeWord(rawWord);
+  if (!word) return;
+
+  const dictionaryEntry = await prisma.vocabularyWord.upsert({
+    where: { word },
+    create: { word },
+    update: {},
+  });
+
+  await prisma.vocabularyLookup.create({
+    data: { studentId, vocabularyWordId: dictionaryEntry.id, articleId, difficultyColor },
+  });
+}
+
+/**
+ * Changes the difficulty color of a word — 🔴 Hard / 🟡 Medium / 🔵 Easy.
+ * An upsert, not a plain update: every word clicked in an Article is now
+ * auto-saved (see saveWord/ArticleReader), but
  * that auto-save is a fire-and-forget background call, so a student
  * explicitly picking a status right afterward can race it — this must
  * still succeed (creating the row itself if needed) rather than throwing
@@ -209,11 +236,15 @@ export type VocabularyStats = {
   recentlyLearned: { word: string; lastReviewedAt: Date }[];
   /** The single most recently *saved* word (any status) — null for an empty notebook. */
   mostRecentWord: { word: string; addedAt: Date } | null;
+  /** Every VocabularyLookup row (every click, including repeats) — see logVocabularyLookup. */
+  totalSearches: number;
+  /** The most recent lookup EVENT, real activity recency (re-clicking an old word updates this even though it doesn't change StudentVocabulary). Null if this student has never clicked a word. */
+  lastSearchedWord: { word: string; searchedAt: Date } | null;
 };
 
-/** Every count here is a real groupBy/query against StudentVocabulary — no placeholder numbers. */
+/** Every count here is a real groupBy/query against StudentVocabulary/VocabularyLookup — no placeholder numbers. */
 export async function getStudentVocabularyStats(studentId: string): Promise<VocabularyStats> {
-  const [grouped, recentlyLearned, mostRecent] = await Promise.all([
+  const [grouped, recentlyLearned, mostRecent, totalSearches, lastSearch] = await Promise.all([
     prisma.studentVocabulary.groupBy({ by: ["status"], where: { studentId }, _count: { _all: true } }),
     prisma.studentVocabulary.findMany({
       where: { studentId, status: "KNOWN" },
@@ -224,6 +255,12 @@ export async function getStudentVocabularyStats(studentId: string): Promise<Voca
     prisma.studentVocabulary.findFirst({
       where: { studentId },
       orderBy: { addedAt: "desc" },
+      include: { vocabularyWord: { select: { word: true } } },
+    }),
+    prisma.vocabularyLookup.count({ where: { studentId } }),
+    prisma.vocabularyLookup.findFirst({
+      where: { studentId },
+      orderBy: { createdAt: "desc" },
       include: { vocabularyWord: { select: { word: true } } },
     }),
   ]);
@@ -248,5 +285,7 @@ export async function getStudentVocabularyStats(studentId: string): Promise<Voca
       lastReviewedAt: entry.lastReviewedAt,
     })),
     mostRecentWord: mostRecent ? { word: mostRecent.vocabularyWord.word, addedAt: mostRecent.addedAt } : null,
+    totalSearches,
+    lastSearchedWord: lastSearch ? { word: lastSearch.vocabularyWord.word, searchedAt: lastSearch.createdAt } : null,
   };
 }

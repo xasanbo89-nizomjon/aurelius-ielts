@@ -212,6 +212,7 @@ model StudentProfile {
   articleViews          ArticleView[]
   readingProgress       ReadingProgress[]
   vocabulary            StudentVocabulary[]
+  vocabularyLookups      VocabularyLookup[]
   vocabularyAiActionLogs VocabularyAiActionLog[]
   trialAuditLogs        TrialAuditLog[]
   writingFeedback        WritingFeedback?
@@ -1131,6 +1132,7 @@ model Article {
   views            ArticleView[]
   readingProgress  ReadingProgress[]
   vocabularyEvents StudentVocabulary[]
+  vocabularyLookups VocabularyLookup[]
 
   @@index([createdById, status])
   @@map("articles")
@@ -1196,6 +1198,7 @@ model VocabularyWord {
   updatedAt DateTime @updatedAt
 
   studentEntries StudentVocabulary[]
+  lookups        VocabularyLookup[]
   explanation    AiWordExplanation?
   aiActionLogs   VocabularyAiActionLog[]
 
@@ -1281,6 +1284,38 @@ model StudentVocabulary {
   @@unique([studentId, vocabularyWordId])
   @@index([studentId, status])
   @@map("student_vocabulary")
+}
+
+/// Phase 19 — Vocabulary Intelligence. An append-only log, one row per word
+/// click/lookup — deliberately NOT deduplicated, unlike StudentVocabulary
+/// above (one row per unique word, current status only). This is what lets
+/// "Total Searches" (every click, including repeats) differ from "Unique
+/// Words" (StudentVocabulary's row count) in the analytics this powers.
+/// Written alongside StudentVocabulary, never instead of it — the existing
+/// vocabulary popup/notebook keep reading/writing StudentVocabulary exactly
+/// as before.
+model VocabularyLookup {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  vocabularyWordId String
+  vocabularyWord   VocabularyWord @relation(fields: [vocabularyWordId], references: [id], onDelete: Cascade)
+
+  articleId String?
+  article   Article? @relation(fields: [articleId], references: [id], onDelete: SetNull)
+
+  /// Red = Hard (UNKNOWN) / Yellow = Medium (LEARNING) / Blue = Easy
+  /// (KNOWN) — the student's current classification at the moment of this
+  /// click, defaulting to Medium when no color has ever been chosen.
+  difficultyColor VocabularyStatus
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId, createdAt])
+  @@index([articleId])
+  @@index([vocabularyWordId])
+  @@map("vocabulary_lookups")
 }
 
 /// "Continue where they stopped" — one row per (student, article), upserted

@@ -31,24 +31,24 @@ export const ARTICLE_DIFFICULTY_LABELS: Record<ArticleDifficulty, string> = {
 };
 
 /**
- * Phase 19 — Vocabulary Analytics & Automatic Word Tracking. Display
- * wording only — the underlying enum stays UNKNOWN/LEARNING/KNOWN (no
- * schema/migration change, so existing saved statuses are unaffected):
- * RED (UNKNOWN) = Unknown / needs revision, YELLOW (LEARNING) = Partially
- * known, GREEN (KNOWN) = Viewed — the automatic default the moment a word
- * is clicked in an Article (see ArticleReader/saveWordAction), which a
- * student can then manually move to yellow or red.
+ * Display wording only — the underlying enum stays UNKNOWN/LEARNING/KNOWN
+ * (no schema/migration change, so existing saved statuses are unaffected):
+ * RED (UNKNOWN) = Hard, YELLOW (LEARNING) = Medium, BLUE (KNOWN) = Easy.
+ * Every word clicked in an Article is auto-saved (see ArticleReader) —
+ * defaulting to Medium/yellow when the student never explicitly chooses a
+ * color, per the Phase 19 brief. A student can still move it to Hard or
+ * Easy at any time.
  */
 export const VOCABULARY_STATUS_LABELS: Record<VocabularyStatus, string> = {
-  UNKNOWN: "Unknown",
-  LEARNING: "Partially Known",
-  KNOWN: "Viewed",
+  UNKNOWN: "Hard",
+  LEARNING: "Medium",
+  KNOWN: "Easy",
 };
 
 export const VOCABULARY_STATUS_EMOJI: Record<VocabularyStatus, string> = {
   UNKNOWN: "🔴",
   LEARNING: "🟡",
-  KNOWN: "🟢",
+  KNOWN: "🔵",
 };
 
 export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
@@ -104,7 +104,7 @@ export const GRAMMAR_ISSUE_CATEGORY_LABELS: Record<GrammarIssueCategory, string>
   INFORMAL_LANGUAGE: "Informal Language",
 };
 
-/** Red / yellow / green — the traffic-light scheme from the Phase 19 brief. */
+/** Red / yellow / blue — the traffic-light scheme from the Phase 19 brief (Hard / Medium / Easy). */
 export const VOCABULARY_STATUS_COLORS: Record<VocabularyStatus, { dot: string; bg: string; text: string; border: string }> = {
   UNKNOWN: { dot: "bg-red-500", bg: "bg-red-500/10", text: "text-red-600 dark:text-red-400", border: "border-red-500/25" },
   LEARNING: {
@@ -113,10 +113,5 @@ export const VOCABULARY_STATUS_COLORS: Record<VocabularyStatus, { dot: string; b
     text: "text-amber-600 dark:text-amber-400",
     border: "border-amber-500/25",
   },
-  KNOWN: {
-    dot: "bg-green-500",
-    bg: "bg-green-500/10",
-    text: "text-green-600 dark:text-green-400",
-    border: "border-green-500/25",
-  },
+  KNOWN: { dot: "bg-blue-500", bg: "bg-blue-500/10", text: "text-blue-600 dark:text-blue-400", border: "border-blue-500/25" },
 };

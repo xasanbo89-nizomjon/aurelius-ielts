@@ -4,7 +4,12 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { getWordDetailsAction, saveWordAction, updateWordStatusAction } from "@/actions/vocabulary.actions";
+import {
+  getWordDetailsAction,
+  saveWordAction,
+  updateWordStatusAction,
+  logVocabularyLookupAction,
+} from "@/actions/vocabulary.actions";
 import { saveReadingProgressAction } from "@/actions/reading.actions";
 import { useStudyHeartbeat } from "@/hooks/use-study-heartbeat";
 import { normalizeWord } from "@/lib/vocabulary-word";
@@ -13,8 +18,8 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
 type WordStatus = "UNKNOWN" | "LEARNING" | "KNOWN";
-/** Every word clicked in an article is automatically saved with this status ("Viewed") unless already saved — see handleWordClick. */
-const DEFAULT_CLICK_STATUS: WordStatus = "KNOWN";
+/** Every word clicked in an article is automatically saved with this color ("Medium") unless the student has already chosen one — see handleWordClick. */
+const DEFAULT_CLICK_STATUS: WordStatus = "LEARNING";
 
 type WordDetails = {
   word: string;
@@ -133,13 +138,22 @@ export function ArticleReader({
       y: rect.top - (containerRect?.top ?? 0),
     });
 
-    // Requirement: every word clicked in an Article is automatically saved
-    // to the student's vocabulary history, defaulting to "Viewed" (green).
-    // Guarded on the LOCAL statuses map (not re-fetched), so a word already
-    // saved — whether preloaded on page load or auto-saved earlier this
-    // visit — is never touched again here; saveWordAction is also its own
-    // idempotent no-op for an already-saved word, so this is safe even if
-    // the guard ever raced.
+    // Phase 19 — two separate writes on every click, on purpose:
+    //
+    // 1) A VocabularyLookup row is logged EVERY time, even on a word
+    //    that's already saved — this is what "Total Searches" (as opposed
+    //    to "Unique Words") counts, so re-clicking the same word for a
+    //    second look must still count as another search.
+    const colorAtClick = statuses[word] ?? DEFAULT_CLICK_STATUS;
+    void logVocabularyLookupAction(word, articleId, colorAtClick);
+
+    // 2) The per-word status (StudentVocabulary) is only ever created
+    //    ONCE, the first time a word is seen, defaulting to Medium/yellow
+    //    when the student hasn't chosen a color — guaranteeing vocabulary
+    //    data always exists without needing a deliberate save. Guarded on
+    //    the LOCAL statuses map, so an already-saved word is never
+    //    touched again here (saveWordAction is also its own idempotent
+    //    no-op for an already-saved word, safe even if this ever raced).
     if (statuses[word] == null) {
       setStatuses((prev) => ({ ...prev, [word]: DEFAULT_CLICK_STATUS }));
       saveWordAction(word, DEFAULT_CLICK_STATUS, articleId).then((result) => {

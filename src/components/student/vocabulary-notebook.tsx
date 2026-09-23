@@ -21,7 +21,7 @@ const FILTERS: { value: StatusFilter; label: string; dotClass?: string }[] = [
   { value: "ALL", label: "All" },
   { value: "UNKNOWN", label: "Red", dotClass: "bg-red-500" },
   { value: "LEARNING", label: "Yellow", dotClass: "bg-amber-500" },
-  { value: "KNOWN", label: "Green", dotClass: "bg-green-500" },
+  { value: "KNOWN", label: "Blue", dotClass: "bg-blue-500" },
 ];
 
 const SORT_OPTIONS: { value: SortBy; label: string }[] = [

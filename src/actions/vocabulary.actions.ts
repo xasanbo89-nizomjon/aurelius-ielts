@@ -8,6 +8,7 @@ import {
   updateWordStatus,
   deleteWord,
   getStudentVocabulary,
+  logVocabularyLookup,
   type WordDetails,
   type SaveWordResult,
 } from "@/lib/vocabulary";
@@ -19,6 +20,7 @@ import {
   updateWordStatusSchema,
   deleteWordSchema,
   getStudentVocabularySchema,
+  logVocabularyLookupSchema,
   type GetStudentVocabularyInput,
 } from "@/lib/validations/vocabulary";
 
@@ -80,6 +82,30 @@ export async function updateWordStatusAction(
     return { success: true, details };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not update that word.") };
+  }
+}
+
+export type LogVocabularyLookupResult = { success: true } | { success: false; error: string };
+
+/**
+ * Phase 19 — fires on every word click, not just the first. No
+ * revalidatePath here on purpose: this is a background analytics write
+ * (feeds teacher-facing Vocabulary Intelligence, not anything the student
+ * sees on their own /student/vocabulary page), so invalidating that page's
+ * cache on every single click would be pure waste.
+ */
+export async function logVocabularyLookupAction(
+  word: string,
+  articleId: string | undefined,
+  difficultyColor: "UNKNOWN" | "LEARNING" | "KNOWN"
+): Promise<LogVocabularyLookupResult> {
+  try {
+    const { profile } = await requireStudentProfile();
+    const parsed = logVocabularyLookupSchema.parse({ word, articleId, difficultyColor });
+    await logVocabularyLookup(profile.id, parsed.word, parsed.difficultyColor, parsed.articleId);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not record that word lookup.") };
   }
 }
 

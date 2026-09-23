@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Eye, Flame, Frown, Users } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Eye, Flame, Frown, Users, Search, Gauge } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getArticleForTeacher } from "@/lib/articles";
@@ -65,6 +65,27 @@ export default async function ArticleAnalyticsPage({
           value={analytics.completionRate != null ? `${analytics.completionRate}%` : "—"}
           icon={CheckCircle2}
           caption={analytics.completionRate == null ? "No one has started reading yet" : "Of readers who started"}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard
+          label="Total Vocabulary Lookups"
+          value={String(analytics.totalVocabularyLookups)}
+          icon={Search}
+          caption="Every word click, including repeats"
+        />
+        <StatCard
+          label="Most Searched Word"
+          value={analytics.mostSearchedWord?.word ?? "—"}
+          icon={Flame}
+          caption={analytics.mostSearchedWord ? `${analytics.mostSearchedWord.count} lookups` : "No lookups yet"}
+        />
+        <StatCard
+          label="Most Common Difficulty"
+          value={analytics.mostCommonDifficulty?.label ?? "—"}
+          icon={Gauge}
+          caption={analytics.mostCommonDifficulty ? `${analytics.mostCommonDifficulty.count} lookups` : "No lookups yet"}
         />
       </div>
 

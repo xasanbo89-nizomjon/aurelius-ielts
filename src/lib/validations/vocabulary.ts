@@ -20,6 +20,13 @@ export const updateWordStatusSchema = z.object({
 });
 export type UpdateWordStatusInput = z.infer<typeof updateWordStatusSchema>;
 
+export const logVocabularyLookupSchema = z.object({
+  word: z.string().trim().min(1, "Enter a word.").max(64),
+  articleId: z.string().trim().min(1).optional(),
+  difficultyColor: vocabularyStatusSchema,
+});
+export type LogVocabularyLookupInput = z.infer<typeof logVocabularyLookupSchema>;
+
 export const deleteWordSchema = z.object({
   word: z.string().trim().min(1, "Enter a word.").max(64),
 });

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Award, Coins, Flame, Target, Users } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
@@ -168,7 +169,11 @@ export default async function TeacherStudentsPage({
                 const trial = trialInfo[student.id];
                 return (
                   <TableRow key={student.id}>
-                    <TableCell className="font-medium">{student.name ?? "—"}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link href={`/teacher/students/${student.id}`} className="hover:underline">
+                        {student.name ?? "—"}
+                      </Link>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{student.email}</TableCell>
                     <TableCell className="text-muted-foreground">{student.joinedAt.toLocaleDateString()}</TableCell>
                     <TableCell>

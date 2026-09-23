@@ -87,6 +87,26 @@ export async function getStudentRoster(
   return { students, total, isRootView };
 }
 
+export type StudentForTeacher = { id: string; name: string | null; email: string };
+
+/**
+ * Authorizes + loads one student for the Students -> [studentId] detail
+ * page (Phase 19 Vocabulary Tab). A root teacher can open any student
+ * (same as the roster's isRootView), otherwise only a student actually
+ * assigned to this teacher — never someone else's, returned as null.
+ */
+export async function getStudentForTeacher(
+  teacherId: string,
+  studentId: string,
+  isRootView: boolean
+): Promise<StudentForTeacher | null> {
+  const student = await prisma.studentProfile.findFirst({
+    where: { id: studentId, ...(isRootView ? {} : { teacherId }) },
+    select: { id: true, user: { select: { name: true, email: true } } },
+  });
+  return student ? { id: student.id, name: student.user.name, email: student.user.email } : null;
+}
+
 export type StudentOption = { id: string; name: string | null; email: string };
 
 /** Every real student assigned to this teacher — options for assignment pickers (e.g. Writing Assignments). */
