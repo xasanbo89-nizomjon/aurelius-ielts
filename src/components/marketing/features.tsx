@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Headphones, BookOpen, PenLine, Mic, ClipboardCheck, ShieldCheck } from "lucide-react";
+import { Headphones, BookOpen, PenLine, ClipboardCheck, ShieldCheck } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 
@@ -20,11 +20,6 @@ const FEATURES = [
     icon: PenLine,
     title: "Writing",
     description: "Task 1 & 2 responses, reviewed personally by your teacher.",
-  },
-  {
-    icon: Mic,
-    title: "Speaking",
-    description: "Recorded responses across all three speaking parts.",
   },
   {
     icon: ClipboardCheck,

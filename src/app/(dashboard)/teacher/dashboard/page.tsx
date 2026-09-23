@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Users, FileText, PenLine, Mic, Gem, Newspaper, BookMarked, RotateCcw, CalendarPlus, History, Clock } from "lucide-react";
+import { Users, FileText, PenLine, Gem, Newspaper, BookMarked, RotateCcw, CalendarPlus, History, Clock } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getTeacherOverview } from "@/lib/dashboard-data";
@@ -59,12 +59,6 @@ export default async function TeacherDashboardPage() {
           value={String(overview.pendingWritingReviews)}
           icon={PenLine}
           caption={overview.pendingWritingReviews === 0 ? "All caught up" : "Awaiting your feedback"}
-        />
-        <StatCard
-          label="Speaking Reviews"
-          value={String(overview.pendingSpeakingReviews)}
-          icon={Mic}
-          caption={overview.pendingSpeakingReviews === 0 ? "All caught up" : "Awaiting your feedback"}
         />
       </div>
 

@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s · Aurelius IELTS",
   },
   description:
-    "A premium IELTS learning platform for students and teachers — Listening, Reading, Writing, Speaking, and full mock tests with real, verified progress tracking.",
+    "A premium IELTS learning platform for students and teachers — Listening, Reading, Writing, and full mock tests with real, verified progress tracking.",
   manifest: "/manifest.json",
   icons: {
     icon: [

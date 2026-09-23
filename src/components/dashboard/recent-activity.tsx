@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardCheck, PenLine, Mic, History, type LucideIcon } from "lucide-react";
+import { ClipboardCheck, PenLine, History, type LucideIcon } from "lucide-react";
 
 import type { ActivityItem } from "@/lib/dashboard-data";
 import { formatRelativeTime } from "@/lib/format";
@@ -9,7 +9,6 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 const TYPE_ICON: Record<ActivityItem["type"], LucideIcon> = {
   TEST: ClipboardCheck,
   WRITING: PenLine,
-  SPEAKING: Mic,
 };
 
 export function RecentActivity({ items }: { items: ActivityItem[] }) {

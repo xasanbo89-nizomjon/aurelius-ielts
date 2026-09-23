@@ -4,7 +4,6 @@ import {
   Headphones,
   BookOpen,
   PenLine,
-  Mic,
   ClipboardCheck,
   Gauge,
   Target,
@@ -188,12 +187,6 @@ export default async function StudentDashboardPage() {
             description="Draft Task 1 and Task 2 responses for teacher review."
             href="/student/writing"
             icon={PenLine}
-          />
-          <SkillCard
-            title="Speaking"
-            description="Record responses across all three speaking parts."
-            href="/student/speaking"
-            icon={Mic}
           />
           <SkillCard
             title="Full Mock Test"
