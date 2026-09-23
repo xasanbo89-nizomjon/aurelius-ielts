@@ -15,33 +15,6 @@ export type WordDetails = {
   status: VocabularyStatus | null;
 };
 
-/**
- * Read-only lookup for the word-click popup. Never fabricates a
- * translation/definition/example — a word with no dictionary entry yet
- * (see VocabularyWord in schema.prisma) honestly returns nulls, which the
- * UI renders as "not available yet". Nothing is saved by looking a word up
- * — only saveWord()/updateWordStatus() persist anything.
- */
-export async function getWordDetails(studentId: string, rawWord: string): Promise<WordDetails> {
-  const word = normalizeWord(rawWord);
-
-  const [dictionaryEntry, studentEntry] = await Promise.all([
-    prisma.vocabularyWord.findUnique({ where: { word } }),
-    prisma.studentVocabulary.findFirst({
-      where: { studentId, vocabularyWord: { word } },
-      select: { status: true },
-    }),
-  ]);
-
-  return {
-    word,
-    uzbekTranslation: dictionaryEntry?.uzbekTranslation ?? null,
-    englishDefinition: dictionaryEntry?.englishDefinition ?? null,
-    exampleSentence: dictionaryEntry?.exampleSentence ?? null,
-    status: studentEntry?.status ?? null,
-  };
-}
-
 function toDetails(
   word: string,
   dictionaryEntry: { uzbekTranslation: string | null; englishDefinition: string | null; exampleSentence: string | null },

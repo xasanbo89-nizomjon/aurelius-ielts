@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 
 import { requireStudentProfile } from "@/lib/session";
 import {
-  getWordDetails,
   saveWord,
   updateWordStatus,
   deleteWord,
@@ -12,6 +11,7 @@ import {
   type WordDetails,
   type SaveWordResult,
 } from "@/lib/vocabulary";
+import { getOrGenerateWordDetails } from "@/lib/ai/vocabulary-assistant";
 import { friendlyErrorMessage } from "@/lib/validation-error";
 import {
   getWordDetailsSchema,
@@ -28,12 +28,18 @@ function errorMessage(error: unknown, fallback: string): string {
 
 export type GetWordDetailsResult = { success: true; details: WordDetails } | { success: false; error: string };
 
-/** Read-only — opening the popup never saves anything by itself. */
+/**
+ * Never saves anything to the student's notebook by itself — but unlike a
+ * plain read, a never-before-looked-up word does trigger real AI generation
+ * (translation/definition/example), cached into the shared dictionary for
+ * every future lookup. See getOrGenerateWordDetails for the quota/fallback
+ * behavior.
+ */
 export async function getWordDetailsAction(word: string): Promise<GetWordDetailsResult> {
   try {
     const { profile } = await requireStudentProfile();
     const parsed = getWordDetailsSchema.parse({ word });
-    const details = await getWordDetails(profile.id, parsed.word);
+    const details = await getOrGenerateWordDetails(profile.id, profile.teacherId, parsed.word);
     return { success: true, details };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not look up that word.") };

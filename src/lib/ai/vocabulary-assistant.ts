@@ -3,6 +3,7 @@ import type { ArticleDifficulty, VocabularyStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { normalizeWord } from "@/lib/vocabulary-word";
+import type { WordDetails } from "@/lib/vocabulary";
 import { generateWordIntelligence } from "@/lib/ai/services/word-intelligence";
 import { generateWordExplanation } from "@/lib/ai/services/explain-word";
 import { AIServiceUnavailableError } from "@/lib/ai/errors";
@@ -164,6 +165,106 @@ export async function getWordIntelligence(
   });
 
   return { success: true, data: toWordIntelligence(updated), cached: false };
+}
+
+/**
+ * The Article word-click popup's lookup (requirement #5, vocabulary lookup
+ * fix): unlike getWordIntelligence(), this never requires the word to be
+ * saved first — a student clicking a word in an article to see what it
+ * means is the very first thing that happens, before they've decided
+ * whether to save it. Cache-first, same as getWordIntelligence(): a word
+ * any student has ever generated is instant and free for everyone else.
+ *
+ * For a genuinely new word, this creates the shared VocabularyWord row (if
+ * one doesn't exist yet — normally only saveWord() does that) and generates
+ * real translation/definition/example via the same AI service and the same
+ * daily quota getWordIntelligence() draws from, so clicking through an
+ * article can't bypass the existing per-student cost cap. Hitting the quota
+ * degrades quietly to nulls (rendered as "Not available yet" by the
+ * popup) rather than surfacing an error — this is a passive hover lookup,
+ * not a deliberate "Generate" button press.
+ */
+export async function getOrGenerateWordDetails(
+  studentId: string,
+  teacherId: string | null,
+  rawWord: string
+): Promise<WordDetails> {
+  const word = normalizeWord(rawWord);
+  if (!word) return { word: rawWord, uzbekTranslation: null, englishDefinition: null, exampleSentence: null, status: null };
+
+  const [dict, studentEntry] = await Promise.all([
+    prisma.vocabularyWord.upsert({ where: { word }, create: { word }, update: {} }),
+    prisma.studentVocabulary.findFirst({ where: { studentId, vocabularyWord: { word } }, select: { status: true } }),
+  ]);
+
+  if (dict.aiGeneratedAt) {
+    return {
+      word,
+      uzbekTranslation: dict.uzbekTranslation,
+      englishDefinition: dict.englishDefinition,
+      exampleSentence: dict.exampleSentence,
+      status: studentEntry?.status ?? null,
+    };
+  }
+
+  const limit = await getDailyVocabularyAiLimit(teacherId);
+  const usedToday = await countTodayFreshRequests(studentId);
+  if (usedToday >= limit) {
+    return {
+      word,
+      uzbekTranslation: dict.uzbekTranslation,
+      englishDefinition: dict.englishDefinition,
+      exampleSentence: dict.exampleSentence,
+      status: studentEntry?.status ?? null,
+    };
+  }
+
+  let generated;
+  try {
+    generated = await generateWordIntelligence(word);
+  } catch (error) {
+    const reason = error instanceof AIServiceUnavailableError ? error.message : "Unknown error.";
+    console.error("[ai] word lookup generation failed:", reason);
+    return {
+      word,
+      uzbekTranslation: dict.uzbekTranslation,
+      englishDefinition: dict.englishDefinition,
+      exampleSentence: dict.exampleSentence,
+      status: studentEntry?.status ?? null,
+    };
+  }
+
+  const updated = await prisma.vocabularyWord.update({
+    where: { id: dict.id },
+    data: {
+      uzbekTranslation: dict.uzbekTranslation ?? generated.uzbekTranslation,
+      englishDefinition: dict.englishDefinition ?? generated.englishDefinition,
+      exampleSentence: dict.exampleSentence ?? generated.exampleSentence,
+      synonyms: generated.synonyms,
+      opposites: generated.opposites,
+      relatedWords: generated.relatedWords,
+      wordFamily: generated.wordFamily,
+      ipaPronunciation: generated.ipaPronunciation,
+      stressPattern: generated.stressPattern,
+      simpleExamples: generated.simpleExamples,
+      ieltsExamples: generated.ieltsExamples,
+      ieltsDifficulty: generated.ieltsDifficulty,
+      aiModel: getOpenAIModel(),
+      aiGeneratedAt: new Date(),
+    },
+  });
+
+  await prisma.vocabularyAiActionLog.create({
+    data: { studentId, vocabularyWordId: dict.id, action: "WORD_INTELLIGENCE", servedFromCache: false },
+  });
+
+  return {
+    word,
+    uzbekTranslation: updated.uzbekTranslation,
+    englishDefinition: updated.englishDefinition,
+    exampleSentence: updated.exampleSentence,
+    status: studentEntry?.status ?? null,
+  };
 }
 
 export type WordExplanation = {
