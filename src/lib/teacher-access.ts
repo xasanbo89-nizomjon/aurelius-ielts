@@ -50,6 +50,21 @@ export async function getRootTeacherProfileId(): Promise<string | null> {
   return root?.id ?? null;
 }
 
+/**
+ * Every teacher account with the DB-backed root flag set (TeacherProfile.
+ * isRootTeacher — see schema.prisma), for display on Teacher Management.
+ * Distinct from ROOT_TEACHER_EMAIL: there can be more than one root
+ * teacher, granted to an existing account without creating a new user.
+ */
+export async function listRootTeacherEmails(): Promise<string[]> {
+  const rows = await prisma.teacherProfile.findMany({
+    where: { isRootTeacher: true },
+    orderBy: { createdAt: "asc" },
+    select: { user: { select: { email: true } } },
+  });
+  return rows.map((row) => row.user.email);
+}
+
 export type TeacherAllowlistRow = {
   id: string;
   email: string;
@@ -122,19 +137,29 @@ export async function addTeacherByEmail(addedByTeacherId: string, rawEmail: stri
 
 export type RemoveTeacherResult = { success: true } | { success: false; error: string };
 
-/** Revokes a teacher grant and, if that email has a real account, demotes it back to STUDENT immediately. */
+/**
+ * Revokes a teacher grant and, if that email has a real account, demotes it
+ * back to STUDENT immediately. Refuses for any root teacher — both the
+ * hardcoded bootstrap email and any account with the DB-backed
+ * TeacherProfile.isRootTeacher flag (see schema.prisma), since only the
+ * bootstrap check alone would let a *second* root teacher be silently
+ * demoted through this path.
+ */
 export async function removeTeacherByEmail(rawEmail: string): Promise<RemoveTeacherResult> {
   const email = normalizeEmail(rawEmail);
   if (isRootTeacherEmail(email)) {
     return { success: false, error: "The root administrator can't be removed." };
   }
 
-  await prisma.teacherAllowlist.deleteMany({ where: { email } });
-
   const existingUser = await prisma.user.findUnique({
     where: { email },
-    include: { studentProfile: true },
+    include: { studentProfile: true, teacherProfile: true },
   });
+  if (existingUser?.teacherProfile?.isRootTeacher) {
+    return { success: false, error: "A root administrator can't be removed." };
+  }
+
+  await prisma.teacherAllowlist.deleteMany({ where: { email } });
 
   if (existingUser && existingUser.role === "TEACHER") {
     await prisma.user.update({

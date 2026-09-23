@@ -44,11 +44,11 @@ export default async function TeacherStudentsPage({
 }: {
   searchParams: Promise<{ q?: string; page?: string }>;
 }) {
-  const { user, profile } = await requireTeacherProfile();
+  const { profile } = await requireTeacherProfile();
   const { q, page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
 
-  const { students, total, isRootView } = await getStudentRoster(profile.id, user.email, { search: q, page });
+  const { students, total, isRootView } = await getStudentRoster(profile.id, profile.isRootTeacher, { search: q, page });
   const teachers = isRootView ? await listAllTeachers() : [];
   const insights = await getTeacherEngagementInsights(profile.id);
   // Trial Management (bonus feature) is root-teacher-only — bounded by

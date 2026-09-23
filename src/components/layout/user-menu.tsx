@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { signOut } from "firebase/auth";
-import { Loader2, LogOut, User as UserIcon } from "lucide-react";
+import { Loader2, LogOut, Settings, User as UserIcon, UserCircle } from "lucide-react";
 
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { clearSessionAction } from "@/actions/session.actions";
@@ -77,11 +77,26 @@ export function UserMenu({
             <span className="text-muted-foreground truncate text-xs font-normal">{email}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link href={role === "TEACHER" ? "/teacher/dashboard" : "/student/dashboard"}>
-              <UserIcon /> My account
-            </Link>
-          </DropdownMenuItem>
+          {role === "STUDENT" ? (
+            <>
+              <DropdownMenuItem asChild>
+                <Link href="/student/profile">
+                  <UserCircle /> My Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/student/settings">
+                  <Settings /> Settings
+                </Link>
+              </DropdownMenuItem>
+            </>
+          ) : (
+            <DropdownMenuItem asChild>
+              <Link href="/teacher/dashboard">
+                <UserIcon /> My account
+              </Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
@@ -90,7 +105,7 @@ export function UserMenu({
               setConfirmSignOutOpen(true);
             }}
           >
-            <LogOut /> Sign out
+            <LogOut /> {role === "STUDENT" ? "Logout" : "Sign out"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -234,6 +234,16 @@ model TeacherProfile {
   bio       String?
   expertise String?
 
+  /// Phase 17 — Root Teacher. DB-backed admin flag, separate from
+  /// ROOT_TEACHER_EMAIL (src/lib/teacher-access.ts), which stays a single
+  /// hardcoded bootstrap email used only to decide a brand-new sign-up's
+  /// role. This flag is the real "has elevated permissions" check
+  /// everywhere else (Students roster, Trial Management, Teacher
+  /// Management) — unlike the hardcoded email, more than one teacher can
+  /// have it, and it's grantable to an existing account without creating
+  /// a new user or touching their existing data.
+  isRootTeacher Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

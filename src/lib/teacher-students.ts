@@ -1,7 +1,6 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { isRootTeacherEmail } from "@/lib/teacher-access";
 import { cefrLabelForBand } from "@/lib/analytics/student-insights";
 
 export const STUDENT_ROSTER_PAGE_SIZE = 10;
@@ -26,16 +25,18 @@ export type StudentRosterResult = {
  * The real cause of "Students page is always empty": `StudentProfile.teacherId`
  * is never set anywhere at sign-up (there's no assignment step until this
  * module), so a plain `where: { teacherId: profile.id }` filter matched zero
- * rows for every teacher, always. The root admin sees every student
+ * rows for every teacher, always. A root teacher sees every student
  * (including unassigned ones, so they can be triaged via Assign Teacher);
  * every other teacher sees only students actually assigned to them.
+ * `isRootView` is the caller's own `profile.isRootTeacher` (see
+ * TeacherProfile in schema.prisma) — passed in rather than looked up here
+ * so this stays a pure query function with no auth logic of its own.
  */
 export async function getStudentRoster(
   teacherId: string,
-  teacherEmail: string,
+  isRootView: boolean,
   options: { search?: string; page?: number } = {}
 ): Promise<StudentRosterResult> {
-  const isRootView = isRootTeacherEmail(teacherEmail);
   const page = Math.max(1, options.page ?? 1);
   const search = options.search?.trim();
 
@@ -113,12 +114,12 @@ export type AssignTeacherResult = { success: true } | { success: false; error: s
 
 /** Root-only: (re)assigns a student to a teacher, or unassigns with teacherId null. */
 export async function assignStudentTeacher(
-  actingTeacherEmail: string,
+  isActingTeacherRoot: boolean,
   studentId: string,
   teacherId: string | null
 ): Promise<AssignTeacherResult> {
-  if (!isRootTeacherEmail(actingTeacherEmail)) {
-    return { success: false, error: "Only the root administrator can assign teachers." };
+  if (!isActingTeacherRoot) {
+    return { success: false, error: "Only a root administrator can assign teachers." };
   }
 
   const student = await prisma.studentProfile.findUnique({ where: { id: studentId }, select: { id: true } });

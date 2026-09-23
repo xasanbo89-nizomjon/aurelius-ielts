@@ -8,7 +8,6 @@ export type NavItem = {
 
 export const STUDENT_NAV_ITEMS: NavItem[] = [
   { label: "Home", href: "/student/dashboard", icon: "LayoutDashboard" },
-  { label: "My Profile", href: "/student/profile", icon: "UserCircle" },
   { label: "Listening", href: "/student/listening", icon: "Headphones" },
   { label: "Reading", href: "/student/reading", icon: "BookOpen" },
   { label: "Writing", href: "/student/writing", icon: "PenLine" },

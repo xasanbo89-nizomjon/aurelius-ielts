@@ -5,7 +5,6 @@ import { requireTeacherProfile } from "@/lib/session";
 import { getTeacherOverview } from "@/lib/dashboard-data";
 import { getTeacherArticlesOverview } from "@/lib/article-analytics";
 import { getTrialAnalytics } from "@/lib/trial-management";
-import { isRootTeacherEmail } from "@/lib/teacher-access";
 import { formatRelativeTime } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
@@ -19,7 +18,7 @@ export const metadata: Metadata = { title: "Overview" };
 
 export default async function TeacherDashboardPage() {
   const { user, profile } = await requireTeacherProfile();
-  const isRoot = isRootTeacherEmail(user.email);
+  const isRoot = profile.isRootTeacher;
 
   const [overview, articlesOverview, trialAnalytics] = await Promise.all([
     getTeacherOverview(profile.id),

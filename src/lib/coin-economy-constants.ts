@@ -8,7 +8,12 @@ export const MAX_DAILY_STUDY_COINS = 45;
 export const PREMIUM_REDEMPTION_COST = 1000;
 export const PREMIUM_REDEMPTION_DAYS = 30;
 
-/** Phase 17 — Article Audio. One-time rewards, each gated by a real completion threshold and an idempotency key so re-crossing it never pays out twice. */
-export const ARTICLE_READ_COMPLETE_COINS = 10;
+/**
+ * Phase 17 — Article Audio. One-time rewards, each gated by a real
+ * completion threshold and an idempotency key so re-crossing it never pays
+ * out twice — 5 + 5 = 10 coins is the real, enforced maximum per article,
+ * not just a documented intent.
+ */
+export const ARTICLE_READ_COMPLETE_COINS = 5;
 export const ARTICLE_AUDIO_COMPLETE_COINS = 5;
 export const ARTICLE_AUDIO_COMPLETE_THRESHOLD_PERCENT = 90;

@@ -15,10 +15,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { EmptyState } from "@/components/dashboard/empty-state";
 
 export function TeacherManagementView({
-  rootEmail,
+  rootTeacherEmails,
   teachers,
 }: {
-  rootEmail: string;
+  rootTeacherEmails: string[];
   teachers: TeacherAllowlistRow[];
 }) {
   const [email, setEmail] = useState("");
@@ -62,12 +62,16 @@ export function TeacherManagementView({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <ShieldCheck className="text-accent size-4.5" aria-hidden="true" /> Root administrator
+            <ShieldCheck className="text-accent size-4.5" aria-hidden="true" /> Root administrators
           </CardTitle>
-          <CardDescription>Permanent — always a teacher, and not managed here.</CardDescription>
+          <CardDescription>Always teachers, and not managed here.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <Badge variant="accent">{rootEmail}</Badge>
+        <CardContent className="flex flex-wrap gap-1.5">
+          {rootTeacherEmails.map((email) => (
+            <Badge key={email} variant="accent">
+              {email}
+            </Badge>
+          ))}
         </CardContent>
       </Card>
 

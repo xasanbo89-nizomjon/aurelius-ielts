@@ -3,7 +3,6 @@ import type { TrialAuditAction } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { addDays, getSubscriptionSummary, TRIAL_DURATION_DAYS, type SubscriptionSummary } from "@/lib/subscription";
-import { isRootTeacherEmail } from "@/lib/teacher-access";
 
 const TRIAL_EXTENSION_DAYS = 30;
 
@@ -16,19 +15,20 @@ export type TrialActionResult = { success: true; summary: SubscriptionSummary } 
 
 /**
  * Reset 90-Day Trial — root-teacher-only. The real authorization gate is
- * isRootTeacherEmail(), checked here regardless of what the UI already
- * hid — never trust a client-side role check for this. Overwrites the
- * student's current subscription row's start/end/status entirely (a
- * genuinely fresh start), rather than layering a new row on top, so there
- * is always exactly one current trial state per student.
+ * `isActingTeacherRoot` (the caller's own `profile.isRootTeacher`),
+ * checked here regardless of what the UI already hid — never trust a
+ * client-side role check for this. Overwrites the student's current
+ * subscription row's start/end/status entirely (a genuinely fresh start),
+ * rather than layering a new row on top, so there is always exactly one
+ * current trial state per student.
  */
 export async function resetStudentTrial(
-  actingTeacherEmail: string,
+  isActingTeacherRoot: boolean,
   rootTeacherId: string,
   studentId: string
 ): Promise<TrialActionResult> {
-  if (!isRootTeacherEmail(actingTeacherEmail)) {
-    return { success: false, error: "Only the root administrator can manage student trials." };
+  if (!isActingTeacherRoot) {
+    return { success: false, error: "Only a root administrator can manage student trials." };
   }
 
   try {
@@ -72,12 +72,12 @@ export async function resetStudentTrial(
  * were still in the past.
  */
 export async function extendStudentTrial(
-  actingTeacherEmail: string,
+  isActingTeacherRoot: boolean,
   rootTeacherId: string,
   studentId: string
 ): Promise<TrialActionResult> {
-  if (!isRootTeacherEmail(actingTeacherEmail)) {
-    return { success: false, error: "Only the root administrator can manage student trials." };
+  if (!isActingTeacherRoot) {
+    return { success: false, error: "Only a root administrator can manage student trials." };
   }
 
   try {
