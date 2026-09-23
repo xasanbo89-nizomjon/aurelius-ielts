@@ -32,6 +32,24 @@ export async function determineRoleForEmail(email: string): Promise<"TEACHER" | 
   return allowed ? "TEACHER" : "STUDENT";
 }
 
+/**
+ * The root teacher's own TeacherProfile id, used to auto-assign new
+ * students to a working default at sign-up (see
+ * completeOnboardingAction/completeRegistrationAction) so a brand-new
+ * student never lands on an empty "no teacher assigned" dashboard. Returns
+ * null only if the root teacher hasn't signed in and created their own
+ * account yet (a fresh install before its first boot) — new students are
+ * then simply left unassigned, same as before this existed, and can be
+ * assigned manually via Teacher Management once a teacher account exists.
+ */
+export async function getRootTeacherProfileId(): Promise<string | null> {
+  const root = await prisma.teacherProfile.findFirst({
+    where: { user: { email: ROOT_TEACHER_EMAIL } },
+    select: { id: true },
+  });
+  return root?.id ?? null;
+}
+
 export type TeacherAllowlistRow = {
   id: string;
   email: string;

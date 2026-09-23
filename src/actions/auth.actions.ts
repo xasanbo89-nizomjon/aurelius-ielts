@@ -6,7 +6,7 @@ import type { Role } from "@prisma/client";
 
 import { getAdminAuth, SESSION_COOKIE_MAX_AGE_MS, SESSION_COOKIE_NAME } from "@/lib/firebase/admin";
 import { prisma } from "@/lib/prisma";
-import { determineRoleForEmail } from "@/lib/teacher-access";
+import { determineRoleForEmail, getRootTeacherProfileId } from "@/lib/teacher-access";
 import { createTrialSubscription } from "@/lib/subscription";
 
 export type CompleteRegistrationResult = { success: true; role: Role } | { success: false; error: string };
@@ -45,6 +45,11 @@ export async function completeRegistrationAction(
     if (!user) {
       const role = await determineRoleForEmail(decoded.email);
       const email = decoded.email;
+      // Auto-assign new students to the root teacher so they never land on
+      // an empty "no teacher assigned" dashboard — see
+      // getRootTeacherProfileId. Root can still reassign any student to a
+      // different teacher afterward via Teacher Management.
+      const rootTeacherId = role === "STUDENT" ? await getRootTeacherProfileId() : null;
       // Atomic: a new student's free trial is created in the same
       // transaction as their profile — see onboarding.actions.ts for the
       // same pattern on the Google sign-in path.
@@ -56,7 +61,9 @@ export async function completeRegistrationAction(
             name: parsed.data.name,
             image: decoded.picture,
             role,
-            ...(role === "STUDENT" ? { studentProfile: { create: {} } } : { teacherProfile: { create: {} } }),
+            ...(role === "STUDENT"
+              ? { studentProfile: { create: { teacherId: rootTeacherId } } }
+              : { teacherProfile: { create: {} } }),
           },
           include: { studentProfile: true },
         });
