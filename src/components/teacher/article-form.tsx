@@ -10,10 +10,12 @@ import {
   createArticleAction,
   updateArticleAction,
   uploadArticleCoverImageAction,
-  uploadArticleAudioAction,
+  prepareArticleAudioUploadAction,
 } from "@/actions/articles.actions";
 import { IMAGE_INPUT_ACCEPT, validateImageFile } from "@/lib/uploads/image-constraints";
 import { AUDIO_INPUT_ACCEPT, MAX_AUDIO_FILE_SIZE_LABEL, validateAudioFile } from "@/lib/uploads/audio-constraints";
+import { ARTICLE_AUDIO_BUCKET } from "@/lib/uploads/bucket-names";
+import { uploadToSignedUrl } from "@/lib/uploads/supabase-browser";
 import { getAudioDuration } from "@/lib/audio-duration";
 import { computeContentStats } from "@/lib/content-stats";
 import { ARTICLE_DIFFICULTY_LABELS } from "@/lib/labels";
@@ -94,20 +96,34 @@ export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArt
     }
 
     setUploadingAudio(true);
-    const [duration, formData] = await Promise.all([getAudioDuration(file), Promise.resolve(new FormData())]);
-    formData.append("file", file);
-    const result = await uploadArticleAudioAction(formData);
-    setUploadingAudio(false);
+    try {
+      // 1) A tiny request/response with no file bytes — asks the server to
+      // authorize one specific upload. 2) The actual file goes straight from
+      // this browser to Supabase, never through Next.js/Vercel — required
+      // for files up to 50MB, since a Server Action carrying the bytes
+      // itself would hit Vercel's hard ~4.5MB request-body ceiling.
+      const duration = await getAudioDuration(file);
+      const prepared = await prepareArticleAudioUploadAction({
+        fileName: file.name,
+        fileSize: file.size,
+        contentType: validation.contentType,
+      });
+      if (!prepared.success) {
+        toast.error(prepared.error);
+        return;
+      }
 
-    if (!result.success) {
-      toast.error(result.error);
-      return;
+      await uploadToSignedUrl(ARTICLE_AUDIO_BUCKET, prepared.path, prepared.token, file, validation.contentType);
+
+      setNewAudioPath(prepared.publicUrl);
+      setNewAudioDuration(duration);
+      setAudioRemoved(false);
+      toast.success("Article audio uploaded.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not upload the article audio.");
+    } finally {
+      setUploadingAudio(false);
     }
-
-    setNewAudioPath(result.path);
-    setNewAudioDuration(duration);
-    setAudioRemoved(false);
-    toast.success("Article audio uploaded.");
   }
 
   function handleRemoveAudio() {
