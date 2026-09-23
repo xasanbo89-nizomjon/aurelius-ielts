@@ -18,10 +18,13 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline rounded-none",
       },
       size: {
+        // pointer-coarse (touchscreens, any viewport size) bumps sm/icon up
+        // to the 44px minimum touch target — desktop/mouse density is
+        // untouched, since a mouse pointer doesn't need the extra room.
         default: "h-11 px-6 py-2 has-[>svg]:px-5",
-        sm: "h-9 rounded-full px-4 has-[>svg]:px-3.5 text-[0.8rem]",
+        sm: "h-9 rounded-full px-4 has-[>svg]:px-3.5 text-[0.8rem] pointer-coarse:h-11",
         lg: "h-12 rounded-full px-8 has-[>svg]:px-6 text-base",
-        icon: "size-10 rounded-full",
+        icon: "size-10 rounded-full pointer-coarse:size-11",
       },
     },
     defaultVariants: {

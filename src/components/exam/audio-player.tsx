@@ -128,7 +128,7 @@ export function AudioPlayer({ src, label }: { src: string; label: string }) {
             type="button"
             onClick={toggleMute}
             aria-label={muted ? "Unmute audio" : "Mute audio"}
-            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-8 items-center justify-center rounded-full outline-none focus-visible:ring-2"
+            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-8 items-center justify-center rounded-full outline-none focus-visible:ring-2 pointer-coarse:size-11"
           >
             <VolumeIcon className="size-4" />
           </button>
@@ -152,7 +152,7 @@ export function AudioPlayer({ src, label }: { src: string; label: string }) {
               onClick={() => setSpeed(option)}
               aria-pressed={speed === option}
               className={cn(
-                "rounded-full px-2 py-1 text-[11px] font-medium transition-colors",
+                "flex items-center justify-center rounded-full px-2 py-1 text-[11px] font-medium transition-colors pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-2.5",
                 speed === option ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
               )}
             >

@@ -156,7 +156,7 @@ export function ArticleAudioPlayer({
           type="button"
           onClick={() => skip(-SKIP_SECONDS)}
           aria-label={`Skip back ${SKIP_SECONDS} seconds`}
-          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-8 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2"
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-8 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 pointer-coarse:size-11"
         >
           <RotateCcw className="size-4" />
         </button>
@@ -164,7 +164,7 @@ export function ArticleAudioPlayer({
           type="button"
           onClick={() => skip(SKIP_SECONDS)}
           aria-label={`Skip forward ${SKIP_SECONDS} seconds`}
-          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-8 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2"
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-8 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 pointer-coarse:size-11"
         >
           <RotateCw className="size-4" />
         </button>
@@ -197,7 +197,7 @@ export function ArticleAudioPlayer({
               onClick={() => setSpeed(option)}
               aria-pressed={speed === option}
               className={cn(
-                "rounded-full px-2 py-1 text-[11px] font-medium transition-colors",
+                "flex items-center justify-center rounded-full px-2 py-1 text-[11px] font-medium transition-colors pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:px-2.5",
                 speed === option ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"
               )}
             >

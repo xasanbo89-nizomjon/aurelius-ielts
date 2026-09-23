@@ -25,6 +25,9 @@ type WordDetails = {
 const STATUS_EMOJI: Record<WordStatus, string> = { UNKNOWN: "🔴", LEARNING: "🟡", KNOWN: "🔵" };
 const STATUS_ORDER: WordStatus[] = ["UNKNOWN", "LEARNING", "KNOWN"];
 const PROGRESS_SAVE_DEBOUNCE_MS = 1500;
+/** Matches the popup's `w-72` class — used to keep it fully on-screen (see handleWordClick) on narrow phones, where a word near either edge would otherwise push it half off-screen. */
+const POPUP_WIDTH_PX = 288;
+const POPUP_EDGE_MARGIN_PX = 12;
 
 export function ArticleReader({
   articleId,
@@ -115,10 +118,17 @@ export function ArticleReader({
     const container = containerRef.current;
     const rect = event.currentTarget.getBoundingClientRect();
     const containerRect = container?.getBoundingClientRect();
+    const rawX = rect.left - (containerRect?.left ?? 0) + rect.width / 2;
+    // Clamped so the (horizontally-centered) popup never extends past the
+    // container's edges — otherwise a word near the left/right margin on a
+    // narrow phone screen would render the popup partly off-screen.
+    const halfPopup = POPUP_WIDTH_PX / 2 + POPUP_EDGE_MARGIN_PX;
+    const containerWidth = containerRect?.width ?? rawX * 2;
+    const clampedX = Math.min(Math.max(rawX, halfPopup), Math.max(halfPopup, containerWidth - halfPopup));
     setActiveWord({
       raw,
       word,
-      x: rect.left - (containerRect?.left ?? 0) + rect.width / 2,
+      x: clampedX,
       y: rect.top - (containerRect?.top ?? 0),
     });
 
@@ -200,7 +210,7 @@ export function ArticleReader({
           <div
             ref={popupRef}
             style={{ left: activeWord.x, top: activeWord.y }}
-            className="border-border/70 bg-popover text-popover-foreground absolute z-20 w-72 -translate-x-1/2 -translate-y-[calc(100%+10px)] rounded-2xl border p-4 shadow-soft-lg"
+            className="border-border/70 bg-popover text-popover-foreground absolute z-20 w-72 max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-[calc(100%+10px)] rounded-2xl border p-4 shadow-soft-lg"
           >
             <div className="mb-2 flex items-start justify-between gap-2">
               <p className="font-display text-base font-medium">{activeWord.word}</p>
@@ -208,7 +218,7 @@ export function ArticleReader({
                 type="button"
                 onClick={() => setActiveWord(null)}
                 aria-label="Close"
-                className="text-muted-foreground hover:text-foreground -mt-1 -mr-1 rounded-full p-1"
+                className="text-muted-foreground hover:text-foreground -mt-1.5 -mr-1.5 flex size-11 shrink-0 items-center justify-center rounded-full"
               >
                 <X className="size-3.5" />
               </button>

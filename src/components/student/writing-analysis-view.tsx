@@ -49,7 +49,7 @@ export function WritingAnalysisView({ analysis, content }: { analysis: WritingAn
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SubBandCard label="Task Response" value={analysis.taskResponseBand} />
         <SubBandCard label="Coherence & Cohesion" value={analysis.coherenceBand} />
         <SubBandCard label="Lexical Resource" value={analysis.vocabularyBand} />
