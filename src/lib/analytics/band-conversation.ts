@@ -524,3 +524,55 @@ export async function getStudentInsights(studentId: string): Promise<StudentInsi
 
   return insights;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 17 — Article Audio: article activity on the Student Performance
+// Profile ("Railway Children — Reading: 100% · Audio: 92% · Vocabulary: 18
+// words · Time: 24 minutes").
+// ---------------------------------------------------------------------------
+
+export type ArticleActivityRow = {
+  articleId: string;
+  articleTitle: string;
+  hasAudio: boolean;
+  readProgress: number;
+  audioProgress: number;
+  vocabularySaved: number;
+  timeSpentSeconds: number;
+  lastOpenedAt: Date;
+};
+
+/** Every article this student has ever opened, most recently opened first — one query for progress rows, one batched vocabulary count, no N+1. */
+export async function getArticleActivityForStudent(studentId: string): Promise<ArticleActivityRow[]> {
+  const rows = await prisma.readingProgress.findMany({
+    where: { studentId },
+    orderBy: { lastOpenedAt: "desc" },
+    select: {
+      articleId: true,
+      percentComplete: true,
+      audioProgress: true,
+      timeSpentSeconds: true,
+      lastOpenedAt: true,
+      article: { select: { title: true, audioUrl: true } },
+    },
+  });
+  if (rows.length === 0) return [];
+
+  const vocabCounts = await prisma.studentVocabulary.groupBy({
+    by: ["articleId"],
+    where: { studentId, articleId: { in: rows.map((r) => r.articleId) } },
+    _count: true,
+  });
+  const vocabByArticle = new Map(vocabCounts.map((row) => [row.articleId, row._count]));
+
+  return rows.map((row) => ({
+    articleId: row.articleId,
+    articleTitle: row.article.title,
+    hasAudio: row.article.audioUrl != null,
+    readProgress: row.percentComplete,
+    audioProgress: row.audioProgress,
+    vocabularySaved: vocabByArticle.get(row.articleId) ?? 0,
+    timeSpentSeconds: row.timeSpentSeconds,
+    lastOpenedAt: row.lastOpenedAt,
+  }));
+}

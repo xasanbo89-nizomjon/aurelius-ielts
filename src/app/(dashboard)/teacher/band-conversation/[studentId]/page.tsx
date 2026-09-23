@@ -10,6 +10,7 @@ import {
   getWeaknessAnalysis,
   getBandTrend,
   getStudentInsights,
+  getArticleActivityForStudent,
   type BandTrendRange,
 } from "@/lib/analytics/band-conversation";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { TestHistoryTable } from "@/components/analytics/test-history-table";
 import { WeaknessAnalysisCard } from "@/components/analytics/weakness-analysis-card";
 import { BandTrendCharts } from "@/components/analytics/band-trend-chart";
 import { StudentInsightsCard } from "@/components/analytics/student-insights-card";
+import { ArticleActivityTable } from "@/components/analytics/article-activity-table";
 
 export const metadata: Metadata = { title: "Student Performance" };
 
@@ -39,11 +41,12 @@ export default async function StudentPerformancePage({
   const student = await getStudentPerformanceProfile(profile.id, studentId);
   if (!student) notFound();
 
-  const [testHistory, weaknesses, trend, insights] = await Promise.all([
+  const [testHistory, weaknesses, trend, insights, articleActivity] = await Promise.all([
     getTestHistoryForStudent(studentId),
     getWeaknessAnalysis(studentId),
     getBandTrend(studentId, range),
     getStudentInsights(studentId),
+    getArticleActivityForStudent(studentId),
   ]);
 
   return (
@@ -93,6 +96,8 @@ export default async function StudentPerformancePage({
       <BandTrendCharts studentId={studentId} trend={trend} range={range} />
 
       <WeaknessAnalysisCard analysis={weaknesses} />
+
+      <ArticleActivityTable rows={articleActivity} />
 
       <TestHistoryTable studentId={studentId} rows={testHistory} />
     </>

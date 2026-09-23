@@ -62,6 +62,7 @@ export default async function EditArticlePage({
           category: article.category,
           difficulty: article.difficulty,
           coverImagePath: article.coverImagePath,
+          audioUrl: article.audioUrl,
         }}
       />
     </>

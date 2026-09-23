@@ -3,17 +3,21 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ImageIcon, Loader2, Upload } from "lucide-react";
+import { ImageIcon, Loader2, Music, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   createArticleAction,
   updateArticleAction,
   uploadArticleCoverImageAction,
+  uploadArticleAudioAction,
 } from "@/actions/articles.actions";
 import { IMAGE_INPUT_ACCEPT, validateImageFile } from "@/lib/uploads/image-constraints";
+import { AUDIO_INPUT_ACCEPT, MAX_AUDIO_FILE_SIZE_LABEL, validateAudioFile } from "@/lib/uploads/audio-constraints";
+import { getAudioDuration } from "@/lib/audio-duration";
 import { computeContentStats } from "@/lib/content-stats";
 import { ARTICLE_DIFFICULTY_LABELS } from "@/lib/labels";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +32,7 @@ export type ExistingArticle = {
   category: string;
   difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
   coverImagePath: string | null;
+  audioUrl: string | null;
 };
 
 export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArticle }) {
@@ -39,10 +44,16 @@ export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArt
   const [difficulty, setDifficulty] = useState<ExistingArticle["difficulty"]>(existingArticle?.difficulty ?? "INTERMEDIATE");
   const [newCoverPath, setNewCoverPath] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [newAudioPath, setNewAudioPath] = useState<string | null>(null);
+  const [newAudioDuration, setNewAudioDuration] = useState<number | null>(null);
+  const [audioRemoved, setAudioRemoved] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   const coverPreview = newCoverPath ?? existingArticle?.coverImagePath ?? null;
+  const audioPreviewName = audioRemoved ? null : (newAudioPath ?? existingArticle?.audioUrl ?? null);
   const stats = computeContentStats(content);
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -71,6 +82,40 @@ export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArt
     toast.success("Cover image uploaded.");
   }
 
+  async function handleAudioFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const validation = validateAudioFile({ name: file.name, size: file.size, type: file.type });
+    if (!validation.valid) {
+      toast.error(validation.error);
+      return;
+    }
+
+    setUploadingAudio(true);
+    const [duration, formData] = await Promise.all([getAudioDuration(file), Promise.resolve(new FormData())]);
+    formData.append("file", file);
+    const result = await uploadArticleAudioAction(formData);
+    setUploadingAudio(false);
+
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+
+    setNewAudioPath(result.path);
+    setNewAudioDuration(duration);
+    setAudioRemoved(false);
+    toast.success("Article audio uploaded.");
+  }
+
+  function handleRemoveAudio() {
+    setNewAudioPath(null);
+    setNewAudioDuration(null);
+    setAudioRemoved(true);
+  }
+
   async function handleSubmit() {
     if (!title.trim()) return toast.error("Give the article a title.");
     if (!category.trim()) return toast.error("Add a category.");
@@ -84,6 +129,9 @@ export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArt
       category,
       difficulty,
       ...(newCoverPath && { coverImagePath: newCoverPath }),
+      ...(audioRemoved
+        ? { audioUrl: null, audioDuration: null }
+        : newAudioPath && { audioUrl: newAudioPath, audioDuration: newAudioDuration }),
     };
     const result = existingArticle
       ? await updateArticleAction(existingArticle.id, input)
@@ -103,7 +151,7 @@ export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArt
     }
   }
 
-  const busy = submitting || uploading;
+  const busy = submitting || uploading || uploadingAudio;
 
   return (
     <div className="max-w-3xl space-y-5">
@@ -174,6 +222,33 @@ export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArt
           </Button>
         </div>
         <p className="text-muted-foreground text-xs">Accepts .jpg, .png and .webp files, up to 5MB.</p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Article audio (optional)</Label>
+        <input ref={audioInputRef} type="file" accept={AUDIO_INPUT_ACCEPT} className="hidden" onChange={handleAudioFileChange} />
+        <div className="flex flex-wrap items-center gap-3">
+          <div
+            className={cn(
+              "border-border/70 flex size-16 shrink-0 items-center justify-center rounded-xl border",
+              audioPreviewName ? "bg-accent/15 text-accent" : "bg-secondary/30 text-muted-foreground"
+            )}
+          >
+            <Music className="size-6" strokeWidth={1.5} />
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => audioInputRef.current?.click()} disabled={busy}>
+            {uploadingAudio ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+            {audioPreviewName ? "Replace audio" : "Upload audio"}
+          </Button>
+          {audioPreviewName && (
+            <Button type="button" variant="ghost" size="sm" onClick={handleRemoveAudio} disabled={busy}>
+              <X className="size-4" /> Remove
+            </Button>
+          )}
+        </div>
+        <p className="text-muted-foreground text-xs">
+          Accepts .mp3, .wav and .m4a files, up to {MAX_AUDIO_FILE_SIZE_LABEL}. Students see an audio player above the article.
+        </p>
       </div>
 
       <div className="space-y-1.5">

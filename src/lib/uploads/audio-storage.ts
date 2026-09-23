@@ -29,3 +29,27 @@ export async function uploadListeningAudio(teacherId: string, file: File): Promi
 
   return { path: servedPath, fileName: file.name, mimeType: validation.contentType, size: file.size };
 }
+
+/** The Supabase Storage bucket article audio is uploaded into — public, same pattern as LISTENING_AUDIO_BUCKET. */
+export const ARTICLE_AUDIO_BUCKET = "article-audio";
+
+/**
+ * Uploads an article's audio narration to the public `article-audio`
+ * Supabase Storage bucket and returns its playable public URL. Same
+ * upload path/validation as uploadListeningAudio — a separate bucket only
+ * because it's a conceptually distinct piece of content (article
+ * narration vs. a listening-test recording), not because anything about
+ * the upload mechanics differs.
+ */
+export async function uploadArticleAudio(teacherId: string, file: File): Promise<UploadedAudio> {
+  const validation = validateAudioFile({ name: file.name, size: file.size, type: file.type });
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const objectPath = `${teacherId}/${randomUUID()}${validation.extension}`;
+  const servedPath = await uploadBuffer(ARTICLE_AUDIO_BUCKET, objectPath, buffer, validation.contentType);
+
+  return { path: servedPath, fileName: file.name, mimeType: validation.contentType, size: file.size };
+}

@@ -1,8 +1,13 @@
 "use server";
 
 import { requireStudentProfile } from "@/lib/session";
-import { saveReadingProgress } from "@/lib/reading-progress";
-import { readingProgressSchema, type ReadingProgressInput } from "@/lib/validations/articles";
+import { saveReadingProgress, saveAudioProgress } from "@/lib/reading-progress";
+import {
+  readingProgressSchema,
+  audioProgressSchema,
+  type ReadingProgressInput,
+  type AudioProgressInput,
+} from "@/lib/validations/articles";
 
 export type SaveReadingProgressResult = { success: true } | { success: false; error: string };
 
@@ -19,9 +24,25 @@ export async function saveReadingProgressAction(input: ReadingProgressInput): Pr
     await saveReadingProgress(profile.id, parsed.articleId, {
       lastPosition: parsed.lastPosition,
       percentComplete: parsed.percentComplete,
+      timeSpentSeconds: parsed.timeSpentSeconds,
     });
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Could not save reading progress." };
+  }
+}
+
+/** Same debounced, no-revalidate shape as saveReadingProgressAction — fires repeatedly while audio plays. */
+export async function saveArticleAudioProgressAction(input: AudioProgressInput): Promise<SaveReadingProgressResult> {
+  try {
+    const { profile } = await requireStudentProfile();
+    const parsed = audioProgressSchema.parse(input);
+    await saveAudioProgress(profile.id, parsed.articleId, {
+      audioProgress: parsed.audioProgress,
+      timeSpentSeconds: parsed.timeSpentSeconds,
+    });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Could not save audio progress." };
   }
 }

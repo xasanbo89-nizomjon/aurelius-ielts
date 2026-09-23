@@ -10,6 +10,7 @@ import { extractWords } from "@/lib/content-stats";
 import { ARTICLE_DIFFICULTY_LABELS } from "@/lib/labels";
 import { Badge } from "@/components/ui/badge";
 import { ArticleReader } from "@/components/student/article-reader";
+import { ArticleAudioPlayer } from "@/components/student/article-audio-player-lazy";
 
 export const metadata: Metadata = { title: "Article" };
 
@@ -48,6 +49,14 @@ export default async function StudentArticleReaderPage({
           </span>
         </div>
       </div>
+
+      {article.audioUrl && (
+        <ArticleAudioPlayer
+          articleId={article.id}
+          src={article.audioUrl}
+          initialProgressPercent={progress?.audioProgress ?? 0}
+        />
+      )}
 
       <ArticleReader
         articleId={article.id}

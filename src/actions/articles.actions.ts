@@ -6,6 +6,7 @@ import type { ArticleStatus } from "@prisma/client";
 import { requireTeacherProfile } from "@/lib/session";
 import * as articles from "@/lib/articles";
 import { uploadArticleCoverImage } from "@/lib/uploads/image-storage";
+import { uploadArticleAudio } from "@/lib/uploads/audio-storage";
 import { articleSchema, type ArticleInput } from "@/lib/validations/articles";
 
 export type ActionResult = { success: true } | { success: false; error: string };
@@ -79,5 +80,25 @@ export async function uploadArticleCoverImageAction(formData: FormData): Promise
     return { success: true, ...uploaded };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not upload the cover image.") };
+  }
+}
+
+export type UploadArticleAudioResult =
+  | { success: true; path: string; fileName: string; mimeType: string; size: number }
+  | { success: false; error: string };
+
+export async function uploadArticleAudioAction(formData: FormData): Promise<UploadArticleAudioResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      return { success: false, error: "No file was provided." };
+    }
+
+    const uploaded = await uploadArticleAudio(profile.id, file);
+    return { success: true, ...uploaded };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not upload the article audio.") };
   }
 }

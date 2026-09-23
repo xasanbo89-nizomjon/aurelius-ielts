@@ -43,6 +43,7 @@ export function ArticleReader({
   const popupRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredScrollRef = useRef(false);
+  const lastTimeTrackRef = useRef(Date.now());
 
   const [statuses, setStatuses] = useState<Record<string, WordStatus>>(initialStatuses);
   const [detailsCache, setDetailsCache] = useState<Record<string, WordDetails>>({});
@@ -67,7 +68,12 @@ export function ArticleReader({
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         const lastPosition = Math.round((percent / 100) * content.length);
-        void saveReadingProgressAction({ articleId, lastPosition, percentComplete: percent });
+        const now = Date.now();
+        // Real elapsed wall-clock time since the last save, capped so a
+        // backgrounded/idle tab (no scroll for minutes) can't inflate it.
+        const timeSpentSeconds = Math.min(120, Math.round((now - lastTimeTrackRef.current) / 1000));
+        lastTimeTrackRef.current = now;
+        void saveReadingProgressAction({ articleId, lastPosition, percentComplete: percent, timeSpentSeconds });
       }, PROGRESS_SAVE_DEBOUNCE_MS);
     },
     [articleId, content.length]

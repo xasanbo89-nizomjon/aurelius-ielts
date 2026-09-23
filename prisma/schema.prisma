@@ -1103,6 +1103,15 @@ model Article {
   wordCount      Int
   readingMinutes Int
 
+  /// Phase 17 — Article Audio. Both null for every article created before
+  /// this existed and for any article a teacher never attaches audio to;
+  /// the student page hides the audio player entirely when audioUrl is
+  /// null, so this is fully backward compatible. audioDuration is seconds,
+  /// read from the uploaded file's real metadata at upload time — never
+  /// estimated.
+  audioUrl      String?
+  audioDuration Int?
+
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
 
@@ -1277,6 +1286,17 @@ model ReadingProgress {
   lastPosition    Int       @default(0)
   percentComplete Int       @default(0)
   completedAt     DateTime?
+
+  /// Phase 17 — Article Audio. audioProgress is 0-100, the same shape as
+  /// percentComplete but tracking the audio player's furthest position
+  /// instead of scroll position; stays 0 for articles with no audio.
+  /// timeSpentSeconds accumulates real elapsed time with the article open
+  /// (reading or listening) — never a fabricated estimate. lastOpenedAt
+  /// updates alongside progress, which in practice tracks "last opened"
+  /// closely enough without a dedicated page-view write on every visit.
+  audioProgress    Int      @default(0)
+  timeSpentSeconds Int      @default(0)
+  lastOpenedAt     DateTime @default(now())
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

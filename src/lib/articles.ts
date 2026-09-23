@@ -7,6 +7,20 @@ import type { ArticleInput } from "@/lib/validations/articles";
 
 export { computeContentStats };
 
+/**
+ * `undefined` means "leave whatever's already there alone" (the field
+ * wasn't touched this session); an explicit `null` means "the teacher
+ * removed it" and must actually clear the column. Only relevant to
+ * updates — on create there's nothing to leave alone, so null and
+ * undefined both simply mean "no audio yet".
+ */
+function audioFields(input: ArticleInput) {
+  return {
+    ...(input.audioUrl !== undefined && { audioUrl: input.audioUrl }),
+    ...(input.audioDuration !== undefined && { audioDuration: input.audioDuration }),
+  };
+}
+
 function toCreateData(teacherId: string, input: ArticleInput) {
   const { wordCount, readingMinutes } = computeContentStats(input.content);
   return {
@@ -19,6 +33,7 @@ function toCreateData(teacherId: string, input: ArticleInput) {
     readingMinutes,
     createdById: teacherId,
     ...(input.coverImagePath && { coverImagePath: input.coverImagePath }),
+    ...audioFields(input),
   } satisfies Prisma.ArticleUncheckedCreateInput;
 }
 
@@ -42,6 +57,7 @@ export async function updateArticle(articleId: string, teacherId: string, input:
       // otherwise leaves the existing cover untouched (same convention as
       // Passage audio in test-management.ts).
       ...(input.coverImagePath && { coverImagePath: input.coverImagePath }),
+      ...audioFields(input),
     },
   });
   if (result.count === 0) throw new Error("Article not found.");
