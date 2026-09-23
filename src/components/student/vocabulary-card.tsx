@@ -2,12 +2,10 @@
 
 import type { VocabularyStatus } from "@prisma/client";
 
-import { VOCABULARY_STATUS_COLORS, VOCABULARY_STATUS_LABELS } from "@/lib/labels";
+import { VOCABULARY_STATUS_COLORS, VOCABULARY_STATUS_LABELS, VOCABULARY_STATUS_EMOJI } from "@/lib/labels";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-
-const STATUS_EMOJI: Record<VocabularyStatus, string> = { UNKNOWN: "🔴", LEARNING: "🟡", KNOWN: "🔵" };
 
 export type VocabularyCardEntry = {
   id: string;
@@ -44,7 +42,7 @@ export function VocabularyCard({ entry, onClick }: { entry: VocabularyCardEntry;
         </p>
         <div className="flex items-center justify-between gap-2 pt-1">
           <Badge variant="outline" className={cn("gap-1.5 border", colors.border, colors.text, colors.bg)}>
-            {STATUS_EMOJI[entry.status]} {VOCABULARY_STATUS_LABELS[entry.status]}
+            {VOCABULARY_STATUS_EMOJI[entry.status]} {VOCABULARY_STATUS_LABELS[entry.status]}
           </Badge>
           <span className="text-muted-foreground shrink-0 text-xs">{entry.addedAt.toLocaleDateString()}</span>
         </div>

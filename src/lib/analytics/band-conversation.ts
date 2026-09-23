@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
-import type { QuestionType, SkillType } from "@prisma/client";
+import type { QuestionType, SkillType, VocabularyStatus } from "@prisma/client";
 
 export const BAND_CONVERSATION_PAGE_SIZE = 20;
 
@@ -60,6 +60,8 @@ export type BandConversationStudentRow = {
   testsCompleted: number;
   lastActivityDate: Date | null;
   isActive: boolean;
+  /** Same formula as VocabularyStats.vocabularyScore (src/lib/vocabulary.ts) — null for a student with no saved words yet. */
+  vocabularyScore: number | null;
 };
 
 export type BandConversationStatusFilter = "all" | "active" | "inactive";
@@ -124,7 +126,7 @@ export async function getBandConversationStudents(
   const studentIds = rows.map((row) => row.id);
   if (studentIds.length === 0) return { students: [], total };
 
-  const [bandRows, activityRows] = await Promise.all([
+  const [bandRows, activityRows, vocabRows] = await Promise.all([
     prisma.result.groupBy({
       by: ["studentId"],
       where: { studentId: { in: studentIds }, completedAt: { not: null }, skill: { in: ["READING", "LISTENING"] } },
@@ -136,14 +138,32 @@ export async function getBandConversationStudents(
       where: { studentId: { in: studentIds } },
       _max: { activityDate: true },
     }),
+    // Grouped by BOTH studentId and status in one query — the per-student,
+    // per-status counts needed for vocabularyScore, batched for the whole
+    // page rather than one groupBy per row.
+    prisma.studentVocabulary.groupBy({
+      by: ["studentId", "status"],
+      where: { studentId: { in: studentIds } },
+      _count: { _all: true },
+    }),
   ]);
 
   const bandByStudent = new Map(bandRows.map((row) => [row.studentId, row]));
   const activityByStudent = new Map(activityRows.map((row) => [row.studentId, row._max.activityDate]));
 
+  const vocabByStudent = new Map<string, { known: number; learning: number; total: number }>();
+  for (const row of vocabRows) {
+    const entry = vocabByStudent.get(row.studentId) ?? { known: 0, learning: 0, total: 0 };
+    entry.total += row._count._all;
+    if (row.status === "KNOWN") entry.known += row._count._all;
+    if (row.status === "LEARNING") entry.learning += row._count._all;
+    vocabByStudent.set(row.studentId, entry);
+  }
+
   const students: BandConversationStudentRow[] = rows.map((row) => {
     const band = bandByStudent.get(row.id);
     const lastActivityDate = activityByStudent.get(row.id) ?? null;
+    const vocab = vocabByStudent.get(row.id);
     return {
       id: row.id,
       name: row.user.name,
@@ -152,6 +172,8 @@ export async function getBandConversationStudents(
       testsCompleted: band?._count ?? 0,
       lastActivityDate,
       isActive: lastActivityDate != null && lastActivityDate >= activeSince,
+      vocabularyScore:
+        vocab && vocab.total > 0 ? Math.round(((vocab.known + vocab.learning * 0.5) / vocab.total) * 100) : null,
     };
   });
 
@@ -574,5 +596,38 @@ export async function getArticleActivityForStudent(studentId: string): Promise<A
     vocabularySaved: vocabByArticle.get(row.articleId) ?? 0,
     timeSpentSeconds: row.timeSpentSeconds,
     lastOpenedAt: row.lastOpenedAt,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Phase 19 — Vocabulary Analytics & Automatic Word Tracking: recent
+// word-by-word activity on the Student Performance Profile, so a teacher
+// can review real vocabulary weaknesses (the red/unknown entries) alongside
+// everything else already there.
+// ---------------------------------------------------------------------------
+
+export type VocabularyActivityRow = {
+  word: string;
+  status: VocabularyStatus;
+  articleTitle: string | null;
+  addedAt: Date;
+  lastReviewedAt: Date;
+};
+
+/** Every word this student has ever viewed/saved, most recently reviewed first — real StudentVocabulary rows, no placeholder entries. */
+export async function getRecentVocabularyActivity(studentId: string, limit = 15): Promise<VocabularyActivityRow[]> {
+  const rows = await prisma.studentVocabulary.findMany({
+    where: { studentId },
+    orderBy: { lastReviewedAt: "desc" },
+    take: limit,
+    include: { vocabularyWord: { select: { word: true } }, article: { select: { title: true } } },
+  });
+
+  return rows.map((row) => ({
+    word: row.vocabularyWord.word,
+    status: row.status,
+    articleTitle: row.article?.title ?? null,
+    addedAt: row.addedAt,
+    lastReviewedAt: row.lastReviewedAt,
   }));
 }

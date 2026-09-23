@@ -2,7 +2,7 @@ import Link from "next/link";
 import { BookMarked } from "lucide-react";
 
 import { formatRelativeTime } from "@/lib/format";
-import { VOCABULARY_STATUS_LABELS } from "@/lib/labels";
+import { VOCABULARY_STATUS_LABELS, VOCABULARY_STATUS_EMOJI } from "@/lib/labels";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/dashboard/empty-state";
@@ -20,8 +20,8 @@ export function RecentVocabulary({ words }: { words: { word: string; lastReviewe
       {words.length === 0 ? (
         <EmptyState
           icon={BookMarked}
-          title="No words learned yet"
-          description={`Mark words 🔵 ${VOCABULARY_STATUS_LABELS.KNOWN} while reading an article and they'll show up here.`}
+          title="No words viewed yet"
+          description={`Click any word while reading an article and it's automatically saved here as ${VOCABULARY_STATUS_EMOJI.KNOWN} ${VOCABULARY_STATUS_LABELS.KNOWN}.`}
         />
       ) : (
         <Card className="gap-0 py-2">

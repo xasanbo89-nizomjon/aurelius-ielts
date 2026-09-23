@@ -11,8 +11,10 @@ import {
   getBandTrend,
   getStudentInsights,
   getArticleActivityForStudent,
+  getRecentVocabularyActivity,
   type BandTrendRange,
 } from "@/lib/analytics/band-conversation";
+import { getStudentVocabularyStats } from "@/lib/vocabulary";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
@@ -21,6 +23,8 @@ import { WeaknessAnalysisCard } from "@/components/analytics/weakness-analysis-c
 import { BandTrendCharts } from "@/components/analytics/band-trend-chart";
 import { StudentInsightsCard } from "@/components/analytics/student-insights-card";
 import { ArticleActivityTable } from "@/components/analytics/article-activity-table";
+import { VocabularyStatsCards } from "@/components/analytics/vocabulary-stats-cards";
+import { VocabularyActivityList } from "@/components/analytics/vocabulary-activity-list";
 
 export const metadata: Metadata = { title: "Student Performance" };
 
@@ -41,13 +45,16 @@ export default async function StudentPerformancePage({
   const student = await getStudentPerformanceProfile(profile.id, studentId);
   if (!student) notFound();
 
-  const [testHistory, weaknesses, trend, insights, articleActivity] = await Promise.all([
-    getTestHistoryForStudent(studentId),
-    getWeaknessAnalysis(studentId),
-    getBandTrend(studentId, range),
-    getStudentInsights(studentId),
-    getArticleActivityForStudent(studentId),
-  ]);
+  const [testHistory, weaknesses, trend, insights, articleActivity, vocabularyStats, vocabularyActivity] =
+    await Promise.all([
+      getTestHistoryForStudent(studentId),
+      getWeaknessAnalysis(studentId),
+      getBandTrend(studentId, range),
+      getStudentInsights(studentId),
+      getArticleActivityForStudent(studentId),
+      getStudentVocabularyStats(studentId),
+      getRecentVocabularyActivity(studentId),
+    ]);
 
   return (
     <>
@@ -96,6 +103,13 @@ export default async function StudentPerformancePage({
       <BandTrendCharts studentId={studentId} trend={trend} range={range} />
 
       <WeaknessAnalysisCard analysis={weaknesses} />
+
+      <section className="space-y-4">
+        <h2 className="font-display text-xl font-medium tracking-tight">Vocabulary Analytics</h2>
+        <VocabularyStatsCards stats={vocabularyStats} />
+      </section>
+
+      <VocabularyActivityList rows={vocabularyActivity} />
 
       <ArticleActivityTable rows={articleActivity} />
 

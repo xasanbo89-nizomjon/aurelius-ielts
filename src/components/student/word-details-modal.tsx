@@ -5,7 +5,12 @@ import type { VocabularyStatus } from "@prisma/client";
 import { Loader2, Sparkles, Trash2 } from "lucide-react";
 
 import { explainWordAction } from "@/actions/vocabulary-ai.actions";
-import { ARTICLE_DIFFICULTY_LABELS, VOCABULARY_STATUS_COLORS, VOCABULARY_STATUS_LABELS } from "@/lib/labels";
+import {
+  ARTICLE_DIFFICULTY_LABELS,
+  VOCABULARY_STATUS_COLORS,
+  VOCABULARY_STATUS_LABELS,
+  VOCABULARY_STATUS_EMOJI,
+} from "@/lib/labels";
 import {
   Dialog,
   DialogClose,
@@ -22,7 +27,6 @@ import { cn } from "@/lib/utils";
 import type { VocabularyCardEntry } from "@/components/student/vocabulary-card";
 import type { WordExplanation, WordIntelligence } from "@/lib/ai/vocabulary-assistant";
 
-const STATUS_EMOJI: Record<VocabularyStatus, string> = { UNKNOWN: "🔴", LEARNING: "🟡", KNOWN: "🔵" };
 const STATUS_ORDER: VocabularyStatus[] = ["UNKNOWN", "LEARNING", "KNOWN"];
 
 export type WordDetailsEntry = VocabularyCardEntry & WordIntelligence & { hasAiInsights: boolean };
@@ -262,7 +266,7 @@ export function WordDetailsModal({
                         active ? `${colors.bg} ${colors.border} ${colors.text}` : "border-border/70 hover:bg-secondary/60"
                       )}
                     >
-                      <span>{STATUS_EMOJI[status]}</span>
+                      <span>{VOCABULARY_STATUS_EMOJI[status]}</span>
                       {VOCABULARY_STATUS_LABELS[status]}
                     </button>
                   );

@@ -91,6 +91,7 @@ export default async function BandConversationPage({
                 <TableHead>Email</TableHead>
                 <TableHead>Current Estimated Band</TableHead>
                 <TableHead>Tests Completed</TableHead>
+                <TableHead>Vocabulary Score</TableHead>
                 <TableHead>Last Activity</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
@@ -112,6 +113,13 @@ export default async function BandConversationPage({
                     )}
                   </TableCell>
                   <TableCell className="tabular-nums">{student.testsCompleted}</TableCell>
+                  <TableCell>
+                    {student.vocabularyScore != null ? (
+                      <Badge variant={student.vocabularyScore >= 70 ? "success" : "outline"}>{student.vocabularyScore}%</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {student.lastActivityDate ? student.lastActivityDate.toLocaleDateString() : "Never"}
                   </TableCell>

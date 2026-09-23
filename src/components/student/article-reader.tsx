@@ -8,11 +8,13 @@ import { getWordDetailsAction, saveWordAction, updateWordStatusAction } from "@/
 import { saveReadingProgressAction } from "@/actions/reading.actions";
 import { useStudyHeartbeat } from "@/hooks/use-study-heartbeat";
 import { normalizeWord } from "@/lib/vocabulary-word";
-import { VOCABULARY_STATUS_COLORS, VOCABULARY_STATUS_LABELS } from "@/lib/labels";
+import { VOCABULARY_STATUS_COLORS, VOCABULARY_STATUS_LABELS, VOCABULARY_STATUS_EMOJI } from "@/lib/labels";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
 type WordStatus = "UNKNOWN" | "LEARNING" | "KNOWN";
+/** Every word clicked in an article is automatically saved with this status ("Viewed") unless already saved — see handleWordClick. */
+const DEFAULT_CLICK_STATUS: WordStatus = "KNOWN";
 
 type WordDetails = {
   word: string;
@@ -22,7 +24,6 @@ type WordDetails = {
   status: WordStatus | null;
 };
 
-const STATUS_EMOJI: Record<WordStatus, string> = { UNKNOWN: "🔴", LEARNING: "🟡", KNOWN: "🔵" };
 const STATUS_ORDER: WordStatus[] = ["UNKNOWN", "LEARNING", "KNOWN"];
 const PROGRESS_SAVE_DEBOUNCE_MS = 1500;
 /** Matches the popup's `w-72` class — used to keep it fully on-screen (see handleWordClick) on narrow phones, where a word near either edge would otherwise push it half off-screen. */
@@ -132,6 +133,20 @@ export function ArticleReader({
       y: rect.top - (containerRect?.top ?? 0),
     });
 
+    // Requirement: every word clicked in an Article is automatically saved
+    // to the student's vocabulary history, defaulting to "Viewed" (green).
+    // Guarded on the LOCAL statuses map (not re-fetched), so a word already
+    // saved — whether preloaded on page load or auto-saved earlier this
+    // visit — is never touched again here; saveWordAction is also its own
+    // idempotent no-op for an already-saved word, so this is safe even if
+    // the guard ever raced.
+    if (statuses[word] == null) {
+      setStatuses((prev) => ({ ...prev, [word]: DEFAULT_CLICK_STATUS }));
+      saveWordAction(word, DEFAULT_CLICK_STATUS, articleId).then((result) => {
+        if (!result.success) toast.error(result.error);
+      });
+    }
+
     if (detailsCache[word]) return;
 
     setLoadingWord(word);
@@ -143,19 +158,15 @@ export function ArticleReader({
   }
 
   async function handleSetStatus(word: string, status: WordStatus) {
-    // Not yet in the notebook -> save it. Already there (this session's
-    // preloaded statuses, or a status set earlier in this same visit) ->
-    // update it instead. saveWord() is a no-op for an already-saved word,
-    // so routing through it a second time would silently ignore the new
-    // status the student just picked.
-    const alreadySaved = statuses[word] != null;
-
+    // Always the upsert-safe path — words are now auto-saved on click (see
+    // handleWordClick), but that's a fire-and-forget background call, so an
+    // explicit status pick right afterward could otherwise race it. An
+    // explicit pick here always wins regardless of timing: updateWordStatus
+    // creates the row itself if the auto-save hasn't landed yet.
     setStatuses((prev) => ({ ...prev, [word]: status }));
     setDetailsCache((prev) => (prev[word] ? { ...prev, [word]: { ...prev[word], status } } : prev));
 
-    const result = alreadySaved
-      ? await updateWordStatusAction(word, status)
-      : await saveWordAction(word, status, articleId);
+    const result = await updateWordStatusAction(word, status, articleId);
     if (!result.success) {
       toast.error(result.error);
       return;
@@ -268,7 +279,7 @@ export function ArticleReader({
                       : "border-border/70 hover:bg-secondary/60"
                   )}
                 >
-                  <span>{STATUS_EMOJI[status]}</span>
+                  <span>{VOCABULARY_STATUS_EMOJI[status]}</span>
                   {VOCABULARY_STATUS_LABELS[status]}
                 </button>
               ))}

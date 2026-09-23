@@ -77,29 +77,36 @@ export async function saveWord(
 }
 
 /**
- * Changes the status of a word already in this student's notebook —
- * requirement #2 (🔴 Difficult / 🟡 Learning / 🔵 Known). Deliberately
- * distinct from saveWord(): this only ever updates an existing row (a
- * student re-classifying a word they've already saved, from the reader or
- * the vocabulary book) and throws a clear error if the word was never
- * saved, rather than silently creating one.
+ * Changes the status of a word — 🔴 Unknown / 🟡 Partially Known / 🟢
+ * Viewed (requirement #3). An upsert, not a plain update: every word
+ * clicked in an Article is now auto-saved (see saveWord/ArticleReader), but
+ * that auto-save is a fire-and-forget background call, so a student
+ * explicitly picking a status right afterward can race it — this must
+ * still succeed (creating the row itself if needed) rather than throwing
+ * "not saved yet" for what the student experiences as one continuous
+ * action. Idempotent same as saveWord: articleId is only recorded if this
+ * call is the one that creates the row.
  */
 export async function updateWordStatus(
   studentId: string,
   rawWord: string,
-  status: VocabularyStatus
+  status: VocabularyStatus,
+  articleId?: string
 ): Promise<WordDetails> {
   const word = normalizeWord(rawWord);
   if (!word) throw new Error("Enter a valid word.");
 
-  const dictionaryEntry = await prisma.vocabularyWord.findUnique({ where: { word } });
-  if (!dictionaryEntry) throw new Error("This word hasn't been saved to your vocabulary yet.");
-
-  const result = await prisma.studentVocabulary.updateMany({
-    where: { studentId, vocabularyWordId: dictionaryEntry.id },
-    data: { status, lastReviewedAt: new Date() },
+  const dictionaryEntry = await prisma.vocabularyWord.upsert({
+    where: { word },
+    create: { word },
+    update: {},
   });
-  if (result.count === 0) throw new Error("This word hasn't been saved to your vocabulary yet.");
+
+  await prisma.studentVocabulary.upsert({
+    where: { studentId_vocabularyWordId: { studentId, vocabularyWordId: dictionaryEntry.id } },
+    create: { studentId, vocabularyWordId: dictionaryEntry.id, status, articleId },
+    update: { status, lastReviewedAt: new Date() },
+  });
 
   return toDetails(word, dictionaryEntry, status);
 }
@@ -191,6 +198,14 @@ export type VocabularyStats = {
   unknown: number;
   learning: number;
   known: number;
+  /**
+   * 0-100, null for an empty notebook. Real weighted average over this
+   * student's actual saved words — green (known) counts fully, yellow
+   * (learning) counts half, red (unknown) counts zero:
+   * round((known + learning*0.5) / total * 100). Never estimated or
+   * fabricated; recomputed fresh from the real counts above every call.
+   */
+  vocabularyScore: number | null;
   recentlyLearned: { word: string; lastReviewedAt: Date }[];
   /** The single most recently *saved* word (any status) — null for an empty notebook. */
   mostRecentWord: { word: string; addedAt: Date } | null;
@@ -217,11 +232,17 @@ export async function getStudentVocabularyStats(studentId: string): Promise<Voca
     Record<VocabularyStatus, number>
   >;
 
+  const total = grouped.reduce((sum, g) => sum + g._count._all, 0);
+  const unknown = byStatus.UNKNOWN ?? 0;
+  const learning = byStatus.LEARNING ?? 0;
+  const known = byStatus.KNOWN ?? 0;
+
   return {
-    total: grouped.reduce((sum, g) => sum + g._count._all, 0),
-    unknown: byStatus.UNKNOWN ?? 0,
-    learning: byStatus.LEARNING ?? 0,
-    known: byStatus.KNOWN ?? 0,
+    total,
+    unknown,
+    learning,
+    known,
+    vocabularyScore: total > 0 ? Math.round(((known + learning * 0.5) / total) * 100) : null,
     recentlyLearned: recentlyLearned.map((entry) => ({
       word: entry.vocabularyWord.word,
       lastReviewedAt: entry.lastReviewedAt,

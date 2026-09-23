@@ -8,6 +8,7 @@ import { getStreakSummary } from "@/lib/streaks";
 import { getAchievementsForStudent, syncAchievements } from "@/lib/achievements";
 import { getStudyTimeSummary } from "@/lib/study-activity";
 import { getSubscriptionSummary } from "@/lib/subscription";
+import { getStudentVocabularyStats } from "@/lib/vocabulary";
 import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_VARIANTS } from "@/lib/labels";
 import { formatDuration } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -18,6 +19,7 @@ import { Progress } from "@/components/ui/progress";
 import { ProfilePhotoUploader } from "@/components/student/profile-photo-uploader";
 import { ProfileGoalsForm } from "@/components/student/profile-goals-form";
 import { RedeemPremiumButton } from "@/components/student/redeem-premium-button";
+import { VocabularyStatsCards } from "@/components/analytics/vocabulary-stats-cards";
 
 export const metadata: Metadata = { title: "My Profile" };
 
@@ -27,13 +29,14 @@ export default async function StudentProfilePage() {
   // Lazy safety-net: real achievement conditions get re-checked here too, not just from the heartbeat/exam-completion path.
   await syncAchievements(profile.id);
 
-  const [details, wallet, streak, achievements, studyTime, subscription] = await Promise.all([
+  const [details, wallet, streak, achievements, studyTime, subscription, vocabularyStats] = await Promise.all([
     getStudentProfileDetails(user.id, profile.id),
     getWalletSummary(profile.id),
     getStreakSummary(profile.id),
     getAchievementsForStudent(profile.id),
     getStudyTimeSummary(profile.id),
     getSubscriptionSummary(profile.id),
+    getStudentVocabularyStats(profile.id),
   ]);
 
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
@@ -108,6 +111,11 @@ export default async function StudentProfilePage() {
           <StatCard label="This Week" value={formatDuration(studyTime.weekSeconds)} icon={Clock} />
           <StatCard label="This Month" value={formatDuration(studyTime.monthSeconds)} icon={Clock} />
         </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="font-display text-xl font-medium tracking-tight">Vocabulary</h2>
+        <VocabularyStatsCards stats={vocabularyStats} />
       </section>
 
       <section className="space-y-4">

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BookMarked, CheckCircle2, Clock, Flame, History, Layers, TrendingUp } from "lucide-react";
+import { Clock, History, Layers } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getStudentVocabulary, getStudentVocabularyStats } from "@/lib/vocabulary";
@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Button } from "@/components/ui/button";
 import { VocabularyNotebook } from "@/components/student/vocabulary-notebook";
+import { VocabularyStatsCards } from "@/components/analytics/vocabulary-stats-cards";
 import type { WordDetailsEntry } from "@/components/student/word-details-modal";
 
 export const metadata: Metadata = { title: "Vocabulary" };
@@ -50,30 +51,7 @@ export default async function VocabularyPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Words" value={String(stats.total)} icon={BookMarked} />
-        <StatCard
-          label="Hard Words"
-          value={String(stats.unknown)}
-          icon={Flame}
-          caption="🔴 Red"
-          valueClassName="text-red-600 dark:text-red-400"
-        />
-        <StatCard
-          label="Medium Words"
-          value={String(stats.learning)}
-          icon={TrendingUp}
-          caption="🟡 Yellow"
-          valueClassName="text-amber-600 dark:text-amber-400"
-        />
-        <StatCard
-          label="Easy Words"
-          value={String(stats.known)}
-          icon={CheckCircle2}
-          caption="🔵 Blue"
-          valueClassName="text-blue-600 dark:text-blue-400"
-        />
-      </div>
+      <VocabularyStatsCards stats={stats} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatCard

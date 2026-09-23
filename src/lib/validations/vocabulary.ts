@@ -16,6 +16,7 @@ export type SaveWordInput = z.infer<typeof saveWordSchema>;
 export const updateWordStatusSchema = z.object({
   word: z.string().trim().min(1, "Enter a word.").max(64),
   status: vocabularyStatusSchema,
+  articleId: z.string().trim().min(1).optional(),
 });
 export type UpdateWordStatusInput = z.infer<typeof updateWordStatusSchema>;
 

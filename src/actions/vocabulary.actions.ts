@@ -69,12 +69,13 @@ export type UpdateWordStatusResult = { success: true; details: WordDetails } | {
 
 export async function updateWordStatusAction(
   word: string,
-  status: "UNKNOWN" | "LEARNING" | "KNOWN"
+  status: "UNKNOWN" | "LEARNING" | "KNOWN",
+  articleId?: string
 ): Promise<UpdateWordStatusResult> {
   try {
     const { profile } = await requireStudentProfile();
-    const parsed = updateWordStatusSchema.parse({ word, status });
-    const details = await updateWordStatus(profile.id, parsed.word, parsed.status);
+    const parsed = updateWordStatusSchema.parse({ word, status, articleId });
+    const details = await updateWordStatus(profile.id, parsed.word, parsed.status, parsed.articleId);
     revalidatePath("/student/vocabulary");
     return { success: true, details };
   } catch (error) {
