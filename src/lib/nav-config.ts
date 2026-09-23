@@ -33,6 +33,7 @@ export const TEACHER_NAV_ITEMS: NavItem[] = [
   { label: "Speaking Reviews", href: "/teacher/speaking-reviews", icon: "Mic" },
   { label: "Analytics", href: "/teacher/analytics", icon: "BarChart3" },
   { label: "Band Conversion", href: "/teacher/band-conversion", icon: "Scale" },
+  { label: "Band Conversation", href: "/teacher/band-conversation", icon: "LineChart" },
   { label: "Updates", href: "/teacher/updates", icon: "Megaphone" },
   { label: "Promo Codes", href: "/teacher/promo-codes", icon: "Ticket" },
   { label: "Payments", href: "/teacher/payments", icon: "CreditCard" },
