@@ -6,13 +6,22 @@ export type NavItem = {
   icon: NavIconName;
 };
 
+// Phase 19 — Student Experience Redesign: the sidebar/mobile nav only
+// carries the primary learning-hub destinations now. Listening/Reading/Full
+// Mock Test live inside the Tests hub (/student/tests) instead of as
+// separate entries, and Vocabulary/Study Coach/Analytics/Test
+// History/Subscription moved to STUDENT_SECONDARY_NAV_ITEMS (surfaced from
+// the profile menu) — none of those routes or their data were removed.
 export const STUDENT_NAV_ITEMS: NavItem[] = [
   { label: "Home", href: "/student/dashboard", icon: "LayoutDashboard" },
-  { label: "Listening", href: "/student/listening", icon: "Headphones" },
-  { label: "Reading", href: "/student/reading", icon: "BookOpen" },
-  { label: "Writing", href: "/student/writing", icon: "PenLine" },
-  { label: "Full Mock Test", href: "/student/mock-test", icon: "ClipboardCheck" },
+  { label: "Tests", href: "/student/tests", icon: "ClipboardCheck" },
   { label: "Articles", href: "/student/articles", icon: "Newspaper" },
+  { label: "Writing", href: "/student/writing", icon: "PenLine" },
+  { label: "Speaking", href: "/student/speaking", icon: "Mic" },
+];
+
+/** Secondary student destinations, surfaced from the profile menu instead of the sidebar. */
+export const STUDENT_SECONDARY_NAV_ITEMS: NavItem[] = [
   { label: "Vocabulary", href: "/student/vocabulary", icon: "BookMarked" },
   { label: "Study Coach", href: "/student/study-coach", icon: "Target" },
   { label: "Analytics", href: "/student/analytics", icon: "LineChart" },

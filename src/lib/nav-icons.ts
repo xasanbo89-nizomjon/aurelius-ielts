@@ -22,6 +22,7 @@ import {
   BookMarked,
   NotebookPen,
   UserCircle,
+  Mic,
 } from "lucide-react";
 
 /**
@@ -56,6 +57,7 @@ export const NAV_ICONS = {
   BookMarked,
   NotebookPen,
   UserCircle,
+  Mic,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;

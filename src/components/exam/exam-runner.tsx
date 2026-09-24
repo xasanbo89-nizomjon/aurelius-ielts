@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { QuestionType } from "@prisma/client";
-import { ChevronLeft, ChevronRight, Flag, List, Loader2, Maximize2, Minimize2, NotebookPen } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, Home, List, Loader2, Maximize2, Minimize2, NotebookPen } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -24,6 +25,7 @@ import { QuestionNavigator, type NavigatorQuestionState } from "@/components/exa
 import { YourAnswersPanel, type AnswerSummaryQuestion } from "@/components/exam/your-answers-panel";
 import { ListeningPartNav, type ListeningPart } from "@/components/exam/listening-part-nav";
 import { SubmitConfirmationDialog } from "@/components/exam/submit-confirmation-dialog";
+import { LeaveTestDialog } from "@/components/exam/leave-test-dialog";
 import { PassagePanel } from "@/components/exam/passage-panel";
 import { NotesDrawer, type ExamNote } from "@/components/exam/notes-drawer";
 import { AudioPlayer } from "@/components/exam/audio-player";
@@ -83,9 +85,11 @@ export function ExamRunner({
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [submitting, startSubmitTransition] = useTransition();
   const [pendingSaves, setPendingSaves] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
+  const router = useRouter();
 
   const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const examContainerRef = useRef<HTMLDivElement>(null);
@@ -329,6 +333,14 @@ export function ExamRunner({
   return (
     <div ref={examContainerRef} className="bg-background flex h-svh flex-col">
       <header className="border-border/70 relative flex h-16 shrink-0 items-center gap-2 border-b px-4 sm:gap-3 sm:px-6">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Leave test and go home"
+          onClick={() => setLeaveDialogOpen(true)}
+        >
+          <Home className="size-4.5" />
+        </Button>
         <h1 className="font-display min-w-0 flex-1 truncate text-base font-medium sm:text-lg">{testTitle}</h1>
         {pendingSaves > 0 && (
           <span className="text-muted-foreground hidden items-center gap-1.5 text-xs sm:flex">
@@ -533,6 +545,12 @@ export function ExamRunner({
         flaggedCount={flags.size}
         submitting={submitting}
         onConfirm={handleSubmit}
+      />
+
+      <LeaveTestDialog
+        open={leaveDialogOpen}
+        onOpenChange={setLeaveDialogOpen}
+        onConfirm={() => router.push("/student/dashboard")}
       />
     </div>
   );

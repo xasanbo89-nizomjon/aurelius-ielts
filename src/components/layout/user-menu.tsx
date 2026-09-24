@@ -5,6 +5,8 @@ import Link from "next/link";
 import { signOut } from "firebase/auth";
 import { Loader2, LogOut, Settings, User as UserIcon, UserCircle } from "lucide-react";
 
+import type { NavItem } from "@/lib/nav-config";
+import { NAV_ICONS } from "@/lib/nav-icons";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { clearSessionAction } from "@/actions/session.actions";
 import { getInitials } from "@/lib/avatar";
@@ -33,11 +35,14 @@ export function UserMenu({
   email,
   image,
   role,
+  secondaryItems,
 }: {
   name?: string | null;
   email?: string | null;
   image?: string | null;
   role: "STUDENT" | "TEACHER";
+  /** Student-only: secondary destinations (Vocabulary, Analytics, etc.) that no longer live in the sidebar. */
+  secondaryItems?: NavItem[];
 }) {
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -89,6 +94,21 @@ export function UserMenu({
                   <Settings /> Settings
                 </Link>
               </DropdownMenuItem>
+              {secondaryItems && secondaryItems.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  {secondaryItems.map((item) => {
+                    const Icon = NAV_ICONS[item.icon];
+                    return (
+                      <DropdownMenuItem key={item.href} asChild>
+                        <Link href={item.href}>
+                          <Icon /> {item.label}
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </>
+              )}
             </>
           ) : (
             <DropdownMenuItem asChild>

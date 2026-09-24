@@ -1,10 +1,13 @@
 import type { ReactNode } from "react";
 
 import type { NavItem } from "@/lib/nav-config";
+import type { WhatsNewItem } from "@/lib/whats-new";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { DailyStreakBadge } from "@/components/layout/daily-streak-badge";
+import { NotificationsBell } from "@/components/layout/notifications-bell";
+import { PremiumBadge } from "@/components/layout/premium-badge";
 import { UserMenu } from "@/components/layout/user-menu";
 
 export function DashboardShell({
@@ -12,14 +15,22 @@ export function DashboardShell({
   role,
   user,
   streakCount,
+  whatsNew,
+  isPremium,
+  secondaryNavItems,
   children,
 }: {
   navItems: NavItem[];
   role: "STUDENT" | "TEACHER";
   user: { name?: string | null; email?: string | null; image?: string | null };
   streakCount: number;
+  /** Student header only — omitted for teachers, whose header is unchanged. */
+  whatsNew?: WhatsNewItem[];
+  isPremium?: boolean;
+  secondaryNavItems?: NavItem[];
   children: ReactNode;
 }) {
+  const isStudent = role === "STUDENT";
   return (
     <div className="bg-background flex min-h-svh w-full">
       <a
@@ -43,8 +54,19 @@ export function DashboardShell({
         <header className="bg-background/85 border-border/70 sticky top-0 z-30 flex h-18 items-center gap-1.5 border-b px-4 backdrop-blur-sm sm:px-6 sm:gap-2 lg:px-10">
           <MobileSidebar items={navItems} />
           <div className="min-w-0 flex-1" />
-          <DailyStreakBadge streakCount={streakCount} />
-          <UserMenu name={user.name} email={user.email} image={user.image} role={role} />
+          {isStudent ? (
+            <>
+              <DailyStreakBadge streakCount={streakCount} bare />
+              <NotificationsBell items={whatsNew ?? []} />
+              <PremiumBadge isPremium={isPremium ?? false} />
+              <UserMenu name={user.name} email={user.email} image={user.image} role={role} secondaryItems={secondaryNavItems} />
+            </>
+          ) : (
+            <>
+              <DailyStreakBadge streakCount={streakCount} />
+              <UserMenu name={user.name} email={user.email} image={user.image} role={role} />
+            </>
+          )}
         </header>
 
         <main id="main-content" tabIndex={-1} className="flex-1 px-4 py-8 outline-none sm:px-6 lg:px-10 lg:py-10">
