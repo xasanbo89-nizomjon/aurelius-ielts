@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Mic } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
-import { getSpeakingTaskForTeacher, listSpeakingSubmissionsForTask } from "@/lib/speaking";
+import { getSpeakingTaskForTeacher, listSpeakingSubmissionsForTask, asStringArray } from "@/lib/speaking";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -67,7 +67,6 @@ export default async function TeacherSpeakingTaskPage({
                 taskId={task.id}
                 submission={{
                   id: submission.id,
-                  audioUrl: submission.audioUrl,
                   status: submission.status,
                   bandScore: submission.bandScore,
                   feedback: submission.feedback,
@@ -75,6 +74,10 @@ export default async function TeacherSpeakingTaskPage({
                   lexicalBand: submission.lexicalBand,
                   grammarBand: submission.grammarBand,
                   pronunciationBand: submission.pronunciationBand,
+                  strengths: asStringArray(submission.strengths),
+                  weaknesses: asStringArray(submission.weaknesses),
+                  improvements: asStringArray(submission.improvements),
+                  teacherNotes: submission.teacherNotes,
                   createdAt: submission.createdAt,
                   student: { name: submission.student.user.name, email: submission.student.user.email },
                 }}

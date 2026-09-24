@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "AIInsightKind" ADD VALUE 'MOTIVATION_MESSAGE';

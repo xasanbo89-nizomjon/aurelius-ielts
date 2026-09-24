@@ -18,6 +18,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { Pagination } from "@/components/ui/pagination";
 import { AssignTeacherSelect } from "@/components/teacher/assign-teacher-select";
 import { TrialActionsCell } from "@/components/teacher/trial-actions-cell";
+import { AdminPremiumControls } from "@/components/teacher/admin-premium-controls";
 
 function RankedList({ items, formatValue, emptyLabel }: { items: RankedStudent[]; formatValue: (value: number) => string; emptyLabel: string }) {
   if (items.length === 0) {
@@ -209,7 +210,10 @@ export default async function TeacherStudentsPage({
                           {trial.daysRemaining != null ? `${trial.daysRemaining} day${trial.daysRemaining === 1 ? "" : "s"}` : "—"}
                         </TableCell>
                         <TableCell>
-                          <TrialActionsCell studentId={student.id} studentLabel={student.name ?? student.email} />
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <TrialActionsCell studentId={student.id} studentLabel={student.name ?? student.email} />
+                            <AdminPremiumControls studentId={student.id} studentLabel={student.name ?? student.email} />
+                          </div>
                         </TableCell>
                       </>
                     )}

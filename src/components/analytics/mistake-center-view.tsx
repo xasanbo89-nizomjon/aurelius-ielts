@@ -108,7 +108,7 @@ export function MistakeCenterView({
                   <Badge variant="accent">Band {review.bandScore.toFixed(1)}</Badge>
                 </div>
                 <p className="text-muted-foreground text-sm">{review.feedback}</p>
-                <p className="text-muted-foreground/70 text-xs">{formatRelativeTime(review.reviewedAt)}</p>
+                <p className="text-muted-foreground/70 text-xs">{formatRelativeTime(review.evaluatedAt)}</p>
               </CardContent>
             </Card>
           ))}

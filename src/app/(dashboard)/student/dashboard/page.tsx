@@ -3,15 +3,28 @@ import { ClipboardCheck, Mic, Newspaper, PenLine } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getWhatsNewFeed } from "@/lib/whats-new";
+import { recordLoginAndGetStreak } from "@/lib/login-streak";
+import { getStudentSuccessSummary } from "@/lib/analytics/student-success";
+import { getWalletSummary } from "@/lib/coins";
+import { getSubscriptionSummary } from "@/lib/subscription";
+import { getWeeklyActivityBreakdown } from "@/lib/study-activity";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { HomeHubCard } from "@/components/dashboard/home-hub-card";
 import { WhatsNewSection } from "@/components/dashboard/whats-new-section";
+import { MobileDashboardWidgets } from "@/components/student/mobile-dashboard-widgets";
 
 export const metadata: Metadata = { title: "Home" };
 
 export default async function StudentDashboardPage() {
   const { user, profile } = await requireStudentProfile();
-  const whatsNew = await getWhatsNewFeed(profile.id, profile.teacherId);
+  const [whatsNew, streakCount, success, wallet, subscription, weeklyActivity] = await Promise.all([
+    getWhatsNewFeed(profile.id, profile.teacherId),
+    recordLoginAndGetStreak(user.id),
+    getStudentSuccessSummary(profile.id),
+    getWalletSummary(profile.id),
+    getSubscriptionSummary(profile.id),
+    getWeeklyActivityBreakdown(profile.id),
+  ]);
 
   const firstName = user.name?.trim().split(/\s+/)[0];
 
@@ -20,6 +33,16 @@ export default async function StudentDashboardPage() {
       <PageHeader
         title={firstName ? `Welcome back, ${firstName}` : "Welcome back"}
         description="What would you like to study today?"
+      />
+
+      <MobileDashboardWidgets
+        targetBand={success.targetBand}
+        goalProgressPercent={success.goalProgressPercent}
+        coinBalance={wallet.balance}
+        isPremium={subscription.isPremium}
+        premiumDaysRemaining={subscription.isPremium ? subscription.daysRemaining : null}
+        streakCount={streakCount}
+        weeklyActivity={weeklyActivity}
       />
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">

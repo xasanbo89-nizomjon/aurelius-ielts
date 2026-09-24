@@ -10,6 +10,10 @@ export const ACHIEVEMENT_DEFINITIONS: { code: AchievementCode; title: string; de
   { code: "VOCAB_100_WORDS", title: "100 Vocabulary Words", description: "Save 100 words to your vocabulary notebook.", coinReward: 100 },
   { code: "WRITING_10_TASKS", title: "10 Writing Tasks", description: "Submit 10 writing tasks for AI feedback.", coinReward: 100 },
   { code: "STREAK_30_DAYS", title: "30 Day Streak", description: "Reach a 30-day study streak.", coinReward: 300 },
+  { code: "STREAK_7_DAYS", title: "7 Day Streak", description: "Reach a 7-day study streak.", coinReward: 30 },
+  { code: "FIRST_WRITING_SUBMISSION", title: "First Writing Submission", description: "Submit your first essay for review.", coinReward: 30 },
+  { code: "FIRST_SPEAKING_SUBMISSION", title: "First Speaking Submission", description: "Submit your first speaking response.", coinReward: 30 },
+  { code: "FIRST_PREMIUM_MONTH", title: "First Premium Month", description: "Unlock Premium access for the first time.", coinReward: 100 },
 ];
 
 /** Real, current-count checks — never a cached/estimated signal. Each returns whether the condition is true RIGHT NOW. */
@@ -24,6 +28,23 @@ const CONDITIONS: Record<AchievementCode, (studentId: string) => Promise<boolean
   STREAK_30_DAYS: async (studentId) => {
     const streak = await prisma.studyStreak.findUnique({ where: { studentId }, select: { longestStreak: true } });
     return (streak?.longestStreak ?? 0) >= 30;
+  },
+  STREAK_7_DAYS: async (studentId) => {
+    const streak = await prisma.studyStreak.findUnique({ where: { studentId }, select: { longestStreak: true } });
+    return (streak?.longestStreak ?? 0) >= 7;
+  },
+  FIRST_WRITING_SUBMISSION: async (studentId) =>
+    (await prisma.writingSubmission.count({ where: { studentId, status: { not: "DRAFT" } } })) >= 1,
+  FIRST_SPEAKING_SUBMISSION: async (studentId) => (await prisma.speakingSubmission.count({ where: { studentId } })) >= 1,
+  // Real historical evidence across all 3 premium sources — not just
+  // "currently ACTIVE", since a lapsed student should keep this achievement.
+  FIRST_PREMIUM_MONTH: async (studentId) => {
+    const [redemption, adminGrant, payment] = await Promise.all([
+      prisma.coinTransaction.count({ where: { studentId, type: "REDEMPTION" } }),
+      prisma.trialAuditLog.count({ where: { studentId, action: "PREMIUM_GRANT" } }),
+      prisma.payment.count({ where: { studentId, status: "COMPLETED" } }),
+    ]);
+    return redemption + adminGrant + payment > 0;
   },
 };
 

@@ -14,6 +14,7 @@ import { ArticleReader } from "@/components/student/article-reader";
 import { ArticleAudioPlayer } from "@/components/student/article-audio-player-lazy";
 import { WordsPanelButton } from "@/components/student/words-panel-button";
 import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
+import { SaveArticleOfflineButton } from "@/components/student/save-article-offline-button";
 
 export const metadata: Metadata = { title: "Article" };
 
@@ -47,13 +48,27 @@ export default async function StudentArticleReaderPage({
         </div>
         <h1 className="font-display text-2xl leading-tight font-medium tracking-tight sm:text-3xl">{article.title}</h1>
         {article.description && <p className="text-muted-foreground max-w-2xl text-sm sm:text-base">{article.description}</p>}
-        <div className="text-muted-foreground flex items-center gap-4 text-xs">
-          <span className="flex items-center gap-1">
-            <Clock className="size-3.5" /> {article.readingMinutes} min read
-          </span>
-          <span className="flex items-center gap-1">
-            <Type className="size-3.5" /> {article.wordCount.toLocaleString()} words
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-muted-foreground flex items-center gap-4 text-xs">
+            <span className="flex items-center gap-1">
+              <Clock className="size-3.5" /> {article.readingMinutes} min read
+            </span>
+            <span className="flex items-center gap-1">
+              <Type className="size-3.5" /> {article.wordCount.toLocaleString()} words
+            </span>
+          </div>
+          <SaveArticleOfflineButton
+            article={{
+              id: article.id,
+              title: article.title,
+              description: article.description,
+              category: article.category,
+              difficulty: article.difficulty,
+              content: article.content,
+              readingMinutes: article.readingMinutes,
+              wordCount: article.wordCount,
+            }}
+          />
         </div>
       </div>
 

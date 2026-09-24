@@ -3,11 +3,11 @@ import { randomUUID } from "crypto";
 
 import { uploadBuffer, type UploadedFile } from "@/lib/uploads/storage";
 import { createSignedUploadUrl, type SignedUpload } from "@/lib/uploads/supabase";
-import { validateAudioFile, validateRecordedAudio } from "@/lib/uploads/audio-constraints";
-import { LISTENING_AUDIO_BUCKET, ARTICLE_AUDIO_BUCKET, SPEAKING_AUDIO_BUCKET } from "@/lib/uploads/bucket-names";
+import { validateAudioFile } from "@/lib/uploads/audio-constraints";
+import { LISTENING_AUDIO_BUCKET, ARTICLE_AUDIO_BUCKET } from "@/lib/uploads/bucket-names";
 
 export type UploadedAudio = UploadedFile;
-export { LISTENING_AUDIO_BUCKET, ARTICLE_AUDIO_BUCKET, SPEAKING_AUDIO_BUCKET };
+export { LISTENING_AUDIO_BUCKET, ARTICLE_AUDIO_BUCKET };
 
 /**
  * Uploads a listening-test audio file to the public `listening-audio`
@@ -51,24 +51,4 @@ export async function prepareArticleAudioUpload(
 
   const objectPath = `${teacherId}/${randomUUID()}${validation.extension}`;
   return createSignedUploadUrl(ARTICLE_AUDIO_BUCKET, objectPath);
-}
-
-/**
- * Same direct-to-Supabase pattern as prepareArticleAudioUpload, for a
- * student's recorded Speaking response — a browser MediaRecorder Blob, not
- * a picked file, so it's validated by validateRecordedAudio (mimeType-based)
- * instead of validateAudioFile (extension-based).
- */
-export async function prepareSpeakingAudioUpload(
-  studentId: string,
-  file: { size: number; type?: string }
-): Promise<SignedUpload> {
-  const validation = validateRecordedAudio(file);
-  if (!validation.valid) {
-    throw new Error(validation.error);
-  }
-
-  const extension = file.type?.includes("mp4") ? ".m4a" : file.type?.includes("ogg") ? ".ogg" : ".webm";
-  const objectPath = `${studentId}/${randomUUID()}${extension}`;
-  return createSignedUploadUrl(SPEAKING_AUDIO_BUCKET, objectPath);
 }

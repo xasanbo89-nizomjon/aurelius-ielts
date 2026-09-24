@@ -52,8 +52,16 @@ export function validateAudioFile(file: { name: string; size: number; type?: str
   return { valid: true, extension, contentType: EXTENSION_CONTENT_TYPES[extension] };
 }
 
-export const MAX_RECORDED_AUDIO_SIZE_BYTES = 25 * 1024 * 1024; // 25MB — a browser mic recording, not an uploaded file
-export const MAX_RECORDED_AUDIO_SIZE_LABEL = "25MB";
+/**
+ * Phase 27 — a Speaking recording now goes straight through a Server Action
+ * (no more direct-to-Supabase bypass, since it's never stored), so it must
+ * fit under Vercel's ~4.5MB serverless request-body ceiling with real
+ * headroom for multipart/encoding overhead. Lowered from the old 25MB
+ * upload-based limit for that reason — a few minutes of webm/opus speech
+ * comfortably fits well under this.
+ */
+export const MAX_RECORDED_AUDIO_SIZE_BYTES = 4 * 1024 * 1024; // 4MB
+export const MAX_RECORDED_AUDIO_SIZE_LABEL = "4MB (about 3-4 minutes)";
 
 /**
  * Validates a browser MediaRecorder Blob (Speaking responses) — deliberately

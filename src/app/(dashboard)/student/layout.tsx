@@ -24,6 +24,7 @@ export default async function StudentLayout({ children }: { children: ReactNode 
       user={user}
       streakCount={streakCount}
       isPremium={subscriptionSummary.isPremium}
+      premiumDaysRemaining={subscriptionSummary.isPremium ? subscriptionSummary.daysRemaining : null}
       secondaryNavItems={STUDENT_SECONDARY_NAV_ITEMS}
     >
       {children}

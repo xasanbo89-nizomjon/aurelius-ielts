@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Mic, Plus } from "lucide-react";
+import { BarChart3, Mic, Plus } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { listSpeakingTasksForTeacher } from "@/lib/speaking";
@@ -24,11 +24,18 @@ export default async function TeacherSpeakingPage() {
         title="Speaking Tasks"
         description="Create Speaking tasks and share their code with students."
         actions={
-          <Button asChild>
-            <Link href="/teacher/speaking/new">
-              <Plus className="size-4" /> Create task
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild variant="outline">
+              <Link href="/teacher/speaking/analytics">
+                <BarChart3 className="size-4" /> Analytics
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/teacher/speaking/new">
+                <Plus className="size-4" /> Create task
+              </Link>
+            </Button>
+          </div>
         }
       />
 

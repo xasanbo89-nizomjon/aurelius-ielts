@@ -3,7 +3,7 @@ import type { StudyActivityType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { settleStreakForToday } from "@/lib/streaks";
-import { settleStudyCoinsForToday } from "@/lib/coins";
+import { settleStudyCoinsForToday, settleWeeklyBonus, settleMonthlyBonus } from "@/lib/coins";
 import { syncAchievements } from "@/lib/achievements";
 
 /** Client pings roughly this often while genuinely focused on a practice page. */
@@ -52,7 +52,13 @@ export async function recordStudentActivity(studentId: string, type: StudyActivi
     update: { durationSeconds: { increment: seconds }, lastHeartbeatAt: new Date() },
   });
 
-  await Promise.all([settleStreakForToday(studentId), settleStudyCoinsForToday(studentId), syncAchievements(studentId)]);
+  await Promise.all([
+    settleStreakForToday(studentId),
+    settleStudyCoinsForToday(studentId),
+    settleWeeklyBonus(studentId),
+    settleMonthlyBonus(studentId),
+    syncAchievements(studentId),
+  ]);
 }
 
 export type HeartbeatResult = { creditedSeconds: number };
@@ -117,4 +123,29 @@ export async function getStudyTimeSummary(studentId: string): Promise<StudyTimeS
   }
 
   return { todaySeconds, weekSeconds, monthSeconds, byTypeToday };
+}
+
+export type DailyActivityPoint = { date: string; seconds: number };
+
+/** Phase 28 — Mobile Dashboard "Weekly Activity" widget: real per-day totals over the last 7 calendar days, from the same StudyActivity rows getStudyTimeSummary reads. */
+export async function getWeeklyActivityBreakdown(studentId: string): Promise<DailyActivityPoint[]> {
+  const today = startOfDay(new Date());
+  const weekStart = addDays(today, -6);
+
+  const rows = await prisma.studyActivity.findMany({
+    where: { studentId, activityDate: { gte: weekStart } },
+    select: { activityDate: true, durationSeconds: true },
+  });
+
+  const byDay = new Map<string, number>();
+  for (let i = 0; i < 7; i++) {
+    const day = addDays(weekStart, i);
+    byDay.set(day.toISOString().slice(0, 10), 0);
+  }
+  for (const row of rows) {
+    const key = startOfDay(row.activityDate).toISOString().slice(0, 10);
+    if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + row.durationSeconds);
+  }
+
+  return [...byDay.entries()].map(([date, seconds]) => ({ date, seconds }));
 }

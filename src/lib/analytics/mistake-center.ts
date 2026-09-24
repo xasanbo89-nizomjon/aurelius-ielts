@@ -84,16 +84,22 @@ export type SpeakingReviewEntry = {
   part: number;
   bandScore: number;
   feedback: string;
-  reviewedAt: Date;
+  evaluatedAt: Date;
 };
 
-/** No structured "mistake" list for Speaking (no transcript) — the real teacher review IS the mistake record here. */
+/**
+ * Phase 27 — no structured per-question "mistake" list for Speaking (unlike
+ * Reading/Listening's wrong-answer records); the AI's own feedback IS the
+ * mistake record here. Ordered by evaluatedAt (the real AI-scoring
+ * timestamp) rather than reviewedAt, which is now a separate, optional
+ * teacher-notes timestamp that's frequently null.
+ */
 export async function getSpeakingReviews(studentId: string, limit = 50): Promise<SpeakingReviewEntry[]> {
   const submissions = await prisma.speakingSubmission.findMany({
     where: { studentId, status: "REVIEWED", bandScore: { not: null }, feedback: { not: null } },
-    orderBy: { reviewedAt: "desc" },
+    orderBy: { evaluatedAt: "desc" },
     take: limit,
-    select: { id: true, part: true, bandScore: true, feedback: true, reviewedAt: true, task: { select: { title: true } } },
+    select: { id: true, part: true, bandScore: true, feedback: true, evaluatedAt: true, task: { select: { title: true } } },
   });
 
   return submissions.map((s) => ({
@@ -102,6 +108,6 @@ export async function getSpeakingReviews(studentId: string, limit = 50): Promise
     part: s.part,
     bandScore: s.bandScore as number,
     feedback: s.feedback as string,
-    reviewedAt: s.reviewedAt as Date,
+    evaluatedAt: s.evaluatedAt as Date,
   }));
 }

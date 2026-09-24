@@ -151,6 +151,15 @@ enum CoinTransactionType {
   STREAK_BONUS
   ACHIEVEMENT
   REDEMPTION
+  /// Phase 26 — a real weekly/monthly consistency bonus, distinct from the
+  /// daily STUDY_TIME conversion and the login-streak STREAK_BONUS.
+  WEEKLY_BONUS
+  MONTHLY_BONUS
+  /// Phase 26 — Admin Premium Control: a root teacher manually adjusting a
+  /// student's balance. Always positive/negative respectively, same as
+  /// every other type — the CoinTransaction row IS the audit log entry.
+  ADMIN_GRANT
+  ADMIN_DEDUCT
 }
 
 enum AchievementCode {
@@ -159,6 +168,28 @@ enum AchievementCode {
   VOCAB_100_WORDS
   WRITING_10_TASKS
   STREAK_30_DAYS
+  /// Phase 26 additions
+  STREAK_7_DAYS
+  FIRST_WRITING_SUBMISSION
+  FIRST_SPEAKING_SUBMISSION
+  FIRST_PREMIUM_MONTH
+}
+
+/// Phase 26 — Subscription Management: which of the 3 real ways a student
+/// ended up on an ACTIVE paid plan. Null for an organic TRIAL — there's
+/// nothing to attribute yet.
+enum PremiumSource {
+  COIN_REDEMPTION
+  ADMIN_GRANT
+  DIRECT_PAYMENT
+}
+
+/// Phase 26 — Payment Architecture: the providers this layer is built to
+/// support. Neither is connected to a real gateway yet — see
+/// src/lib/payments/.
+enum PaymentProvider {
+  CLICK
+  PAYME
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +274,7 @@ model StudentProfile {
   aiInsightCache         AIInsightCache[]
   questionBookmarks      QuestionBookmark[]
   writingTaskBookmarks   WritingTaskBookmark[]
+  invoices               Invoice[]
 
   @@map("student_profiles")
 }
@@ -815,27 +847,43 @@ model SpeakingSubmission {
   /// Denormalized from the task at submit time, so a submission's own record
   /// stays meaningful even if the task is edited or archived later.
   part     Int
-  prompt   String @db.Text
-  audioUrl String
+  prompt   String  @db.Text
+  /// Phase 27 — recordings are never stored (evaluated in-memory, then
+  /// discarded — see src/lib/speaking.ts). Always null going forward; kept
+  /// nullable (not removed) only so the column doesn't need a destructive
+  /// drop for a table that was already empty.
+  audioUrl String?
 
   status SubmissionStatus @default(PENDING)
 
-  /// Real band score + feedback, but never returned to the student-facing
-  /// query path — "Student does NOT see final speaking score" is enforced in
-  /// src/lib/speaking.ts by which fields the student-facing selects include,
-  /// not by a flag here.
+  /// Phase 27 — AI-evaluated immediately after recording, from a real
+  /// Whisper transcript, never a teacher-entered guess. Previously
+  /// hidden from the student ("Teacher only") — Phase 27 explicitly
+  /// reverses that: the student now sees their AI result immediately, same
+  /// as Writing's instant AI feedback. A human teacher's own commentary
+  /// layers on top via `teacherNotes`, not by overwriting these.
   bandScore         Float?
-  /// Phase 23 — the 4 official IELTS Speaking criteria, scored individually
-  /// (mirrors WritingAnalysis's grammarBand/vocabularyBand/coherenceBand/
-  /// taskResponseBand pattern). Nullable: only set once a teacher actually
-  /// reviews with per-criterion scores, never backfilled/guessed — this is
+  /// The 4 official IELTS Speaking criteria, AI-scored individually (was
+  /// teacher-entered in Phase 23; same fields, now real AI output) — this is
   /// what makes a real "Speaking Fluency weakness" pattern possible instead
   /// of inventing one from freeform feedback text.
   fluencyBand       Float?
   lexicalBand       Float?
   grammarBand       Float?
   pronunciationBand Float?
+  /// AI-generated overall summary (was teacher-entered pre-Phase-27).
   feedback          String?         @db.Text
+  /// string[] — real, AI-identified, grounded in the actual transcript.
+  strengths         Json?
+  weaknesses        Json?
+  /// string[] — concrete next-step suggestions.
+  improvements      Json?
+  /// Phase 27 — a real, separate, optional human note a teacher adds on top
+  /// of the AI result. Distinct from `feedback` (AI-authored) on purpose.
+  teacherNotes      String?         @db.Text
+  /// When the AI evaluation actually ran — distinct from `createdAt`
+  /// (submission time) in case evaluation is ever retried/regenerated.
+  evaluatedAt       DateTime?
   reviewedById      String?
   reviewedBy        TeacherProfile? @relation("SpeakingReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   reviewedAt        DateTime?
@@ -852,6 +900,7 @@ enum AIInsightKind {
   MISTAKE_ANALYSIS
   IMPROVEMENT_PLAN
   TEACHER_REPORT
+  MOTIVATION_MESSAGE
 }
 
 /**
@@ -918,6 +967,7 @@ model SubscriptionPlan {
   updatedAt DateTime @updatedAt
 
   subscriptions Subscription[]
+  invoices      Invoice[]
 
   @@map("subscription_plans")
 }
@@ -934,6 +984,10 @@ model Subscription {
   status    SubscriptionStatus @default(TRIAL)
   startDate DateTime           @default(now())
   endDate   DateTime?
+  /// Phase 26 — how this student most recently became/stayed ACTIVE. Null
+  /// for an organic trial; set (and never cleared) by
+  /// redeemPremiumWithCoins/grantPremium/a completed direct Payment.
+  source    PremiumSource?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1004,15 +1058,55 @@ model Payment {
   promoCode      PromoCode?     @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
 
   amount            Float
-  currency          String        @default("USD")
-  status            PaymentStatus @default(PENDING)
+  currency          String           @default("USD")
+  status            PaymentStatus    @default(PENDING)
+  /// Legacy free-text provider name, kept as-is (nothing currently writes
+  /// it). Phase 26's typed Payment Provider Layer uses `providerType`
+  /// instead — see src/lib/payments/.
   provider          String?
   providerPaymentId String?
+  /// Phase 26 — which real provider this payment is/would be processed
+  /// through. Null until a real gateway is actually connected.
+  providerType      PaymentProvider?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  invoice Invoice?
+
   @@map("payments")
+}
+
+/// Phase 26 — Payment Architecture's Invoice System: a real, durable record
+/// of what a student was charged for, independent of whether a payment
+/// gateway ever actually processed it (an invoice can exist in DRAFT/
+/// PENDING before any real payment attempt). Not connected to a gateway —
+/// see src/lib/payments/.
+model Invoice {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  planId String?
+  plan   SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  amount      Float
+  currency    String        @default("USD")
+  status      PaymentStatus @default(PENDING)
+  description String
+
+  issuedAt DateTime  @default(now())
+  dueAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@map("invoices")
 }
 
 // ---------------------------------------------------------------------------
@@ -1189,14 +1283,23 @@ model AiSettings {
   teacher   TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
 
   /// "Explain More" requests a single student can generate fresh per day.
-  dailyExplanationLimit   Int @default(20)
+  dailyExplanationLimit        Int @default(20)
   /// AI writing actions (analysis, rewrite, or sentence improvement) a
   /// single student can generate fresh per day.
-  dailyWritingActionLimit Int @default(10)
+  dailyWritingActionLimit      Int @default(10)
   /// Fresh AI Vocabulary Assistant generations (word intelligence + Explain
   /// Word combined) a single student can trigger per day. Cache hits never
   /// count against this.
-  dailyVocabularyAiLimit  Int @default(50)
+  dailyVocabularyAiLimit       Int @default(50)
+  /// Phase 26 — Study Coin Rewards' configurable daily cap (coins, not
+  /// requests) — see src/lib/coins.ts settleStudyCoinsForToday. Same
+  /// per-teacher-configurable pattern as the 3 limits above.
+  dailyStudyCoinCap            Int @default(45)
+  /// Phase 27 — real-time AI Speaking evaluations (Whisper transcription +
+  /// scoring) a single student can trigger per day — see
+  /// src/lib/speaking.ts assertWithinSpeakingRateLimit. Counted directly
+  /// from SpeakingSubmission rows created today, no separate log table.
+  dailySpeakingEvaluationLimit Int @default(15)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1231,6 +1334,11 @@ model TeacherAllowlist {
 enum TrialAuditAction {
   TRIAL_RESET_90
   TRIAL_EXTEND_30
+  /// Phase 26 — Admin Premium Control, logged into this same audit trail
+  /// rather than a parallel table (it's the same "root teacher changed a
+  /// student's subscription state" event, just a different real reason).
+  PREMIUM_GRANT
+  PREMIUM_REMOVE
 }
 
 /// One row per root-teacher trial action — created once, never updated or

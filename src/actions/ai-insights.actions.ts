@@ -4,16 +4,22 @@ import { requireStudentProfile, requireTeacherProfile } from "@/lib/session";
 import { hasActiveAccess } from "@/lib/subscription";
 import { getStudentForTeacher } from "@/lib/teacher-students";
 import { getAllSkillInsights, getPerformanceOverview, getSkillPerformance } from "@/lib/analytics/student-insights";
+import { getStudentSuccessSummary } from "@/lib/analytics/student-success";
+import { getStreakBreakdown } from "@/lib/streaks";
 import { getWritingAnalytics } from "@/lib/ai/writing";
 import { getSpeakingAnalytics } from "@/lib/speaking";
 import { getCachedInsight, setCachedInsight } from "@/lib/ai/insight-cache";
 import { generateMistakeAnalysis } from "@/lib/ai/services/mistake-analysis";
 import { generateImprovementPlan } from "@/lib/ai/services/improvement-plan";
 import { generateTeacherReport } from "@/lib/ai/services/teacher-report";
+import { generateMotivationMessage } from "@/lib/ai/services/motivation";
 import type { MistakeAnalysisResponse } from "@/lib/ai/prompts/mistake-analysis";
 import type { ImprovementPlanResponse } from "@/lib/ai/prompts/improvement-plan";
 import type { TeacherReportResponse } from "@/lib/ai/prompts/teacher-report";
+import type { MotivationResponse } from "@/lib/ai/prompts/motivation";
 import { AIServiceUnavailableError } from "@/lib/ai/errors";
+
+const MOTIVATION_MESSAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 const NOT_ENOUGH_DATA_ERROR = "Not enough data yet — complete a few tests first.";
 
@@ -135,4 +141,40 @@ export async function getBandScoreOverviewAction(): Promise<BandScoreOverview> {
     writingBand: writing.averageBand,
     speakingBand: speaking.averageBand,
   };
+}
+
+export type MotivationResult = { message: string; tone: MotivationResponse["tone"] } | null;
+
+/**
+ * Phase 25 — AI Motivation Engine. Unlike the other AI Analysis actions,
+ * this one auto-refreshes once a real day has passed (not only on an
+ * explicit click) — a stale "keep it up!" from last week is worse than no
+ * message, but regenerating on every page view would be wasteful. Bounded
+ * to at most one real OpenAI call per student per day.
+ */
+export async function getMotivationMessageAction(): Promise<MotivationResult> {
+  const { profile } = await requireStudentProfile();
+
+  const cached = await getCachedInsight<MotivationResponse>(profile.id, "MOTIVATION_MESSAGE");
+  if (cached && Date.now() - cached.generatedAt.getTime() < MOTIVATION_MESSAGE_MAX_AGE_MS) {
+    return { message: cached.content.message, tone: cached.content.tone };
+  }
+
+  const [streak, success] = await Promise.all([getStreakBreakdown(profile.id), getStudentSuccessSummary(profile.id)]);
+  if (success.testsCompleted === 0 && streak.currentStreak === 0) return null;
+
+  try {
+    const content = await generateMotivationMessage({
+      currentStreak: streak.currentStreak,
+      longestStreak: streak.longestStreak,
+      lastActiveDaysAgo: streak.lastActiveDate ? Math.floor((Date.now() - streak.lastActiveDate.getTime()) / (1000 * 60 * 60 * 24)) : null,
+      trend: success.trend,
+      testsCompleted: success.testsCompleted,
+      weeklyDelta: success.weeklyProgress.delta,
+    });
+    await setCachedInsight(profile.id, "MOTIVATION_MESSAGE", content);
+    return { message: content.message, tone: content.tone };
+  } catch {
+    return cached ? { message: cached.content.message, tone: cached.content.tone } : null;
+  }
 }

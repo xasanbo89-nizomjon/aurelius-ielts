@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { BookOpenCheck, Clock, Newspaper, Type } from "lucide-react";
+import { BookOpenCheck, Clock, Newspaper, Type, WifiOff } from "lucide-react";
 import type { ArticleDifficulty } from "@prisma/client";
 
 import { requireStudentProfile } from "@/lib/session";
@@ -14,6 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Pagination } from "@/components/ui/pagination";
+import { Button } from "@/components/ui/button";
 import { ArticleFilters } from "@/components/student/article-filters";
 import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
 
@@ -60,6 +61,13 @@ export default async function StudentArticlesPage({
       <PageHeader
         title="Articles"
         description="Read IELTS-style articles and build your vocabulary as you go — click any word to look it up."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link href="/offline/articles">
+              <WifiOff className="size-4" /> Offline Articles
+            </Link>
+          </Button>
+        }
       />
 
       <ArticleFilters defaultSearch={q} defaultCategory={category} defaultDifficulty={difficulty} categories={categories} />

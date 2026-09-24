@@ -10,20 +10,22 @@ import {
   setSpeakingTaskStatus,
   deleteSpeakingTask,
   findSpeakingTaskByCode,
-  submitSpeakingResponse,
-  reviewSpeakingSubmission,
+  submitAndEvaluateSpeakingResponse,
+  addSpeakingTeacherNotes,
+  assertWithinSpeakingRateLimit,
+  setDailySpeakingEvaluationLimit,
+  SpeakingTranscriptTooShortError,
   type SpeakingTaskForStudent,
 } from "@/lib/speaking";
-import { prepareSpeakingAudioUpload } from "@/lib/uploads/audio-storage";
 import { friendlyErrorMessage } from "@/lib/validation-error";
 import {
   createSpeakingTaskSchema,
   updateSpeakingTaskSchema,
   speakingCodeSchema,
-  reviewSpeakingSubmissionSchema,
+  speakingTeacherNotesSchema,
   type CreateSpeakingTaskInput,
   type UpdateSpeakingTaskInput,
-  type ReviewSpeakingSubmissionInput,
+  type SpeakingTeacherNotesInput,
 } from "@/lib/validations/speaking";
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -89,19 +91,30 @@ export async function deleteSpeakingTaskAction(taskId: string): Promise<ActionRe
   }
 }
 
-export async function reviewSpeakingSubmissionAction(
+export async function updateDailySpeakingEvaluationLimitAction(limit: number): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    await setDailySpeakingEvaluationLimit(profile.id, limit);
+    revalidatePath("/teacher/speaking/analytics");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not update the limit.") };
+  }
+}
+
+export async function addSpeakingTeacherNotesAction(
   submissionId: string,
   taskId: string,
-  input: ReviewSpeakingSubmissionInput
+  input: SpeakingTeacherNotesInput
 ): Promise<ActionResult> {
   try {
     const { profile } = await requireTeacherProfile();
-    const parsed = reviewSpeakingSubmissionSchema.parse(input);
-    await reviewSpeakingSubmission(submissionId, profile.id, parsed);
+    const parsed = speakingTeacherNotesSchema.parse(input);
+    await addSpeakingTeacherNotes(submissionId, profile.id, parsed.notes);
     revalidatePath(`/teacher/speaking/${taskId}`);
     return { success: true };
   } catch (error) {
-    return { success: false, error: errorMessage(error, "Could not save the review.") };
+    return { success: false, error: errorMessage(error, "Could not save your note.") };
   }
 }
 
@@ -125,37 +138,40 @@ export async function findSpeakingTaskByCodeAction(code: string): Promise<FindSp
   }
 }
 
-export type PrepareSpeakingAudioUploadResult =
-  | { success: true; signedUrl: string; token: string; path: string; publicUrl: string }
+export type SubmitSpeakingRecordingResult =
+  | { success: true; submissionId: string }
   | { success: false; error: string };
 
-/** Same direct-to-Supabase pattern as article audio — see prepareSpeakingAudioUpload. */
-export async function prepareSpeakingAudioUploadAction(input: {
-  fileSize: number;
-  contentType: string;
-}): Promise<PrepareSpeakingAudioUploadResult> {
+/**
+ * Phase 27 — the recording goes straight from the browser to this action
+ * (no Supabase step) and is discarded the moment evaluation finishes;
+ * nothing in this call path ever writes the audio anywhere durable.
+ */
+export async function submitSpeakingRecordingAction(taskId: string, audio: File): Promise<SubmitSpeakingRecordingResult> {
   try {
     const { profile } = await requireStudentProfile();
     if (!(await hasActiveAccess(profile.id))) {
       return { success: false, error: "Speaking is a Premium feature. Upgrade to submit a recording." };
     }
-    const upload = await prepareSpeakingAudioUpload(profile.id, { size: input.fileSize, type: input.contentType });
-    return { success: true, ...upload };
-  } catch (error) {
-    return { success: false, error: errorMessage(error, "Could not prepare the recording upload.") };
-  }
-}
 
-export async function submitSpeakingResponseAction(taskId: string, audioUrl: string): Promise<ActionResult> {
-  try {
-    const { profile } = await requireStudentProfile();
-    if (!(await hasActiveAccess(profile.id))) {
-      return { success: false, error: "Speaking is a Premium feature. Upgrade to submit a recording." };
+    const rateLimit = await assertWithinSpeakingRateLimit(profile.id, profile.teacherId);
+    if (!rateLimit.ok) {
+      return { success: false, error: rateLimit.error };
     }
-    await submitSpeakingResponse(profile.id, taskId, audioUrl);
+
+    const buffer = Buffer.from(await audio.arrayBuffer());
+    const submission = await submitAndEvaluateSpeakingResponse(profile.id, taskId, {
+      buffer,
+      size: audio.size,
+      mimeType: audio.type || "audio/webm",
+    });
+
     revalidatePath("/student/speaking");
-    return { success: true };
+    return { success: true, submissionId: submission.id };
   } catch (error) {
-    return { success: false, error: errorMessage(error, "Could not submit your recording.") };
+    if (error instanceof SpeakingTranscriptTooShortError) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: errorMessage(error, "Could not evaluate your recording. Please try again.") };
   }
 }

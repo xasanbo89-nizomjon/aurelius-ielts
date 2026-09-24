@@ -81,6 +81,7 @@ export default async function TeacherPaymentsPage({
               <TableRow>
                 <TableHead>Student</TableHead>
                 <TableHead>Amount</TableHead>
+                <TableHead>Provider</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
@@ -92,6 +93,7 @@ export default async function TeacherPaymentsPage({
                   <TableCell className="text-muted-foreground">
                     {payment.currency} {payment.amount.toFixed(2)}
                   </TableCell>
+                  <TableCell className="text-muted-foreground">{payment.providerType ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {payment.createdAt.toLocaleDateString()}
                   </TableCell>

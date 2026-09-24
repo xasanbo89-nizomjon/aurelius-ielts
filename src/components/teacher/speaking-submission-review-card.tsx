@@ -1,21 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
-import { reviewSpeakingSubmissionAction } from "@/actions/speaking.actions";
+import { addSpeakingTeacherNotesAction } from "@/actions/speaking.actions";
 import { formatRelativeTime } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
 export type SpeakingSubmissionForReview = {
   id: string;
-  audioUrl: string;
   status: "PENDING" | "IN_REVIEW" | "REVIEWED" | "DRAFT";
   bandScore: number | null;
   feedback: string | null;
@@ -23,12 +21,21 @@ export type SpeakingSubmissionForReview = {
   lexicalBand: number | null;
   grammarBand: number | null;
   pronunciationBand: number | null;
+  strengths: string[];
+  weaknesses: string[];
+  improvements: string[];
+  teacherNotes: string | null;
   createdAt: Date;
   student: { name: string | null; email: string };
 };
 
-function criterionField(value: number | null): string {
-  return value != null ? String(value) : "";
+function BandChip({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div className="bg-secondary/50 rounded-lg px-3 py-2 text-center">
+      <p className="text-muted-foreground text-[11px] font-medium">{label}</p>
+      <p className="font-display text-lg font-medium tabular-nums">{value != null ? value.toFixed(1) : "—"}</p>
+    </div>
+  );
 }
 
 export function SpeakingSubmissionReviewCard({
@@ -38,47 +45,24 @@ export function SpeakingSubmissionReviewCard({
   taskId: string;
   submission: SpeakingSubmissionForReview;
 }) {
-  const [bandScore, setBandScore] = useState(submission.bandScore != null ? String(submission.bandScore) : "");
-  const [feedback, setFeedback] = useState(submission.feedback ?? "");
-  const [fluencyBand, setFluencyBand] = useState(criterionField(submission.fluencyBand));
-  const [lexicalBand, setLexicalBand] = useState(criterionField(submission.lexicalBand));
-  const [grammarBand, setGrammarBand] = useState(criterionField(submission.grammarBand));
-  const [pronunciationBand, setPronunciationBand] = useState(criterionField(submission.pronunciationBand));
+  const [notes, setNotes] = useState(submission.teacherNotes ?? "");
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSave() {
-    const score = Number(bandScore);
-    if (!bandScore || Number.isNaN(score) || score < 0 || score > 9) {
-      toast.error("Enter a band score between 0 and 9.");
+  async function handleSaveNotes() {
+    if (!notes.trim()) {
+      toast.error("Add a note before saving.");
       return;
     }
-    if (!feedback.trim()) {
-      toast.error("Add feedback for the student.");
-      return;
-    }
-
-    const parseCriterion = (value: string): number | undefined => {
-      if (!value.trim()) return undefined;
-      const num = Number(value);
-      return Number.isNaN(num) ? undefined : num;
-    };
 
     setSubmitting(true);
-    const result = await reviewSpeakingSubmissionAction(submission.id, taskId, {
-      bandScore: score,
-      feedback,
-      fluencyBand: parseCriterion(fluencyBand),
-      lexicalBand: parseCriterion(lexicalBand),
-      grammarBand: parseCriterion(grammarBand),
-      pronunciationBand: parseCriterion(pronunciationBand),
-    });
+    const result = await addSpeakingTeacherNotesAction(submission.id, taskId, { notes });
     setSubmitting(false);
 
     if (!result.success) {
       toast.error(result.error);
       return;
     }
-    toast.success("Review saved.");
+    toast.success("Note saved.");
   }
 
   return (
@@ -89,102 +73,73 @@ export function SpeakingSubmissionReviewCard({
             <p className="text-sm font-medium">{submission.student.name ?? submission.student.email}</p>
             <p className="text-muted-foreground text-xs">{formatRelativeTime(submission.createdAt)}</p>
           </div>
-          <Badge variant={submission.status === "REVIEWED" ? "success" : "outline"}>{submission.status}</Badge>
-        </div>
-
-        <audio controls src={submission.audioUrl} className="w-full" />
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[100px_1fr]">
-          <div className="space-y-1.5">
-            <Label htmlFor={`score-${submission.id}`}>Band</Label>
-            <Input
-              id={`score-${submission.id}`}
-              type="number"
-              min={0}
-              max={9}
-              step={0.5}
-              value={bandScore}
-              onChange={(event) => setBandScore(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`feedback-${submission.id}`}>Feedback</Label>
-            <Textarea
-              id={`feedback-${submission.id}`}
-              rows={2}
-              value={feedback}
-              onChange={(event) => setFeedback(event.target.value)}
-            />
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="gap-1">
+              <Sparkles className="size-3" /> AI Evaluated
+            </Badge>
+            <Badge variant={submission.status === "REVIEWED" ? "success" : "outline"}>{submission.status}</Badge>
           </div>
         </div>
+
+        {submission.status !== "REVIEWED" ? (
+          <p className="text-muted-foreground text-sm">This submission hasn&apos;t been AI-evaluated yet.</p>
+        ) : (
+          <>
+            <div className="flex items-center gap-3">
+              <div className="bg-secondary text-accent flex size-12 shrink-0 items-center justify-center rounded-xl">
+                <span className="font-display text-lg font-medium">{submission.bandScore != null ? submission.bandScore.toFixed(1) : "—"}</span>
+              </div>
+              {submission.feedback && <p className="text-muted-foreground text-sm leading-relaxed">{submission.feedback}</p>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <BandChip label="Fluency" value={submission.fluencyBand} />
+              <BandChip label="Lexical" value={submission.lexicalBand} />
+              <BandChip label="Grammar" value={submission.grammarBand} />
+              <BandChip label="Pronunciation" value={submission.pronunciationBand} />
+            </div>
+
+            {(submission.strengths.length > 0 || submission.weaknesses.length > 0) && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {submission.strengths.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Strengths</p>
+                    <ul className="space-y-1 text-sm">
+                      {submission.strengths.map((item, index) => (
+                        <li key={index}>• {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {submission.weaknesses.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Weaknesses</p>
+                    <ul className="space-y-1 text-sm">
+                      {submission.weaknesses.map((item, index) => (
+                        <li key={index}>• {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
 
         <div className="space-y-1.5">
-          <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Per-criterion bands (optional — powers Speaking weakness detection)
-          </p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="space-y-1">
-              <Label htmlFor={`fluency-${submission.id}`} className="text-xs">
-                Fluency
-              </Label>
-              <Input
-                id={`fluency-${submission.id}`}
-                type="number"
-                min={0}
-                max={9}
-                step={0.5}
-                value={fluencyBand}
-                onChange={(event) => setFluencyBand(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor={`lexical-${submission.id}`} className="text-xs">
-                Lexical
-              </Label>
-              <Input
-                id={`lexical-${submission.id}`}
-                type="number"
-                min={0}
-                max={9}
-                step={0.5}
-                value={lexicalBand}
-                onChange={(event) => setLexicalBand(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor={`grammar-${submission.id}`} className="text-xs">
-                Grammar
-              </Label>
-              <Input
-                id={`grammar-${submission.id}`}
-                type="number"
-                min={0}
-                max={9}
-                step={0.5}
-                value={grammarBand}
-                onChange={(event) => setGrammarBand(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor={`pronunciation-${submission.id}`} className="text-xs">
-                Pronunciation
-              </Label>
-              <Input
-                id={`pronunciation-${submission.id}`}
-                type="number"
-                min={0}
-                max={9}
-                step={0.5}
-                value={pronunciationBand}
-                onChange={(event) => setPronunciationBand(event.target.value)}
-              />
-            </div>
-          </div>
+          <Label htmlFor={`teacher-notes-${submission.id}`}>Your note to this student (optional)</Label>
+          <Textarea
+            id={`teacher-notes-${submission.id}`}
+            rows={2}
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Add a personal note on top of the AI feedback…"
+          />
         </div>
 
-        <Button size="sm" onClick={handleSave} disabled={submitting}>
+        <Button size="sm" onClick={handleSaveNotes} disabled={submitting}>
           {submitting && <Loader2 className="size-4 animate-spin" />}
-          Save review
+          Save note
         </Button>
       </CardContent>
     </Card>

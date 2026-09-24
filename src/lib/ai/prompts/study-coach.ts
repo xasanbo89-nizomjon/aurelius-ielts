@@ -143,7 +143,7 @@ export function buildStudyCoachPrompt(context: StudyCoachContext): { system: str
   );
 
   lines.push(
-    "Generate: a short summary, a 7-day weekly study plan (Day 1 through Day 7) that prioritizes the weaknesses above with some strength maintenance, and a realistic roadmap of milestones from the current estimated band toward the target band."
+    "Generate: a short summary, a 7-day weekly study plan (Day 1 through Day 7) that prioritizes the weaknesses above with some strength maintenance, and a realistic roadmap of milestones from the current estimated band toward the target band. Weaknesses above may span Reading, Listening, Writing and Speaking — when a skill has real weakness data, include real daily tasks for it; never invent tasks for a skill with no data provided."
   );
 
   return { system: SYSTEM_PROMPT, user: lines.join("\n\n") };

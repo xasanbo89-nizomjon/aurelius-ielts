@@ -50,10 +50,10 @@ export function SpeakingCodeEntry() {
           <p className="text-sm whitespace-pre-wrap">{task.prompt}</p>
           <SpeakingRecorder
             taskId={task.id}
-            onSubmitted={() => {
+            onSubmitted={(submissionId) => {
               setTask(null);
               setCode("");
-              router.refresh();
+              router.push(`/student/speaking/${submissionId}`);
             }}
           />
         </CardContent>

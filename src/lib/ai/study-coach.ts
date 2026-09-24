@@ -7,6 +7,8 @@ import {
   getSkillPerformance,
   getStrengths,
   getWeaknesses,
+  getWritingCriterionInsights,
+  getSpeakingCriterionInsights,
   summarizeResultCards,
 } from "@/lib/analytics/student-insights";
 import { SKILL_LABELS } from "@/lib/labels";
@@ -73,11 +75,13 @@ export type GenerateStudyPlanResult =
  * every OpenAI call here is a deliberate, visible action, not a background cost.
  */
 export async function generateAndSaveStudyPlan(studentId: string): Promise<GenerateStudyPlanResult> {
-  const [cards, skills, weaknesses, strengths, profile] = await Promise.all([
+  const [cards, skills, weaknesses, strengths, writingCriteria, speakingCriteria, profile] = await Promise.all([
     getResultCards(studentId),
     getSkillPerformance(studentId),
     getWeaknesses(studentId),
     getStrengths(studentId),
+    getWritingCriterionInsights(studentId),
+    getSpeakingCriterionInsights(studentId),
     prisma.studentProfile.findUnique({ where: { id: studentId }, select: { targetBandScore: true } }),
   ]);
 
@@ -93,14 +97,26 @@ export async function generateAndSaveStudyPlan(studentId: string): Promise<Gener
   const insights = getProfileInsights(overview, skills);
   const targetBand = profile?.targetBandScore ?? null;
 
+  // Phase 25 — Writing/Speaking criteria (band-based) converted to the same
+  // "accuracy" shape as Reading/Listening (percent-based) so all 4 skills
+  // inform the same weaknesses/strengths list the prompt already builds
+  // from — real band-per-criterion data, not estimated.
+  const bandToAccuracy = (band: number) => Math.round((band / 9) * 100);
+  const writingSpeakingWeak = [...writingCriteria, ...speakingCriteria]
+    .filter((c) => c.avgBand < 6.0)
+    .map((c) => ({ label: c.label, accuracy: bandToAccuracy(c.avgBand), sampleSize: c.sampleSize }));
+  const writingSpeakingStrong = [...writingCriteria, ...speakingCriteria]
+    .filter((c) => c.avgBand >= 7.0)
+    .map((c) => ({ label: c.label, accuracy: bandToAccuracy(c.avgBand), sampleSize: c.sampleSize }));
+
   const context: StudyCoachContext = {
     estimatedBand: insights.estimatedBand,
     cefrLabel: insights.cefrLabel,
     targetBand,
     testsCompleted: overview.testsCompleted,
     avgScorePercent: overview.avgScorePercent,
-    weaknesses: weaknesses.map((w) => ({ label: w.label, accuracy: w.accuracy, sampleSize: w.sampleSize })),
-    strengths: strengths.map((s) => ({ label: s.label, accuracy: s.accuracy, sampleSize: s.sampleSize })),
+    weaknesses: [...weaknesses.map((w) => ({ label: w.label, accuracy: w.accuracy, sampleSize: w.sampleSize })), ...writingSpeakingWeak],
+    strengths: [...strengths.map((s) => ({ label: s.label, accuracy: s.accuracy, sampleSize: s.sampleSize })), ...writingSpeakingStrong],
     recentResults: cards.slice(0, RECENT_RESULTS_FOR_CONTEXT).map((card) => ({
       testTitle: card.testTitle,
       skill: SKILL_LABELS[card.skill],

@@ -51,10 +51,13 @@ export async function getNotificationInbox(studentId: string, teacherId: string 
       select: { id: true, taskType: true, bandScore: true, reviewedAt: true },
     }),
     prisma.speakingSubmission.findMany({
-      where: { studentId, status: "REVIEWED", reviewedAt: { not: null } },
-      orderBy: { reviewedAt: "desc" },
+      // Phase 27 — keyed on evaluatedAt, not reviewedAt: AI evaluation is now
+      // instant and IS the real "there's feedback" moment. reviewedAt is a
+      // separate, optional teacher-notes timestamp post-Phase-27.
+      where: { studentId, status: "REVIEWED", evaluatedAt: { not: null } },
+      orderBy: { evaluatedAt: "desc" },
       take: PER_CATEGORY_LIMIT,
-      select: { id: true, part: true, bandScore: true, reviewedAt: true, task: { select: { title: true } } },
+      select: { id: true, part: true, bandScore: true, evaluatedAt: true, task: { select: { title: true } } },
     }),
     getSubscriptionSummary(studentId),
     prisma.notificationRead.findMany({ where: { studentId }, select: { itemKey: true } }),
@@ -93,10 +96,10 @@ export async function getNotificationInbox(studentId: string, teacherId: string 
     ...speakingReviews.map((submission) => ({
       key: `speaking-review-${submission.id}`,
       category: "SPEAKING_REVIEW" as const,
-      title: `${submission.task.title} reviewed`,
-      content: "Your teacher reviewed your speaking response.",
-      href: "/student/speaking",
-      at: submission.reviewedAt as Date,
+      title: `${submission.task.title} evaluated`,
+      content: submission.bandScore != null ? `Your AI Speaking result is ready — Band ${submission.bandScore.toFixed(1)}.` : "Your AI Speaking result is ready.",
+      href: `/student/speaking/${submission.id}`,
+      at: submission.evaluatedAt as Date,
       isRead: readKeys.has(`speaking-review-${submission.id}`),
     })),
   ];
@@ -104,13 +107,15 @@ export async function getNotificationInbox(studentId: string, teacherId: string 
   // System Notices — computed live from real subscription state, never
   // stored/invented. The key includes daysRemaining so each day's real
   // countdown reads as a distinct (and distinctly re-readable) notice.
-  if (subscriptionSummary.hasAccess && subscriptionSummary.status === "TRIAL" && subscriptionSummary.daysRemaining != null && subscriptionSummary.daysRemaining <= 7) {
-    const key = `system-trial-expiry-${subscriptionSummary.daysRemaining}`;
+  // Phase 26 — also covers a real paid Premium subscription running low,
+  // not just a free trial (Part 8: "Display remaining premium days").
+  if (subscriptionSummary.hasAccess && subscriptionSummary.daysRemaining != null && subscriptionSummary.daysRemaining <= 7) {
+    const key = `system-${subscriptionSummary.status.toLowerCase()}-expiry-${subscriptionSummary.daysRemaining}`;
     items.push({
       key,
       category: "SYSTEM_NOTICE",
-      title: "Your trial is ending soon",
-      content: `${subscriptionSummary.daysRemaining} day${subscriptionSummary.daysRemaining === 1 ? "" : "s"} remaining on your free trial.`,
+      title: subscriptionSummary.status === "TRIAL" ? "Your trial is ending soon" : "Your Premium is ending soon",
+      content: `${subscriptionSummary.daysRemaining} day${subscriptionSummary.daysRemaining === 1 ? "" : "s"} remaining on your ${subscriptionSummary.status === "TRIAL" ? "free trial" : "Premium plan"}.`,
       href: "/student/subscription",
       at: new Date(),
       isRead: readKeys.has(key),

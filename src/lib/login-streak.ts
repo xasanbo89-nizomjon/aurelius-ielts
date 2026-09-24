@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";
 
@@ -26,9 +27,12 @@ function isSameDay(a: Date, b: Date): boolean {
  * visit, not a study threshold.
  *
  * Safe to call on every dashboard layout render — it's a no-op read (no
- * write) for every visit after the first one on a given day.
+ * write) for every visit after the first one on a given day. Wrapped in
+ * React's cache() so the layout and a page that both need the streak count
+ * within the same request (Phase 28 mobile dashboard widgets) share one
+ * call instead of writing twice.
  */
-export async function recordLoginAndGetStreak(userId: string): Promise<number> {
+export const recordLoginAndGetStreak = cache(async (userId: string): Promise<number> => {
   const today = startOfDay(new Date());
 
   const user = await prisma.user.findUnique({
@@ -53,4 +57,4 @@ export async function recordLoginAndGetStreak(userId: string): Promise<number> {
   });
 
   return updated.currentLoginStreak;
-}
+});

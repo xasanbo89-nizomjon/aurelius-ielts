@@ -113,6 +113,86 @@ export async function extendStudentTrial(
   return { success: true, summary: await getSubscriptionSummary(studentId) };
 }
 
+/**
+ * Phase 26 — Admin Premium Control "Grant Premium": root-teacher-only,
+ * same shape as extendStudentTrial but sets status ACTIVE (not TRIAL) and
+ * records `source: "ADMIN_GRANT"` — a real, attributable reason, distinct
+ * from a coin redemption or a future direct payment.
+ */
+export async function grantPremium(
+  isActingTeacherRoot: boolean,
+  rootTeacherId: string,
+  studentId: string,
+  days: number = TRIAL_EXTENSION_DAYS
+): Promise<TrialActionResult> {
+  if (!isActingTeacherRoot) {
+    return { success: false, error: "Only a root administrator can manage student subscriptions." };
+  }
+  try {
+    await assertStudentExists(studentId);
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Student not found." };
+  }
+
+  await getSubscriptionSummary(studentId);
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    const latest = await tx.subscription.findFirstOrThrow({ where: { studentId }, orderBy: { createdAt: "desc" } });
+    const previousExpiryDate = latest.endDate;
+    const baseDate = latest.endDate && latest.endDate > now ? latest.endDate : now;
+    const newEndDate = addDays(baseDate, days);
+
+    await tx.subscription.update({
+      where: { id: latest.id },
+      data: { status: "ACTIVE", endDate: newEndDate, source: "ADMIN_GRANT" },
+    });
+
+    await tx.trialAuditLog.create({
+      data: { rootTeacherId, studentId, action: "PREMIUM_GRANT", previousExpiryDate, newExpiryDate: newEndDate },
+    });
+  });
+
+  // Real one-time achievement (FIRST_PREMIUM_MONTH) — idempotency-guarded, never double-awarded.
+  const { syncAchievements } = await import("@/lib/achievements");
+  await syncAchievements(studentId);
+
+  return { success: true, summary: await getSubscriptionSummary(studentId) };
+}
+
+/**
+ * Phase 26 — Admin Premium Control "Remove Premium": root-teacher-only.
+ * Ends access immediately (EXPIRED, endDate = now) rather than deleting the
+ * Subscription row — the student's real subscription history (source,
+ * prior dates) stays intact for the audit trail and Subscription History view.
+ */
+export async function removePremium(isActingTeacherRoot: boolean, rootTeacherId: string, studentId: string): Promise<TrialActionResult> {
+  if (!isActingTeacherRoot) {
+    return { success: false, error: "Only a root administrator can manage student subscriptions." };
+  }
+  try {
+    await assertStudentExists(studentId);
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Student not found." };
+  }
+
+  await getSubscriptionSummary(studentId);
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    const latest = await tx.subscription.findFirstOrThrow({ where: { studentId }, orderBy: { createdAt: "desc" } });
+    const previousExpiryDate = latest.endDate;
+
+    await tx.subscription.update({ where: { id: latest.id }, data: { status: "EXPIRED", endDate: now } });
+
+    await tx.trialAuditLog.create({
+      data: { rootTeacherId, studentId, action: "PREMIUM_REMOVE", previousExpiryDate, newExpiryDate: now },
+    });
+  });
+
+  return { success: true, summary: await getSubscriptionSummary(studentId) };
+}
+
 /** Batched for the student roster page — bounded by pagination (≤10 rows), reuses the same single-source-of-truth summary every other surface uses. */
 export async function getStudentTrialInfoForRoster(studentIds: string[]): Promise<Record<string, SubscriptionSummary>> {
   const entries = await Promise.all(studentIds.map(async (id) => [id, await getSubscriptionSummary(id)] as const));

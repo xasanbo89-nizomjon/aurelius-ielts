@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 
+import { cn } from "@/lib/utils";
 import type { NavItem } from "@/lib/nav-config";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
+import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { DailyStreakBadge } from "@/components/layout/daily-streak-badge";
 import { NotificationsBell } from "@/components/layout/notifications-bell";
 import { PremiumBadge } from "@/components/layout/premium-badge";
@@ -15,6 +17,7 @@ export function DashboardShell({
   user,
   streakCount,
   isPremium,
+  premiumDaysRemaining,
   secondaryNavItems,
   children,
 }: {
@@ -24,6 +27,7 @@ export function DashboardShell({
   streakCount: number;
   /** Student header only — omitted for teachers, whose header is unchanged. */
   isPremium?: boolean;
+  premiumDaysRemaining?: number | null;
   secondaryNavItems?: NavItem[];
   children: ReactNode;
 }) {
@@ -55,7 +59,7 @@ export function DashboardShell({
             <>
               <DailyStreakBadge streakCount={streakCount} bare />
               <NotificationsBell />
-              <PremiumBadge isPremium={isPremium ?? false} />
+              <PremiumBadge isPremium={isPremium ?? false} daysRemaining={premiumDaysRemaining} />
               <UserMenu name={user.name} email={user.email} image={user.image} role={role} secondaryItems={secondaryNavItems} />
             </>
           ) : (
@@ -64,10 +68,16 @@ export function DashboardShell({
           )}
         </header>
 
-        <main id="main-content" tabIndex={-1} className="flex-1 px-4 py-8 outline-none sm:px-6 lg:px-10 lg:py-10">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={cn("flex-1 px-4 py-8 outline-none sm:px-6 lg:px-10 lg:py-10", isStudent && "pb-24 lg:pb-10")}
+        >
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">{children}</div>
         </main>
       </div>
+
+      {isStudent && <MobileBottomNav />}
     </div>
   );
 }

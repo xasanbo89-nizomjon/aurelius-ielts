@@ -25,6 +25,11 @@ import {
   Mic,
   Settings,
   Bookmark,
+  Sparkles,
+  Coins,
+  Trophy,
+  Download,
+  WifiOff,
 } from "lucide-react";
 
 /**
@@ -62,6 +67,11 @@ export const NAV_ICONS = {
   Mic,
   Settings,
   Bookmark,
+  Sparkles,
+  Coins,
+  Trophy,
+  Download,
+  WifiOff,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;

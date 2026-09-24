@@ -24,15 +24,24 @@ export const STUDENT_NAV_ITEMS: NavItem[] = [
  * just no longer linked from primary navigation.
  */
 export const STUDENT_SECONDARY_NAV_ITEMS: NavItem[] = [
+  { label: "Success Center", href: "/student/success", icon: "Sparkles" },
   { label: "Study Coach", href: "/student/study-coach", icon: "Target" },
   { label: "Band Score Center", href: "/student/analytics", icon: "LineChart" },
   { label: "Test History", href: "/student/test-history", icon: "History" },
   { label: "Bookmarks", href: "/student/bookmarks", icon: "Bookmark" },
+  { label: "Coin Wallet", href: "/student/coins", icon: "Coins" },
+  { label: "Leaderboard", href: "/student/leaderboard", icon: "Trophy" },
   { label: "Subscription", href: "/student/subscription", icon: "Gem" },
+  // Phase 28 — Offline learning. "Offline Articles" links straight to the
+  // network-independent /offline/* viewer (not a /student/* page), since
+  // it must keep working with zero connection.
+  { label: "Downloads", href: "/student/downloads", icon: "Download" },
+  { label: "Offline Articles", href: "/offline/articles", icon: "WifiOff" },
 ];
 
 export const TEACHER_NAV_ITEMS: NavItem[] = [
   { label: "Overview", href: "/teacher/dashboard", icon: "LayoutDashboard" },
+  { label: "AI Assistant", href: "/teacher/assistant", icon: "Sparkles" },
   { label: "Students", href: "/teacher/students", icon: "Users" },
   { label: "Tests", href: "/teacher/tests", icon: "FileText" },
   { label: "Articles", href: "/teacher/articles", icon: "Newspaper" },
@@ -51,6 +60,7 @@ export const TEACHER_NAV_ITEMS: NavItem[] = [
   { label: "Updates", href: "/teacher/updates", icon: "Megaphone" },
   { label: "Promo Codes", href: "/teacher/promo-codes", icon: "Ticket" },
   { label: "Payments", href: "/teacher/payments", icon: "CreditCard" },
+  { label: "Coin Logs", href: "/teacher/coin-logs", icon: "Coins" },
   { label: "Subscription Plans", href: "/teacher/subscriptions", icon: "Gem" },
   { label: "Teacher Management", href: "/teacher/management", icon: "ShieldCheck" },
 ];

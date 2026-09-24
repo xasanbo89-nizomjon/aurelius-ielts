@@ -15,13 +15,16 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 import { RedeemPromoCodeForm } from "@/components/student/redeem-promo-code-form";
 import { PlanPicker } from "@/components/student/plan-picker";
 import { listActiveSubscriptionPlans } from "@/lib/subscription-plans";
+import { getSubscriptionHistory } from "@/lib/subscription-history";
 
 export const metadata: Metadata = { title: "Subscription" };
+
+const SOURCE_LABEL = { COIN_REDEMPTION: "Coin Redemption", ADMIN_GRANT: "Admin Grant", DIRECT_PAYMENT: "Direct Payment" } as const;
 
 export default async function StudentSubscriptionPage() {
   const { profile } = await requireStudentProfile();
 
-  const [summary, redemptions, teacher, plans] = await Promise.all([
+  const [summary, redemptions, teacher, plans, history] = await Promise.all([
     getSubscriptionSummary(profile.id),
     listRedemptionsForStudent(profile.id),
     profile.teacherId
@@ -31,6 +34,7 @@ export default async function StudentSubscriptionPage() {
         })
       : null,
     listActiveSubscriptionPlans(),
+    getSubscriptionHistory(profile.id),
   ]);
 
   return (
@@ -58,8 +62,11 @@ export default async function StudentSubscriptionPage() {
                 <CalendarClock className="size-4" aria-hidden="true" />
                 {summary.status === "TRIAL"
                   ? `Trial: ${summary.daysRemaining} day${summary.daysRemaining === 1 ? "" : "s"} remaining`
-                  : `Renews in ${summary.daysRemaining} day${summary.daysRemaining === 1 ? "" : "s"}`}
+                  : `Premium: ${summary.daysRemaining} day${summary.daysRemaining === 1 ? "" : "s"} remaining`}
               </span>
+            )}
+            {summary.subscription.source && (
+              <Badge variant="outline">via {SOURCE_LABEL[summary.subscription.source]}</Badge>
             )}
           </div>
 
@@ -94,6 +101,31 @@ export default async function StudentSubscriptionPage() {
       </Card>
 
       <RedeemPromoCodeForm />
+
+      <section className="space-y-4">
+        <h2 className="font-display text-xl font-medium tracking-tight">Subscription History</h2>
+        {history.length === 0 ? (
+          <EmptyState
+            icon={Gem}
+            title="No subscription activity yet"
+            description="Trial resets, premium redemptions, admin grants, and payments will show up here."
+          />
+        ) : (
+          <Card className="gap-0 py-2">
+            <CardContent className="divide-border/70 divide-y px-0">
+              {history.map((entry) => (
+                <div key={entry.key} className="flex items-center justify-between gap-3 px-6 py-3.5">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium">{entry.label}</p>
+                    <p className="text-muted-foreground text-xs">{entry.detail}</p>
+                  </div>
+                  <span className="text-muted-foreground shrink-0 text-xs">{entry.at.toLocaleDateString()}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+      </section>
 
       <section className="space-y-4">
         <h2 className="font-display text-xl font-medium tracking-tight">Redemption History</h2>
