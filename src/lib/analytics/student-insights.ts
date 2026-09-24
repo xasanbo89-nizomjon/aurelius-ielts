@@ -207,6 +207,50 @@ async function getAccuracyInsights(studentId: string): Promise<AccuracyInsight[]
   return [...typeInsights, ...sectionInsights];
 }
 
+export type SkillAccuracyInsight = { key: string; skill: "READING" | "LISTENING"; label: string; accuracy: number; sampleSize: number };
+
+/**
+ * Same real per-question-type accuracy as getAccuracyInsights above, but
+ * grouped by (skill, type) instead of type alone — a question type like
+ * Matching appears in both Reading and Listening, and blending them (as the
+ * original function deliberately does, to keep the existing Weakness/
+ * Strength Tracker cards unchanged) would mislabel a Phase 23 "TFNG
+ * weakness"/"Listening Section 3 weakness" style insight with the wrong
+ * skill. Kept as its own function rather than changing getAccuracyInsights,
+ * so nothing already on the Analytics page shifts.
+ */
+async function getAccuracyInsightsBySkill(studentId: string): Promise<SkillAccuracyInsight[]> {
+  const answers = await prisma.answer.findMany({
+    where: { isCorrect: { not: null }, result: { studentId, completedAt: { not: null } } },
+    select: {
+      isCorrect: true,
+      question: { select: { type: true } },
+      result: { select: { skill: true } },
+    },
+  });
+
+  const byTypeAndSkill = new Map<string, { correct: number; total: number; skill: "READING" | "LISTENING"; type: QuestionType }>();
+
+  for (const answer of answers) {
+    if (answer.result.skill !== "READING" && answer.result.skill !== "LISTENING") continue;
+    const key = `${answer.result.skill}-${answer.question.type}`;
+    const stats = byTypeAndSkill.get(key) ?? { correct: 0, total: 0, skill: answer.result.skill, type: answer.question.type };
+    stats.total += 1;
+    if (answer.isCorrect) stats.correct += 1;
+    byTypeAndSkill.set(key, stats);
+  }
+
+  return [...byTypeAndSkill.values()]
+    .filter((stats) => stats.total >= MIN_SAMPLE_SIZE)
+    .map((stats) => ({
+      key: `type-${stats.skill}-${stats.type}`,
+      skill: stats.skill,
+      label: `${SKILL_LABELS[stats.skill]} — ${QUESTION_TYPE_META[stats.type].label}`,
+      accuracy: Math.round((stats.correct / stats.total) * 100),
+      sampleSize: stats.total,
+    }));
+}
+
 export async function getWeaknesses(studentId: string): Promise<AccuracyInsight[]> {
   const insights = await getAccuracyInsights(studentId);
   return insights
@@ -315,6 +359,110 @@ export type ProfileInsights = {
   strongestSkill: SkillPerformance | null;
   weakestSkill: SkillPerformance | null;
 };
+
+// ---------------------------------------------------------------------------
+// Phase 23 — AI Mistake Analysis Engine: extends weakness/strength detection
+// from Reading/Listening (accuracy-based, above) to Writing/Speaking
+// (criterion-band-based). Real IELTS criteria only — Writing from
+// WritingAnalysis (AI-scored per essay), Speaking from SpeakingSubmission
+// (teacher-scored per criterion, only once a submission is REVIEWED).
+// ---------------------------------------------------------------------------
+
+const MIN_CRITERION_SAMPLE = 2;
+const WEAK_BAND_THRESHOLD = 6.0;
+const STRONG_BAND_THRESHOLD = 7.0;
+
+export type CriterionInsight = { key: string; label: string; avgBand: number; sampleSize: number };
+
+function averageBy(values: (number | null)[]): { avg: number; count: number } | null {
+  const real = values.filter((v): v is number => v != null);
+  if (real.length === 0) return null;
+  return { avg: Math.round((real.reduce((a, b) => a + b, 0) / real.length) * 10) / 10, count: real.length };
+}
+
+export async function getWritingCriterionInsights(studentId: string): Promise<CriterionInsight[]> {
+  const analyses = await prisma.writingAnalysis.findMany({
+    where: { submission: { studentId, status: { not: "DRAFT" } } },
+    select: { grammarBand: true, vocabularyBand: true, coherenceBand: true, taskResponseBand: true },
+  });
+
+  const criteria: { key: string; label: string; values: (number | null)[] }[] = [
+    { key: "writing-grammar", label: "Writing — Grammatical Range & Accuracy", values: analyses.map((a) => a.grammarBand) },
+    { key: "writing-vocabulary", label: "Writing — Lexical Resource", values: analyses.map((a) => a.vocabularyBand) },
+    { key: "writing-coherence", label: "Writing — Coherence & Cohesion", values: analyses.map((a) => a.coherenceBand) },
+    { key: "writing-task-response", label: "Writing — Task Response", values: analyses.map((a) => a.taskResponseBand) },
+  ];
+
+  return criteria
+    .map(({ key, label, values }) => {
+      const result = averageBy(values);
+      return result ? { key, label, avgBand: result.avg, sampleSize: result.count } : null;
+    })
+    .filter((insight): insight is CriterionInsight => insight != null && insight.sampleSize >= MIN_CRITERION_SAMPLE);
+}
+
+export async function getSpeakingCriterionInsights(studentId: string): Promise<CriterionInsight[]> {
+  const submissions = await prisma.speakingSubmission.findMany({
+    where: { studentId, status: "REVIEWED" },
+    select: { fluencyBand: true, lexicalBand: true, grammarBand: true, pronunciationBand: true },
+  });
+
+  const criteria: { key: string; label: string; values: (number | null)[] }[] = [
+    { key: "speaking-fluency", label: "Speaking — Fluency & Coherence", values: submissions.map((s) => s.fluencyBand) },
+    { key: "speaking-lexical", label: "Speaking — Lexical Resource", values: submissions.map((s) => s.lexicalBand) },
+    { key: "speaking-grammar", label: "Speaking — Grammatical Range & Accuracy", values: submissions.map((s) => s.grammarBand) },
+    { key: "speaking-pronunciation", label: "Speaking — Pronunciation", values: submissions.map((s) => s.pronunciationBand) },
+  ];
+
+  return criteria
+    .map(({ key, label, values }) => {
+      const result = averageBy(values);
+      return result ? { key, label, avgBand: result.avg, sampleSize: result.count } : null;
+    })
+    .filter((insight): insight is CriterionInsight => insight != null && insight.sampleSize >= MIN_CRITERION_SAMPLE);
+}
+
+export type CombinedSkillInsight = {
+  key: string;
+  skill: "READING" | "LISTENING" | "WRITING" | "SPEAKING";
+  label: string;
+  detail: string;
+  tone: "weak" | "strong" | "neutral";
+};
+
+/**
+ * Every real weakness/strength signal across all 4 skills, normalized into
+ * one list — the direct real-data input for the AI Mistake Analysis,
+ * Improvement Plan and Teacher Report prompts (Parts 2/6/7/10). Nothing here
+ * is generated or guessed; every entry traces back to a real accuracy or
+ * band-score aggregate.
+ */
+export async function getAllSkillInsights(studentId: string): Promise<CombinedSkillInsight[]> {
+  const [accuracyInsights, writingInsights, speakingInsights] = await Promise.all([
+    getAccuracyInsightsBySkill(studentId),
+    getWritingCriterionInsights(studentId),
+    getSpeakingCriterionInsights(studentId),
+  ]);
+
+  const fromAccuracy: CombinedSkillInsight[] = accuracyInsights.map((insight) => ({
+    key: insight.key,
+    skill: insight.skill,
+    label: insight.label,
+    detail: `${insight.accuracy}% accuracy across ${insight.sampleSize} question${insight.sampleSize === 1 ? "" : "s"}`,
+    tone: insight.accuracy < WEAK_THRESHOLD ? "weak" : insight.accuracy >= STRONG_THRESHOLD ? "strong" : "neutral",
+  }));
+
+  const fromCriteria = (insights: CriterionInsight[], skill: "WRITING" | "SPEAKING"): CombinedSkillInsight[] =>
+    insights.map((insight) => ({
+      key: insight.key,
+      skill,
+      label: insight.label,
+      detail: `Band ${insight.avgBand.toFixed(1)} average across ${insight.sampleSize} submission${insight.sampleSize === 1 ? "" : "s"}`,
+      tone: insight.avgBand < WEAK_BAND_THRESHOLD ? "weak" : insight.avgBand >= STRONG_BAND_THRESHOLD ? "strong" : "neutral",
+    }));
+
+  return [...fromAccuracy, ...fromCriteria(writingInsights, "WRITING"), ...fromCriteria(speakingInsights, "SPEAKING")];
+}
 
 /**
  * A compact profile summary, derived from the same `overview`/`skills` the

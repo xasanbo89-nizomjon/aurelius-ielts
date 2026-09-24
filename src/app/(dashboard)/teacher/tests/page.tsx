@@ -37,7 +37,15 @@ export default async function TeacherTestsPage({
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: { _count: { select: { questions: true, results: true } } },
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        category: true,
+        isPublished: true,
+        isArchived: true,
+        _count: { select: { questions: true, results: true } },
+      },
     }),
     prisma.mockTest.count({ where }),
   ]);
@@ -110,7 +118,12 @@ export default async function TeacherTestsPage({
                       {test.title}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-muted-foreground capitalize">{test.type.toLowerCase()}</TableCell>
+                  <TableCell className="text-muted-foreground capitalize">
+                    <span className="flex items-center gap-1.5">
+                      {test.type.toLowerCase()}
+                      {test.category === "CAMBRIDGE" && <Badge variant="success">Cambridge</Badge>}
+                    </span>
+                  </TableCell>
                   <TableCell>{test._count.questions}</TableCell>
                   <TableCell>{test._count.results}</TableCell>
                   <TableCell>

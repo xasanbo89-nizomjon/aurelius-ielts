@@ -3,6 +3,7 @@ import Link from "next/link";
 import { History, ListChecks, PenLine, Plus, TrendingDown, TrendingUp, Minus, Gauge, Trophy, Clock, FileCheck } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
+import { hasActiveAccess } from "@/lib/subscription";
 import { getStudentSubmissions, getWritingAnalytics, getOrGenerateRecommendation } from "@/lib/ai/writing";
 import { getOrGeneratePractice } from "@/lib/ai/writing-practice";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { WritingSubmissionsTable } from "@/components/student/writing-submissions-table";
 import { WritingRecommendationCard } from "@/components/student/writing-recommendation-card";
 import { WritingPracticeCard } from "@/components/student/writing-practice-card";
+import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
 
 export const metadata: Metadata = { title: "Writing Center" };
 
@@ -27,6 +29,10 @@ const TREND_META = {
 
 export default async function WritingCenterPage() {
   const { profile } = await requireStudentProfile();
+
+  if (!(await hasActiveAccess(profile.id))) {
+    return <PremiumLockScreen feature="Writing" />;
+  }
 
   const [submissions, analytics, recommendation, practice] = await Promise.all([
     getStudentSubmissions(profile.id),

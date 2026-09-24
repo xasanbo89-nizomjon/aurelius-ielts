@@ -7,7 +7,7 @@ import type { Role } from "@prisma/client";
 import { getAdminAuth, SESSION_COOKIE_MAX_AGE_MS, SESSION_COOKIE_NAME } from "@/lib/firebase/admin";
 import { prisma } from "@/lib/prisma";
 import { determineRoleForEmail, getRootTeacherProfileId } from "@/lib/teacher-access";
-import { createTrialSubscription } from "@/lib/subscription";
+import { createNoTrialSubscription } from "@/lib/subscription";
 
 export type CompleteRegistrationResult = { success: true; role: Role } | { success: false; error: string };
 
@@ -69,7 +69,9 @@ export async function completeRegistrationAction(
         });
 
         if (created.studentProfile) {
-          await createTrialSubscription(tx, created.studentProfile.id);
+          // Phase 20 — no free trial for new sign-ups; existing students keep
+          // theirs untouched. See createNoTrialSubscription.
+          await createNoTrialSubscription(tx, created.studentProfile.id);
         }
 
         return created;

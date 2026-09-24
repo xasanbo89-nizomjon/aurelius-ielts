@@ -289,3 +289,64 @@ export async function getStudentVocabularyStats(studentId: string): Promise<Voca
     lastSearchedWord: lastSearch ? { word: lastSearch.vocabularyWord.word, searchedAt: lastSearch.createdAt } : null,
   };
 }
+
+export type WordsPanelEntry = {
+  word: string;
+  translation: string | null;
+  articleId: string | null;
+  articleTitle: string | null;
+  lastSearchedAt: Date;
+  frequency: number;
+};
+
+/**
+ * Phase 20 — "Words" floating panel on the article reader. Every word this
+ * student has ever searched (any article, all-time), most recent first, with
+ * a real per-word frequency from VocabularyLookup — not the notebook's
+ * one-row-per-word StudentVocabulary list, which has no repeat-click count.
+ */
+export async function getWordsPanelEntries(studentId: string, limit = 50): Promise<WordsPanelEntry[]> {
+  const grouped = await prisma.vocabularyLookup.groupBy({
+    by: ["vocabularyWordId"],
+    where: { studentId },
+    _count: { _all: true },
+    _max: { createdAt: true },
+  });
+  if (grouped.length === 0) return [];
+
+  grouped.sort((a, b) => (b._max.createdAt?.getTime() ?? 0) - (a._max.createdAt?.getTime() ?? 0));
+  const topIds = grouped.slice(0, limit).map((g) => g.vocabularyWordId);
+
+  const [words, latestLookups] = await Promise.all([
+    prisma.vocabularyWord.findMany({
+      where: { id: { in: topIds } },
+      select: { id: true, word: true, uzbekTranslation: true },
+    }),
+    prisma.vocabularyLookup.findMany({
+      where: { studentId, vocabularyWordId: { in: topIds } },
+      orderBy: { createdAt: "desc" },
+      distinct: ["vocabularyWordId"],
+      select: { vocabularyWordId: true, createdAt: true, article: { select: { id: true, title: true } } },
+    }),
+  ]);
+
+  const wordMap = new Map(words.map((w) => [w.id, w]));
+  const latestMap = new Map(latestLookups.map((l) => [l.vocabularyWordId, l]));
+  const countMap = new Map(grouped.map((g) => [g.vocabularyWordId, g._count._all]));
+
+  return topIds
+    .map((id) => {
+      const word = wordMap.get(id);
+      const latest = latestMap.get(id);
+      if (!word || !latest) return null;
+      return {
+        word: word.word,
+        translation: word.uzbekTranslation,
+        articleId: latest.article?.id ?? null,
+        articleTitle: latest.article?.title ?? null,
+        lastSearchedAt: latest.createdAt,
+        frequency: countMap.get(id) ?? 0,
+      };
+    })
+    .filter((entry): entry is WordsPanelEntry => entry != null);
+}

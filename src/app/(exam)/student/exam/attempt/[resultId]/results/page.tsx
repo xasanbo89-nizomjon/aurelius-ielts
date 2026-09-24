@@ -1,8 +1,7 @@
-import type { ComponentType } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CalendarDays, CheckCircle2, Circle, Gauge, ListChecks, Timer, XCircle } from "lucide-react";
+import { CheckCircle2, Gauge } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getAttemptSummary } from "@/lib/exam/attempts";
@@ -10,6 +9,7 @@ import { isResponseAnswered } from "@/lib/exam/grading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { WrongAnswerCard } from "@/components/exam/wrong-answer-card";
 
 export const metadata: Metadata = { title: "Test Results" };
 
@@ -26,19 +26,18 @@ export default async function ExamResultsPage({
   if (!attempt.completedAt) redirect(`/student/exam/attempt/${resultId}`);
 
   const answerByQuestion = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
-  const totalQuestions = attempt.mockTest.questions.length;
-  const answeredQuestions = attempt.mockTest.questions.filter((question) =>
-    isResponseAnswered(answerByQuestion.get(question.id)?.response)
-  );
-  const correctCount = attempt.answers.filter((answer) => answer.isCorrect).length;
-  const incorrectCount = answeredQuestions.length - correctCount;
-  const skippedCount = totalQuestions - answeredQuestions.length;
-  const maxScore = attempt.mockTest.questions.reduce((sum, question) => sum + question.points, 0);
   const skillHref = attempt.skill === "LISTENING" ? "/student/listening" : "/student/reading";
-  const minutesSpent = attempt.durationSeconds != null ? Math.round(attempt.durationSeconds / 60) : null;
+
+  const wrongQuestions = attempt.mockTest.questions
+    .map((question, index) => ({ question, index: index + 1, answer: answerByQuestion.get(question.id) }))
+    .filter(({ answer }) => !answer?.isCorrect);
+
+  const correctQuestions = attempt.mockTest.questions
+    .map((question, index) => ({ question, index: index + 1, answer: answerByQuestion.get(question.id) }))
+    .filter(({ answer }) => answer?.isCorrect);
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-6 py-12 sm:py-16">
+    <div className="mx-auto w-full max-w-4xl px-6 py-12 sm:py-16">
       <div className="space-y-8">
         <div className="space-y-2 text-center">
           <Badge variant="outline" className="capitalize">
@@ -48,18 +47,18 @@ export default async function ExamResultsPage({
           <p className="text-muted-foreground text-sm">Test completed — here&apos;s how you did.</p>
         </div>
 
-        <Card className="border-primary/15 bg-primary/[0.03] py-8">
+        <Card className="border-primary/15 bg-primary/[0.03] py-10">
           <CardContent className="flex flex-col items-center gap-2 text-center">
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase">
-              <Gauge className="size-3.5" aria-hidden="true" /> Estimated Band
+              <Gauge className="size-3.5" aria-hidden="true" /> Official Band Score
             </span>
             {attempt.bandScore != null ? (
-              <p className="font-display text-5xl font-medium">{attempt.bandScore.toFixed(1)}</p>
+              <p className="font-display text-7xl font-medium">{attempt.bandScore.toFixed(1)}</p>
             ) : (
               <p className="font-display text-2xl font-medium">Not available yet</p>
             )}
             <p className="text-muted-foreground text-sm">
-              Raw score: {attempt.rawScore ?? 0}/{maxScore}
+              {correctQuestions.length} correct out of {attempt.mockTest.questions.length}
             </p>
             {attempt.bandScore == null && (
               <p className="text-muted-foreground max-w-sm text-xs">
@@ -69,33 +68,57 @@ export default async function ExamResultsPage({
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <StatTile icon={CheckCircle2} label="Correct" value={String(correctCount)} tone="success" />
-          <StatTile icon={XCircle} label="Incorrect" value={String(incorrectCount)} tone="destructive" />
-          <StatTile icon={Circle} label="Skipped" value={String(skippedCount)} tone="muted" />
-          <StatTile
-            icon={Timer}
-            label="Time Spent"
-            value={minutesSpent != null ? `${minutesSpent} min` : "—"}
-            tone="muted"
-          />
-          <StatTile icon={ListChecks} label="Completion" value="Completed" tone="success" />
-          <StatTile
-            icon={Gauge}
-            label="Raw Score"
-            value={`${attempt.rawScore ?? 0}/${maxScore}`}
-            tone="muted"
-          />
-          <StatTile
-            icon={CalendarDays}
-            label="Submitted"
-            value={
-              attempt.completedAt
-                ? attempt.completedAt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
-                : "—"
-            }
-            tone="muted"
-          />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="space-y-3">
+            <h2 className="flex items-center gap-2 text-sm font-medium tracking-wide uppercase">
+              <span className="bg-destructive/10 text-destructive flex size-5 items-center justify-center rounded-full text-xs">
+                {wrongQuestions.length}
+              </span>
+              Wrong Answers
+            </h2>
+            {wrongQuestions.length === 0 ? (
+              <p className="text-muted-foreground text-sm">Every question was answered correctly.</p>
+            ) : (
+              <div className="space-y-3">
+                {wrongQuestions.map(({ question, index, answer }) => (
+                  <WrongAnswerCard
+                    key={question.id}
+                    resultId={resultId}
+                    questionId={question.id}
+                    index={index}
+                    prompt={question.prompt}
+                    answered={isResponseAnswered(answer?.response)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <h2 className="flex items-center gap-2 text-sm font-medium tracking-wide uppercase">
+              <span className="bg-success/10 text-success flex size-5 items-center justify-center rounded-full text-xs">
+                {correctQuestions.length}
+              </span>
+              Correct Answers
+            </h2>
+            {correctQuestions.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No correct answers yet — review below and try again.</p>
+            ) : (
+              <div className="space-y-2">
+                {correctQuestions.map(({ question, index }) => (
+                  <Card key={question.id} className="py-3.5">
+                    <CardContent className="flex items-start gap-2.5">
+                      <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-muted-foreground text-xs font-medium">Question {index}</span>
+                        <p className="text-sm">{question.prompt}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap justify-center gap-3">
@@ -106,35 +129,10 @@ export default async function ExamResultsPage({
             <Link href={skillHref}>Back to {attempt.skill === "LISTENING" ? "Listening" : "Reading"}</Link>
           </Button>
           <Button asChild>
-            <Link href="/student/dashboard">Go to dashboard</Link>
+            <Link href="/student/dashboard">Go to home</Link>
           </Button>
         </div>
       </div>
     </div>
-  );
-}
-
-function StatTile({
-  icon: Icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
-  label: string;
-  value: string;
-  tone: "success" | "destructive" | "muted";
-}) {
-  const toneClass =
-    tone === "success" ? "text-success" : tone === "destructive" ? "text-destructive" : "text-muted-foreground";
-
-  return (
-    <Card className="py-5">
-      <CardContent className="space-y-1.5 text-center">
-        <Icon className={`mx-auto size-4.5 ${toneClass}`} aria-hidden />
-        <p className="text-muted-foreground text-xs font-medium">{label}</p>
-        <p className="font-display text-xl font-medium">{value}</p>
-      </CardContent>
-    </Card>
   );
 }

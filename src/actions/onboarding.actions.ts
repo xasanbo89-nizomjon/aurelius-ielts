@@ -5,7 +5,7 @@ import type { Role } from "@prisma/client";
 import { getFirebaseSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { determineRoleForEmail, getRootTeacherProfileId } from "@/lib/teacher-access";
-import { createTrialSubscription } from "@/lib/subscription";
+import { createNoTrialSubscription } from "@/lib/subscription";
 
 export type OnboardingResult = { success: true; role: Role } | { success: false; error: string };
 
@@ -58,7 +58,9 @@ export async function completeOnboardingAction(): Promise<OnboardingResult> {
     });
 
     if (created.studentProfile) {
-      await createTrialSubscription(tx, created.studentProfile.id);
+      // Phase 20 — no free trial for new sign-ups; existing students keep
+      // theirs untouched. See createNoTrialSubscription.
+      await createNoTrialSubscription(tx, created.studentProfile.id);
     }
 
     return created;

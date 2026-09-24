@@ -4,6 +4,8 @@ export const createTestSchema = z.object({
   title: z.string().trim().min(3, "Title must be at least 3 characters").max(160),
   description: z.string().trim().max(2000).optional(),
   type: z.enum(["READING", "LISTENING"]),
+  /** Phase 20 — Tests Hub categorization + the platform's one free-without-subscription tier. */
+  category: z.enum(["CAMBRIDGE", "GENERAL"]).optional(),
   // Not z.coerce — the form supplies a real number via registered
   // `valueAsNumber`, and coerce's `unknown` input type breaks zodResolver's
   // inference for react-hook-form.
@@ -15,6 +17,7 @@ export const updateTestSchema = z.object({
   title: z.string().trim().min(3, "Title must be at least 3 characters").max(160).optional(),
   description: z.string().trim().max(2000).optional(),
   durationMinutes: z.coerce.number().int().positive().max(300).optional().nullable(),
+  category: z.enum(["CAMBRIDGE", "GENERAL"]).optional(),
 });
 export type UpdateTestInput = z.infer<typeof updateTestSchema>;
 

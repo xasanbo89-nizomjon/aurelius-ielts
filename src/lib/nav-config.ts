@@ -6,26 +6,28 @@ export type NavItem = {
   icon: NavIconName;
 };
 
-// Phase 19 — Student Experience Redesign: the sidebar/mobile nav only
-// carries the primary learning-hub destinations now. Listening/Reading/Full
-// Mock Test live inside the Tests hub (/student/tests) instead of as
-// separate entries, and Vocabulary/Study Coach/Analytics/Test
-// History/Subscription moved to STUDENT_SECONDARY_NAV_ITEMS (surfaced from
-// the profile menu) — none of those routes or their data were removed.
+// Phase 20 — Final UX Restructure: the sidebar carries only Home, Profile
+// and Settings. Tests/Articles/Writing/Speaking are reached exclusively
+// through the 4 home-hub cards now, not the sidebar. None of those routes
+// or their data were removed — only how they're navigated to.
 export const STUDENT_NAV_ITEMS: NavItem[] = [
   { label: "Home", href: "/student/dashboard", icon: "LayoutDashboard" },
-  { label: "Tests", href: "/student/tests", icon: "ClipboardCheck" },
-  { label: "Articles", href: "/student/articles", icon: "Newspaper" },
-  { label: "Writing", href: "/student/writing", icon: "PenLine" },
-  { label: "Speaking", href: "/student/speaking", icon: "Mic" },
+  { label: "Profile", href: "/student/profile", icon: "UserCircle" },
+  { label: "Settings", href: "/student/settings", icon: "Settings" },
 ];
 
-/** Secondary student destinations, surfaced from the profile menu instead of the sidebar. */
+/**
+ * Secondary student destinations, surfaced from the profile menu instead of
+ * the sidebar. Vocabulary was removed from here in Phase 20 — it now works
+ * inside Articles only (see the Words panel on the article reader); the
+ * standalone /student/vocabulary pages still exist and still work, they're
+ * just no longer linked from primary navigation.
+ */
 export const STUDENT_SECONDARY_NAV_ITEMS: NavItem[] = [
-  { label: "Vocabulary", href: "/student/vocabulary", icon: "BookMarked" },
   { label: "Study Coach", href: "/student/study-coach", icon: "Target" },
-  { label: "Analytics", href: "/student/analytics", icon: "LineChart" },
+  { label: "Band Score Center", href: "/student/analytics", icon: "LineChart" },
   { label: "Test History", href: "/student/test-history", icon: "History" },
+  { label: "Bookmarks", href: "/student/bookmarks", icon: "Bookmark" },
   { label: "Subscription", href: "/student/subscription", icon: "Gem" },
 ];
 
@@ -34,11 +36,17 @@ export const TEACHER_NAV_ITEMS: NavItem[] = [
   { label: "Students", href: "/teacher/students", icon: "Users" },
   { label: "Tests", href: "/teacher/tests", icon: "FileText" },
   { label: "Articles", href: "/teacher/articles", icon: "Newspaper" },
+  { label: "Speaking", href: "/teacher/speaking", icon: "Mic" },
   { label: "Assignments", href: "/teacher/assignments", icon: "ListChecks" },
   { label: "Writing", href: "/teacher/writing", icon: "NotebookPen" },
   { label: "Writing Reviews", href: "/teacher/writing-reviews", icon: "PenLine" },
   { label: "Analytics", href: "/teacher/analytics", icon: "BarChart3" },
-  { label: "Band Conversion", href: "/teacher/band-conversion", icon: "Scale" },
+  // Renamed from "Band Conversion" — it kept getting read as a duplicate of
+  // "Band Conversation" right below it. They're unrelated: this is the
+  // raw-score-to-band scale editor that live exam scoring actually reads
+  // from (src/lib/exam/attempts.ts); Band Conversation is the analytics
+  // dashboard. Neither is deletable/duplicate — only the confusing label was.
+  { label: "Score Scale", href: "/teacher/band-conversion", icon: "Scale" },
   { label: "Band Conversation", href: "/teacher/band-conversation", icon: "LineChart" },
   { label: "Updates", href: "/teacher/updates", icon: "Megaphone" },
   { label: "Promo Codes", href: "/teacher/promo-codes", icon: "Ticket" },

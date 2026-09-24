@@ -76,3 +76,59 @@ export async function getStreakSummary(studentId: string): Promise<StreakSummary
     lastActiveDate: streak?.lastActiveDate ?? null,
   };
 }
+
+function mondayOf(date: Date): Date {
+  const d = startOfDay(date);
+  const isoDay = (d.getDay() + 6) % 7; // Mon=0..Sun=6
+  return addDays(d, -isoDay);
+}
+
+function firstOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+/** Walks consecutive buckets backward from `anchor`, counting how many in a row have real activity — stops at the first gap. */
+function countConsecutiveBuckets(activeBucketKeys: Set<string>, anchor: Date, step: (d: Date, n: number) => Date, keyOf: (d: Date) => string): number {
+  let count = 0;
+  let cursor = anchor;
+  while (activeBucketKeys.has(keyOf(cursor))) {
+    count += 1;
+    cursor = step(cursor, -1);
+  }
+  return count;
+}
+
+export type StreakBreakdown = StreakSummary & { weeklyStreak: number; monthlyStreak: number };
+
+/**
+ * Phase 24 — real weekly/monthly streaks, computed from actual StudyActivity
+ * days (not estimated). A week/month "counts" if it has at least one real
+ * active day; the streak walks backward from the most recent active
+ * week/month so an in-progress current week/month doesn't break it before
+ * it's even over.
+ */
+export async function getStreakBreakdown(studentId: string): Promise<StreakBreakdown> {
+  const [summary, activities] = await Promise.all([
+    getStreakSummary(studentId),
+    prisma.studyActivity.findMany({ where: { studentId }, select: { activityDate: true }, distinct: ["activityDate"] }),
+  ]);
+
+  if (activities.length === 0) {
+    return { ...summary, weeklyStreak: 0, monthlyStreak: 0 };
+  }
+
+  const weekKeys = new Set(activities.map((a) => mondayOf(a.activityDate).toISOString()));
+  const monthKeys = new Set(activities.map((a) => firstOfMonth(a.activityDate).toISOString()));
+
+  const mostRecentActivity = activities.reduce((latest, a) => (a.activityDate > latest ? a.activityDate : latest), activities[0].activityDate);
+
+  const weeklyStreak = countConsecutiveBuckets(weekKeys, mondayOf(mostRecentActivity), (d, n) => addDays(d, n * 7), (d) => d.toISOString());
+  const monthlyStreak = countConsecutiveBuckets(
+    monthKeys,
+    firstOfMonth(mostRecentActivity),
+    (d, n) => new Date(d.getFullYear(), d.getMonth() + n, 1),
+    (d) => d.toISOString()
+  );
+
+  return { ...summary, weeklyStreak, monthlyStreak };
+}

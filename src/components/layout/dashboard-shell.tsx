@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
 import type { NavItem } from "@/lib/nav-config";
-import type { WhatsNewItem } from "@/lib/whats-new";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
@@ -15,7 +14,6 @@ export function DashboardShell({
   role,
   user,
   streakCount,
-  whatsNew,
   isPremium,
   secondaryNavItems,
   children,
@@ -25,7 +23,6 @@ export function DashboardShell({
   user: { name?: string | null; email?: string | null; image?: string | null };
   streakCount: number;
   /** Student header only — omitted for teachers, whose header is unchanged. */
-  whatsNew?: WhatsNewItem[];
   isPremium?: boolean;
   secondaryNavItems?: NavItem[];
   children: ReactNode;
@@ -57,15 +54,13 @@ export function DashboardShell({
           {isStudent ? (
             <>
               <DailyStreakBadge streakCount={streakCount} bare />
-              <NotificationsBell items={whatsNew ?? []} />
+              <NotificationsBell />
               <PremiumBadge isPremium={isPremium ?? false} />
               <UserMenu name={user.name} email={user.email} image={user.image} role={role} secondaryItems={secondaryNavItems} />
             </>
           ) : (
-            <>
-              <DailyStreakBadge streakCount={streakCount} />
-              <UserMenu name={user.name} email={user.email} image={user.image} role={role} />
-            </>
+            // Phase 20 — teacher header decluttered: no streak visual, just the account menu.
+            <UserMenu name={user.name} email={user.email} image={user.image} role={role} />
           )}
         </header>
 

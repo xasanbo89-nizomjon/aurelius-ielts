@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireStudentProfile, requireTeacherProfile } from "@/lib/session";
+import { hasActiveAccess } from "@/lib/subscription";
 import {
   submitWritingSchema,
   teacherFeedbackSchema,
@@ -33,6 +34,9 @@ export async function submitWritingAction(
 ): Promise<(ActionResult & { submissionId?: string; analysisWarning?: string })> {
   try {
     const { profile } = await requireStudentProfile();
+    if (!(await hasActiveAccess(profile.id))) {
+      return { success: false, error: "Writing is a Premium feature. Upgrade to submit essays." };
+    }
     const parsed = submitWritingSchema.parse(input);
     const submission = await writing.createSubmission(profile.id, parsed);
 
@@ -118,6 +122,9 @@ export async function saveDraftAction(input: unknown): Promise<SaveDraftResult> 
 export async function submitEssayAction(input: unknown): Promise<SubmitEssayResult> {
   try {
     const { profile } = await requireStudentProfile();
+    if (!(await hasActiveAccess(profile.id))) {
+      return { success: false, error: "Writing is a Premium feature. Upgrade to submit essays." };
+    }
     const parsed = submitEssaySchema.parse(input);
     const result = await writing.submitEssay(profile.id, parsed);
     revalidatePath("/student/writing");

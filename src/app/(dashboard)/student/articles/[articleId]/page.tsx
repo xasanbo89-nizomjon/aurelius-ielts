@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Clock, Type } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
+import { hasActiveAccess } from "@/lib/subscription";
 import { getArticleForStudent, recordArticleView } from "@/lib/articles";
 import { getReadingProgress } from "@/lib/reading-progress";
 import { getVocabularyStatusesForWords } from "@/lib/vocabulary";
@@ -11,6 +12,8 @@ import { ARTICLE_DIFFICULTY_LABELS } from "@/lib/labels";
 import { Badge } from "@/components/ui/badge";
 import { ArticleReader } from "@/components/student/article-reader";
 import { ArticleAudioPlayer } from "@/components/student/article-audio-player-lazy";
+import { WordsPanelButton } from "@/components/student/words-panel-button";
+import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
 
 export const metadata: Metadata = { title: "Article" };
 
@@ -21,6 +24,10 @@ export default async function StudentArticleReaderPage({
 }) {
   const { articleId } = await params;
   const { profile } = await requireStudentProfile();
+
+  if (!(await hasActiveAccess(profile.id))) {
+    return <PremiumLockScreen feature="Leveled Articles" />;
+  }
 
   const article = await getArticleForStudent(articleId, profile.id, profile.teacherId);
   if (!article) notFound();
@@ -66,6 +73,8 @@ export default async function StudentArticleReaderPage({
           progress ? { lastPosition: progress.lastPosition, percentComplete: progress.percentComplete } : null
         }
       />
+
+      <WordsPanelButton />
     </>
   );
 }

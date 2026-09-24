@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 export function CreateTestForm() {
   const router = useRouter();
@@ -27,10 +28,11 @@ export function CreateTestForm() {
     formState: { errors },
   } = useForm<CreateTestInput>({
     resolver: zodResolver(createTestSchema),
-    defaultValues: { type: "READING" },
+    defaultValues: { type: "READING", category: "GENERAL" },
   });
 
   const type = watch("type");
+  const category = watch("category");
 
   async function onSubmit(values: CreateTestInput) {
     setSubmitting(true);
@@ -82,6 +84,18 @@ export function CreateTestForm() {
             {...register("durationMinutes", { setValueAs: (v) => (v === "" ? undefined : Number(v)) })}
           />
         </div>
+      </div>
+
+      <div className="border-border/70 flex items-center justify-between rounded-xl border px-4 py-3.5">
+        <div className="space-y-0.5">
+          <Label htmlFor="category">Cambridge Test</Label>
+          <p className="text-muted-foreground text-xs">Free for every student, no subscription required.</p>
+        </div>
+        <Switch
+          id="category"
+          checked={category === "CAMBRIDGE"}
+          onCheckedChange={(checked) => setValue("category", checked ? "CAMBRIDGE" : "GENERAL")}
+        />
       </div>
 
       <Button type="submit" disabled={submitting}>

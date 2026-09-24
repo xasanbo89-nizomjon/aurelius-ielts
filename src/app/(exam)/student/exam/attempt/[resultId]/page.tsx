@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireStudentProfile } from "@/lib/session";
 import { getAttemptDetail } from "@/lib/exam/attempts";
 import { resolvePassageAudioSrc } from "@/lib/uploads/audio-constraints";
+import { getBookmarkedQuestionIds } from "@/lib/bookmarks";
 import { ExamRunner } from "@/components/exam/exam-runner";
 
 export const metadata: Metadata = { title: "Exam in progress" };
@@ -29,6 +30,11 @@ export default async function ExamAttemptPage({
     ? (attempt.flaggedQuestionIds as string[])
     : [];
 
+  const initialBookmarks = await getBookmarkedQuestionIds(
+    profile.id,
+    attempt.mockTest.questions.map((q) => q.id)
+  );
+
   return (
     <ExamRunner
       resultId={attempt.id}
@@ -53,6 +59,7 @@ export default async function ExamAttemptPage({
       }))}
       initialAnswers={initialAnswers}
       initialFlags={initialFlags}
+      initialBookmarks={initialBookmarks}
       initialHighlights={attempt.highlights.map((highlight) => ({
         id: highlight.id,
         passageId: highlight.passageId,

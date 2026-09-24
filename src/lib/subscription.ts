@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import type { Prisma, Subscription, SubscriptionStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -36,6 +37,24 @@ export async function createTrialSubscription(client: PrismaOrTx, studentId: str
   });
 }
 
+/**
+ * Phase 20 — "platform starts as paid" for new sign-ups, softened: existing
+ * students keep whatever trial/subscription they already have (untouched,
+ * runs to its natural expiry), but every account created from this change
+ * onward gets zero free days — a 0-day, already-EXPIRED row, so they land on
+ * the paywall/redeem-code screen immediately. Called at sign-up instead of
+ * createTrialSubscription; getSubscriptionSummary's self-heal path (backdated
+ * trial for a student with NO row at all) is intentionally left untouched —
+ * it only ever fires for genuine legacy data gaps, since every new sign-up
+ * now gets a row created here in the same transaction.
+ */
+export async function createNoTrialSubscription(client: PrismaOrTx, studentId: string): Promise<Subscription> {
+  const now = new Date();
+  return client.subscription.create({
+    data: { studentId, status: "EXPIRED", startDate: now, endDate: now },
+  });
+}
+
 export type SubscriptionSummary = {
   /** Always a real row — getSubscriptionSummary self-heals a missing one before returning. */
   subscription: Subscription;
@@ -61,7 +80,15 @@ export type SubscriptionSummary = {
  * days ago still correctly gets 85 days left; a student who joined 200 days
  * ago correctly comes back EXPIRED, not a fresh trial.
  */
-export async function getSubscriptionSummary(studentId: string): Promise<SubscriptionSummary> {
+/**
+ * Phase 24 perf pass — wrapped in React's cache() since this is now called
+ * from both the student layout (Premium badge) and, within the same
+ * request, from whichever premium-gated page is rendering (hasActiveAccess)
+ * — without this, that's two real DB round-trips (plus the self-heal writes
+ * above) for what should be one request's answer to "does this student have
+ * access right now".
+ */
+export const getSubscriptionSummary = cache(async function getSubscriptionSummary(studentId: string): Promise<SubscriptionSummary> {
   const latest = await prisma.subscription.findFirst({
     where: { studentId },
     orderBy: { createdAt: "desc" },
@@ -105,7 +132,7 @@ export async function getSubscriptionSummary(studentId: string): Promise<Subscri
     hasAccess,
     isPremium: subscription.status === "ACTIVE",
   };
-}
+});
 
 /**
  * Cheap access gate for exam start/submit — always re-checked server-side,
@@ -114,4 +141,25 @@ export async function getSubscriptionSummary(studentId: string): Promise<Subscri
 export async function hasActiveAccess(studentId: string): Promise<boolean> {
   const summary = await getSubscriptionSummary(studentId);
   return summary.hasAccess;
+}
+
+/**
+ * Phase 20 — "ONLY Cambridge tests remain free": a CAMBRIDGE-category test
+ * bypasses the subscription gate entirely, for any student regardless of
+ * their own access state. Every other test still requires real access.
+ */
+export async function hasActiveAccessForTest(studentId: string, mockTestId: string): Promise<boolean> {
+  const test = await prisma.mockTest.findUnique({ where: { id: mockTestId }, select: { category: true } });
+  if (test?.category === "CAMBRIDGE") return true;
+  return hasActiveAccess(studentId);
+}
+
+/** Same Cambridge bypass as hasActiveAccessForTest, looked up via an in-progress attempt's result instead of the test id directly. */
+export async function hasActiveAccessForResult(studentId: string, resultId: string): Promise<boolean> {
+  const result = await prisma.result.findUnique({
+    where: { id: resultId },
+    select: { mockTest: { select: { category: true } } },
+  });
+  if (result?.mockTest.category === "CAMBRIDGE") return true;
+  return hasActiveAccess(studentId);
 }

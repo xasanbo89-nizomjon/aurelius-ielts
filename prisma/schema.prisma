@@ -34,6 +34,21 @@ enum TestType {
   FULL_MOCK
 }
 
+/// Phase 20 — Tests Hub categorization for Reading/Listening tests only.
+/// CAMBRIDGE tests are also the platform's one free-without-subscription
+/// tier (see hasActiveAccess). FULL_MOCK tests aren't categorized by this —
+/// they're their own "Mock Tests" hub tile regardless.
+enum MockTestCategory {
+  CAMBRIDGE
+  GENERAL
+}
+
+enum SpeakingTaskStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 enum QuestionType {
   MULTIPLE_CHOICE
   TRUE_FALSE_NOT_GIVEN
@@ -90,6 +105,7 @@ enum SubscriptionStatus {
 
 enum BillingInterval {
   MONTHLY
+  QUARTERLY
   YEARLY
 }
 
@@ -199,22 +215,23 @@ model StudentProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  results               Result[]
-  writingSubmissions    WritingSubmission[]
-  speakingSubmissions   SpeakingSubmission[]
-  assignments           Assignment[]
-  subscriptions         Subscription[]
-  payments              Payment[]
-  aiExplanationRequests AiExplanationRequest[]
-  studyPlans            StudyPlan[]
-  writingAiActionLogs   WritingAiActionLog[]
-  promoCodeRedemptions  PromoCodeRedemption[]
-  articleViews          ArticleView[]
-  readingProgress       ReadingProgress[]
-  vocabulary            StudentVocabulary[]
+  results                Result[]
+  writingSubmissions     WritingSubmission[]
+  speakingSubmissions    SpeakingSubmission[]
+  assignments            Assignment[]
+  subscriptions          Subscription[]
+  payments               Payment[]
+  aiExplanationRequests  AiExplanationRequest[]
+  studyPlans             StudyPlan[]
+  writingAiActionLogs    WritingAiActionLog[]
+  promoCodeRedemptions   PromoCodeRedemption[]
+  articleViews           ArticleView[]
+  readingProgress        ReadingProgress[]
+  vocabulary             StudentVocabulary[]
   vocabularyLookups      VocabularyLookup[]
   vocabularyAiActionLogs VocabularyAiActionLog[]
-  trialAuditLogs        TrialAuditLog[]
+  notificationReads      NotificationRead[]
+  trialAuditLogs         TrialAuditLog[]
   writingFeedback        WritingFeedback?
   writingPractice        WritingPractice?
   studyActivities        StudyActivity[]
@@ -223,6 +240,9 @@ model StudentProfile {
   studyStreak            StudyStreak?
   achievementUnlocks     AchievementUnlock[]
   writingTaskAssignments WritingTaskAssignment[]
+  aiInsightCache         AIInsightCache[]
+  questionBookmarks      QuestionBookmark[]
+  writingTaskBookmarks   WritingTaskBookmark[]
 
   @@map("student_profiles")
 }
@@ -261,6 +281,7 @@ model TeacherProfile {
   articles             Article[]
   trialAuditLogs       TrialAuditLog[]
   writingTasks         WritingTask[]
+  speakingTasks        SpeakingTask[]
 
   @@map("teacher_profiles")
 }
@@ -270,15 +291,20 @@ model TeacherProfile {
 // ---------------------------------------------------------------------------
 
 model MockTest {
-  id              String   @id @default(cuid())
+  id              String           @id @default(cuid())
   title           String
-  description     String?  @db.Text
+  description     String?          @db.Text
   type            TestType
-  isPublished     Boolean  @default(false)
+  /// Phase 20 — Tests Hub grouping for READING/LISTENING tests, and the
+  /// platform's one free-without-subscription tier (see hasActiveAccess).
+  /// Meaningless for FULL_MOCK, which always defaults to GENERAL and is
+  /// never surfaced as "Cambridge".
+  category        MockTestCategory @default(GENERAL)
+  isPublished     Boolean          @default(false)
   /// Retired tests stay out of the student-facing catalog but keep their
   /// historical results intact. Independent of isPublished so a test can
   /// never be simultaneously "live" and "archived".
-  isArchived      Boolean  @default(false)
+  isArchived      Boolean          @default(false)
   /// Recommended time limit shown before starting and used to drive the
   /// in-exam countdown. Null means untimed.
   durationMinutes Int?
@@ -350,8 +376,29 @@ model Question {
   answers               Answer[]
   aiExplanations        AiExplanation[]
   aiExplanationRequests AiExplanationRequest[]
+  bookmarks             QuestionBookmark[]
 
   @@map("questions")
+}
+
+/// Phase 24 — "Bookmark difficult questions" (Reading/Listening). Separate
+/// from Answer.flaggedQuestionIds (per-attempt, cleared with that attempt) —
+/// a bookmark is a durable, cross-test save the student can revisit from the
+/// Bookmarked Questions page long after the attempt is gone.
+model QuestionBookmark {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, questionId])
+  @@index([studentId])
+  @@map("question_bookmarks")
 }
 
 // ---------------------------------------------------------------------------
@@ -494,7 +541,7 @@ model WritingAnalysis {
   submissionId String            @unique
   submission   WritingSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
-  estimatedBand Float
+  estimatedBand    Float
   /// The 4 official IELTS Writing criteria, scored individually (Phase 13)
   /// — nullable so pre-Phase-13 analyses (which only ever asked the model
   /// for one overall band) don't need fabricated backfill values.
@@ -513,9 +560,9 @@ model WritingAnalysis {
   /// string[], ranked by impact.
   keyImprovements   Json
   /// string[] (Phase 13) — defaults to an empty array for pre-Phase-13 rows, never fabricated.
-  strengths  Json @default("[]")
+  strengths         Json   @default("[]")
   /// string[] (Phase 13)
-  weaknesses Json @default("[]")
+  weaknesses        Json   @default("[]")
 
   /// The OpenAI model that produced this analysis, kept for audit/debug.
   model String
@@ -599,23 +646,23 @@ model WritingAiActionLog {
 model WritingTask {
   id String @id @default(cuid())
 
-  title      String
-  taskNumber WritingTaskNumber
-  category   WritingTaskCategory
-  prompt     String              @db.Text
+  title             String
+  taskNumber        WritingTaskNumber
+  category          WritingTaskCategory
+  prompt            String              @db.Text
   /// For Task 1 visual tasks (Graph/Table/Process/Map) — a text description
   /// of the chart/diagram/map to describe, since there's no image-upload
   /// pipeline in this phase. Null for Task 2.
-  visualDescription String? @db.Text
+  visualDescription String?             @db.Text
   /// Phase 14 — supersedes the old `isPublished` boolean with a real
   /// 3-state lifecycle (Create -> Publish -> Archive), matching the Root
   /// Teacher Writing Tasks workflow. Only PUBLISHED tasks are ever visible
   /// to students, exactly like isPublished: true was before.
-  status WritingTaskStatus @default(DRAFT)
+  status            WritingTaskStatus   @default(DRAFT)
   /// Optional guidance band this task targets, e.g. 6.5 — shown to students, never used to alter AI scoring.
-  targetBand Float?
+  targetBand        Float?
   /// The assignment deadline. Purely informational (drives "overdue" styling on the student task list) — never blocks a late submission.
-  dueDate    DateTime?
+  dueDate           DateTime?
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -625,9 +672,30 @@ model WritingTask {
 
   submissions WritingSubmission[]
   assignments WritingTaskAssignment[]
+  bookmarks   WritingTaskBookmark[]
 
   @@index([createdById, status])
   @@map("writing_tasks")
+}
+
+/// Phase 24 — Bookmarked Questions page, "Writing" filter tab. Writing has
+/// no discrete right/wrong questions, so a bookmark here saves a task prompt
+/// to revisit/practice later, not a "difficult question" in the Reading/
+/// Listening sense.
+model WritingTaskBookmark {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  taskId String
+  task   WritingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, taskId])
+  @@index([studentId])
+  @@map("writing_task_bookmarks")
 }
 
 /// Architecture Fix — the real enforcement of "Teacher chooses assigned
@@ -666,7 +734,7 @@ model WritingPractice {
   weaknessArea String
   instructions String @db.Text
   /// PracticeItem[] — { sentence: string; answer: string } — see src/lib/ai/prompts/writing-practice.ts
-  items Json
+  items        Json
 
   /// How many analyzed submissions this was computed from — same staleness-detection pattern as WritingFeedback.
   basedOnSubmissionCount Int
@@ -693,8 +761,8 @@ model WritingFeedback {
   studentId String         @unique
   student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  weakestArea    String
-  recommendation String @db.Text
+  weakestArea            String
+  recommendation         String @db.Text
   /// How many analyzed submissions this was computed from — lets the next
   /// read detect staleness and regenerate only once real new data exists.
   basedOnSubmissionCount Int
@@ -708,27 +776,104 @@ model WritingFeedback {
   @@map("writing_feedback")
 }
 
+/// Phase 20 — teacher-authored Speaking task bank, entered by students via a
+/// short unique code (no per-student assignment table, unlike WritingTask —
+/// any student with the code can attempt it, matching "student enters using
+/// speaking code").
+model SpeakingTask {
+  id    String @id @default(cuid())
+  title String
+  /// Short, human-typeable, unique entry code — e.g. "SPK-7F2Q". Students
+  /// use this (not a link) to find the task.
+  code  String @unique
+
+  part   Int
+  prompt String @db.Text
+
+  status SpeakingTaskStatus @default(DRAFT)
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submissions SpeakingSubmission[]
+
+  @@index([createdById, status])
+  @@map("speaking_tasks")
+}
+
 model SpeakingSubmission {
   id        String         @id @default(cuid())
   studentId String
   student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
+  taskId String
+  task   SpeakingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  /// Denormalized from the task at submit time, so a submission's own record
+  /// stays meaningful even if the task is edited or archived later.
   part     Int
   prompt   String @db.Text
   audioUrl String
 
   status SubmissionStatus @default(PENDING)
 
-  bandScore    Float?
-  feedback     String?         @db.Text
-  reviewedById String?
-  reviewedBy   TeacherProfile? @relation("SpeakingReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt   DateTime?
+  /// Real band score + feedback, but never returned to the student-facing
+  /// query path — "Student does NOT see final speaking score" is enforced in
+  /// src/lib/speaking.ts by which fields the student-facing selects include,
+  /// not by a flag here.
+  bandScore         Float?
+  /// Phase 23 — the 4 official IELTS Speaking criteria, scored individually
+  /// (mirrors WritingAnalysis's grammarBand/vocabularyBand/coherenceBand/
+  /// taskResponseBand pattern). Nullable: only set once a teacher actually
+  /// reviews with per-criterion scores, never backfilled/guessed — this is
+  /// what makes a real "Speaking Fluency weakness" pattern possible instead
+  /// of inventing one from freeform feedback text.
+  fluencyBand       Float?
+  lexicalBand       Float?
+  grammarBand       Float?
+  pronunciationBand Float?
+  feedback          String?         @db.Text
+  reviewedById      String?
+  reviewedBy        TeacherProfile? @relation("SpeakingReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt        DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([taskId])
+  @@index([studentId])
   @@map("speaking_submissions")
+}
+
+enum AIInsightKind {
+  MISTAKE_ANALYSIS
+  IMPROVEMENT_PLAN
+  TEACHER_REPORT
+}
+
+/**
+ * Phase 23 — "Store analysis efficiently. Generate on demand." One row per
+ * (student, kind): a regenerate overwrites it (upsert), rather than piling
+ * up history — this is a cache of the latest AI read on real performance
+ * data, not an audit log. `content` shape depends on `kind`; each reader
+ * knows its own shape (see src/lib/ai/insight-cache.ts).
+ */
+model AIInsightCache {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  kind    AIInsightKind
+  content Json
+
+  generatedAt DateTime @default(now())
+
+  @@unique([studentId, kind])
+  @@map("ai_insight_cache")
 }
 
 // ---------------------------------------------------------------------------
@@ -917,6 +1062,31 @@ model Update {
   updatedAt DateTime @updatedAt
 
   @@map("updates")
+}
+
+/// Phase 20 — per-student read state for teacher-created Updates ("Teacher
+/// creates notifications... Student can mark as read"). A row's presence
+/// means read; absence means unread — no boolean to keep in sync.
+/**
+ * Phase 24 — Notification Center V2. Generalized from a strict Update FK to
+ * a stable string key so ONE read-state mechanism can span every real
+ * notification source (teacher updates, new articles, writing/speaking
+ * reviews, system notices) instead of one per source table — see
+ * src/lib/notifications.ts for the key scheme (matches WhatsNewItem's).
+ */
+model NotificationRead {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  itemKey String
+
+  readAt DateTime @default(now())
+
+  @@unique([studentId, itemKey])
+  @@index([studentId])
+  @@map("notification_reads")
 }
 
 // ---------------------------------------------------------------------------
@@ -1129,9 +1299,9 @@ model Article {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  views            ArticleView[]
-  readingProgress  ReadingProgress[]
-  vocabularyEvents StudentVocabulary[]
+  views             ArticleView[]
+  readingProgress   ReadingProgress[]
+  vocabularyEvents  StudentVocabulary[]
   vocabularyLookups VocabularyLookup[]
 
   @@index([createdById, status])
@@ -1367,10 +1537,10 @@ model StudyActivity {
   studentId String
   student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  type StudyActivityType
+  type            StudyActivityType
   /// Truncated to local midnight — the calendar day this row belongs to.
-  activityDate DateTime
-  durationSeconds Int @default(0)
+  activityDate    DateTime
+  durationSeconds Int               @default(0)
   /// The server timestamp of the last heartbeat — the anchor the NEXT
   /// heartbeat's real elapsed-time credit is computed from. Stays null for
   /// Reading/Listening rows (those are written once, from a real completed
@@ -1415,7 +1585,7 @@ model CoinTransaction {
   studentId String
   student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  type CoinTransactionType
+  type        CoinTransactionType
   /// Positive for every earn type; negative for REDEMPTION.
   amount      Int
   description String
@@ -1437,8 +1607,8 @@ model StudyStreak {
   studentId String         @unique
   student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  currentStreak Int @default(0)
-  longestStreak Int @default(0)
+  currentStreak  Int       @default(0)
+  longestStreak  Int       @default(0)
   /// The last calendar day (truncated) that counted toward the streak.
   lastActiveDate DateTime?
 

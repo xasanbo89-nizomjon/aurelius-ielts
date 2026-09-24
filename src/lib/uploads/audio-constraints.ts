@@ -52,6 +52,27 @@ export function validateAudioFile(file: { name: string; size: number; type?: str
   return { valid: true, extension, contentType: EXTENSION_CONTENT_TYPES[extension] };
 }
 
+export const MAX_RECORDED_AUDIO_SIZE_BYTES = 25 * 1024 * 1024; // 25MB — a browser mic recording, not an uploaded file
+export const MAX_RECORDED_AUDIO_SIZE_LABEL = "25MB";
+
+/**
+ * Validates a browser MediaRecorder Blob (Speaking responses) — deliberately
+ * NOT extension-based like validateAudioFile above, since MediaRecorder
+ * output has no filename and its container varies by browser (webm/ogg on
+ * Chrome/Firefox, mp4 on Safari). Trusts the recorder's own reported
+ * mimeType instead.
+ */
+export function validateRecordedAudio(file: { size: number; type?: string }): { valid: true } | { valid: false; error: string } {
+  if (file.size <= 0) return { valid: false, error: "The recording is empty." };
+  if (file.size > MAX_RECORDED_AUDIO_SIZE_BYTES) {
+    return { valid: false, error: `Recordings must be under ${MAX_RECORDED_AUDIO_SIZE_LABEL}.` };
+  }
+  if (file.type && !file.type.startsWith("audio/")) {
+    return { valid: false, error: "That doesn't look like a valid audio recording." };
+  }
+  return { valid: true };
+}
+
 /**
  * The one place that decides which audio field actually plays for a
  * passage. `audioPath` (an uploaded file) always wins when present; `audioUrl`

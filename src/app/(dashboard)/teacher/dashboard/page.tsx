@@ -1,47 +1,28 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  Users,
-  FileText,
-  PenLine,
-  Gem,
-  Newspaper,
-  BookMarked,
-  RotateCcw,
-  CalendarPlus,
-  History,
-  Clock,
-  Search,
-  Trophy,
-  Award,
-} from "lucide-react";
+import { Users, FileText, PenLine, Gem, BookMarked, Search, Trophy, Award, AlertTriangle } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getTeacherOverview } from "@/lib/dashboard-data";
-import { getTeacherArticlesOverview } from "@/lib/article-analytics";
-import { getTrialAnalytics } from "@/lib/trial-management";
-import { getTeacherVocabularyIntelligence, getVocabularyLeaderboard } from "@/lib/analytics/teacher-vocabulary-insights";
-import { formatRelativeTime } from "@/lib/format";
+import { getTeacherVocabularyIntelligence, getVocabularyLeaderboard, getMostSearchedWords } from "@/lib/analytics/teacher-vocabulary-insights";
+import { getAtRiskStudents } from "@/lib/analytics/at-risk-students";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/dashboard/empty-state";
-
-const TRIAL_ACTION_LABEL = { TRIAL_RESET_90: "Reset 90-day trial", TRIAL_EXTEND_30: "Extended +30 days" } as const;
+import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = { title: "Overview" };
 
 export default async function TeacherDashboardPage() {
   const { user, profile } = await requireTeacherProfile();
-  const isRoot = profile.isRootTeacher;
 
-  const [overview, articlesOverview, trialAnalytics, vocabularyIntelligence, vocabularyLeaderboard] = await Promise.all([
+  const [overview, vocabularyIntelligence, vocabularyLeaderboard, atRiskStudents, mostSearchedWords] = await Promise.all([
     getTeacherOverview(profile.id),
-    getTeacherArticlesOverview(profile.id),
-    isRoot ? getTrialAnalytics() : Promise.resolve(null),
     getTeacherVocabularyIntelligence(profile.id),
     getVocabularyLeaderboard(profile.id),
+    getAtRiskStudents(profile.id),
+    getMostSearchedWords(profile.id),
   ]);
 
   const firstName = user.name?.trim().split(/\s+/)[0];
@@ -53,7 +34,7 @@ export default async function TeacherDashboardPage() {
         description="A real-time snapshot of your students, tests and pending reviews."
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Students"
           value={String(overview.studentCount)}
@@ -80,26 +61,39 @@ export default async function TeacherDashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard
-          label="Published Articles"
-          value={String(articlesOverview.publishedCount)}
-          icon={Newspaper}
-          caption={articlesOverview.publishedCount === 0 ? "No articles published yet" : "Live for your students"}
-        />
-        <StatCard
-          label="Article Readers"
-          value={String(articlesOverview.totalReaders)}
-          icon={Users}
-          caption={`${articlesOverview.totalViews} total views`}
-        />
-        <StatCard
-          label="Vocabulary Activity"
-          value={String(articlesOverview.vocabularyActivity)}
-          icon={BookMarked}
-          caption="Words highlighted across your articles"
-        />
-      </div>
+      <section className="space-y-4">
+        <h2 className="font-display flex items-center gap-2 text-xl font-medium tracking-tight">
+          <AlertTriangle className="text-destructive size-5" aria-hidden="true" /> At Risk Students
+        </h2>
+        {atRiskStudents.length === 0 ? (
+          <EmptyState
+            icon={AlertTriangle}
+            title="No students at risk right now"
+            description="Students with dropping streaks, declining scores, or no recent activity will show up here."
+          />
+        ) : (
+          <div className="space-y-3">
+            {atRiskStudents.map((student) => (
+              <Card key={student.studentId} className="border-destructive/20">
+                <CardContent className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1.5">
+                    <Link href={`/teacher/students/${student.studentId}`} className="text-sm font-medium hover:underline">
+                      {student.name ?? student.email}
+                    </Link>
+                    <div className="flex flex-wrap gap-1.5">
+                      {student.reasons.map((reason) => (
+                        <Badge key={reason} variant="destructive">
+                          {reason}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="space-y-4">
         <h2 className="font-display text-xl font-medium tracking-tight">Vocabulary Intelligence</h2>
@@ -165,59 +159,35 @@ export default async function TeacherDashboardPage() {
         )}
       </section>
 
-      {isRoot && trialAnalytics && (
-        <section className="space-y-4">
-          <h2 className="font-display text-xl font-medium tracking-tight">Trial Management</h2>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Total Trial Resets" value={String(trialAnalytics.totalResets)} icon={RotateCcw} />
-            <StatCard label="Total Trial Extensions" value={String(trialAnalytics.totalExtensions)} icon={CalendarPlus} />
-            <StatCard
-              label="Last Trial Action"
-              value={trialAnalytics.lastActionAt ? formatRelativeTime(trialAnalytics.lastActionAt) : "—"}
-              icon={Clock}
-              valueClassName={trialAnalytics.lastActionAt ? "text-xl" : undefined}
-              caption={trialAnalytics.lastActionAt ? trialAnalytics.lastActionAt.toLocaleDateString() : "No actions yet"}
-            />
-            <StatCard
-              label="Recent Actions"
-              value={String(trialAnalytics.recentActions.length)}
-              icon={History}
-              caption="Shown below"
-            />
-          </div>
-
-          {trialAnalytics.recentActions.length === 0 ? (
-            <EmptyState
-              icon={History}
-              title="No trial actions yet"
-              description="Resets and extensions you perform from the Students page will show up here."
-            />
-          ) : (
-            <Card className="gap-0 py-2">
-              <CardContent className="divide-border/70 divide-y px-0">
-                {trialAnalytics.recentActions.map((action) => (
-                  <div key={action.id} className="flex items-center justify-between gap-4 px-6 py-3.5">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{action.studentName ?? action.studentEmail}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {action.newExpiryDate.toLocaleDateString()}
-                        {action.previousExpiryDate && ` (was ${action.previousExpiryDate.toLocaleDateString()})`}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <Badge variant={action.action === "TRIAL_RESET_90" ? "accent" : "success"}>
-                        {TRIAL_ACTION_LABEL[action.action]}
-                      </Badge>
-                      <span className="text-muted-foreground text-xs">{formatRelativeTime(action.at)}</span>
-                    </div>
-                  </div>
+      <section className="space-y-4">
+        <h2 className="font-display text-xl font-medium tracking-tight">Most Searched Words</h2>
+        {mostSearchedWords.length === 0 ? (
+          <EmptyState
+            icon={Search}
+            title="No word searches yet"
+            description="Once students click words in Articles, the most-searched words across your class will show up here."
+          />
+        ) : (
+          <Card>
+            <CardContent>
+              <ol className="space-y-2.5">
+                {mostSearchedWords.map((row, index) => (
+                  <li key={row.word} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate">
+                      <span className="text-muted-foreground mr-2 tabular-nums">{index + 1}.</span>
+                      <span className="font-medium">{row.word}</span>
+                      {row.articleTitle && <span className="text-muted-foreground"> — {row.articleTitle}</span>}
+                    </span>
+                    <span className="text-muted-foreground shrink-0 tabular-nums">
+                      {row.searchCount} search{row.searchCount === 1 ? "" : "es"} · {row.studentCount} student{row.studentCount === 1 ? "" : "s"}
+                    </span>
+                  </li>
                 ))}
-              </CardContent>
-            </Card>
-          )}
-        </section>
-      )}
+              </ol>
+            </CardContent>
+          </Card>
+        )}
+      </section>
     </>
   );
 }

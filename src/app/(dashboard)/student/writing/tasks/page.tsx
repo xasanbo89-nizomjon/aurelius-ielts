@@ -4,6 +4,7 @@ import { CalendarClock, CheckCircle2, ClipboardList, RotateCcw, Target } from "l
 
 import { requireStudentProfile } from "@/lib/session";
 import { listWritingTasksForStudentWithProgress, type StudentTaskWithProgress } from "@/lib/writing-tasks";
+import { listBookmarkedWritingTasks } from "@/lib/bookmarks";
 import { WRITING_TASK_CATEGORY_LABELS, WRITING_TASK_NUMBER_LABELS } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -11,6 +12,7 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { WritingTaskBookmarkButton } from "@/components/student/writing-task-bookmark-button";
 
 export const metadata: Metadata = { title: "Writing Assignments" };
 
@@ -38,7 +40,7 @@ function TaskMeta({ task }: { task: StudentTaskWithProgress }) {
   );
 }
 
-function ActiveTaskCard({ task }: { task: StudentTaskWithProgress }) {
+function ActiveTaskCard({ task, isBookmarked }: { task: StudentTaskWithProgress; isBookmarked: boolean }) {
   const isDraft = task.latest?.status === "DRAFT";
   const href = isDraft ? `/student/writing/new?draftId=${task.latest!.submissionId}` : `/student/writing/new?taskId=${task.id}`;
 
@@ -47,6 +49,7 @@ function ActiveTaskCard({ task }: { task: StudentTaskWithProgress }) {
       <CardContent className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
+            <WritingTaskBookmarkButton taskId={task.id} initialBookmarked={isBookmarked} />
             <p className="font-medium">{task.title}</p>
             <Badge variant="outline">{WRITING_TASK_NUMBER_LABELS[task.taskNumber]}</Badge>
             <Badge variant="outline">{WRITING_TASK_CATEGORY_LABELS[task.category]}</Badge>
@@ -116,7 +119,11 @@ function CompletedTaskCard({ task }: { task: StudentTaskWithProgress }) {
 
 export default async function WritingTasksPage() {
   const { profile } = await requireStudentProfile();
-  const tasks = await listWritingTasksForStudentWithProgress(profile.id);
+  const [tasks, bookmarks] = await Promise.all([
+    listWritingTasksForStudentWithProgress(profile.id),
+    listBookmarkedWritingTasks(profile.id),
+  ]);
+  const bookmarkedTaskIds = new Set(bookmarks.map((b) => b.taskId));
 
   const active = tasks.filter((t) => t.latest === null || t.latest.status === "DRAFT");
   const completed = tasks.filter((t) => t.attempts.some((a) => a.status === "SUBMITTED"));
@@ -148,7 +155,7 @@ export default async function WritingTasksPage() {
             ) : (
               <div className="space-y-3">
                 {active.map((task) => (
-                  <ActiveTaskCard key={task.id} task={task} />
+                  <ActiveTaskCard key={task.id} task={task} isBookmarked={bookmarkedTaskIds.has(task.id)} />
                 ))}
               </div>
             )}

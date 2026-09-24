@@ -28,6 +28,7 @@ export default async function ExamStartPage({
       title: true,
       description: true,
       type: true,
+      category: true,
       durationMinutes: true,
       _count: { select: { questions: true } },
     },
@@ -35,7 +36,7 @@ export default async function ExamStartPage({
 
   if (!test) notFound();
 
-  const canStart = await hasActiveAccess(profile.id);
+  const canStart = test.category === "CAMBRIDGE" || (await hasActiveAccess(profile.id));
   const boundStart = startAttemptAction.bind(null, test.id);
   const Icon = test.type === "LISTENING" ? Headphones : BookOpen;
 
@@ -48,9 +49,12 @@ export default async function ExamStartPage({
           </span>
 
           <div className="space-y-2">
-            <Badge variant="outline" className="capitalize">
-              {test.type.toLowerCase()} module
-            </Badge>
+            <div className="flex items-center justify-center gap-1.5">
+              <Badge variant="outline" className="capitalize">
+                {test.type.toLowerCase()} module
+              </Badge>
+              {test.category === "CAMBRIDGE" && <Badge variant="success">Free</Badge>}
+            </div>
             <h1 className="font-display text-2xl font-medium tracking-tight">{test.title}</h1>
             {test.description && <p className="text-muted-foreground text-sm">{test.description}</p>}
           </div>

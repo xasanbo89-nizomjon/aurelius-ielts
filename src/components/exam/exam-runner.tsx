@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { QuestionType } from "@prisma/client";
-import { ChevronLeft, ChevronRight, Flag, Home, List, Loader2, Maximize2, Minimize2, NotebookPen } from "lucide-react";
+import { Bookmark, ChevronLeft, ChevronRight, Flag, Home, List, Loader2, Maximize2, Minimize2, NotebookPen } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -15,6 +15,7 @@ import {
   submitAttemptAction,
   toggleFlagAction,
 } from "@/actions/exam.actions";
+import { toggleQuestionBookmarkAction } from "@/actions/bookmarks.actions";
 import { cn } from "@/lib/utils";
 import { isResponseAnswered } from "@/lib/exam/grading";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ export function ExamRunner({
   questions,
   initialAnswers,
   initialFlags,
+  initialBookmarks,
   initialHighlights,
   initialNotes,
 }: {
@@ -73,14 +75,40 @@ export function ExamRunner({
   questions: ExamQuestion[];
   initialAnswers: Record<string, unknown>;
   initialFlags: string[];
+  initialBookmarks: string[];
   initialHighlights: ExamHighlight[];
   initialNotes: ExamNoteRecord[];
 }) {
   const [answers, setAnswers] = useState<Record<string, unknown>>(initialAnswers);
   const [flags, setFlags] = useState<Set<string>>(() => new Set(initialFlags));
+  const [bookmarks, setBookmarks] = useState<Set<string>>(() => new Set(initialBookmarks));
   const [highlights, setHighlights] = useState<ExamHighlight[]>(initialHighlights);
   const [notes, setNotes] = useState<ExamNoteRecord[]>(initialNotes);
+  // Phase 24 — "student returns exactly where they left": which passage/part
+  // they were on is remembered per-attempt so a refresh doesn't drop them
+  // back to the start. Per-viewer convenience only (localStorage), restored
+  // in an effect (not the initializer) to avoid an SSR/hydration mismatch —
+  // answers/timer/flags/bookmarks already restore for real from the server
+  // regardless of whether this happens to be available.
   const [sectionIndex, setSectionIndex] = useState(0);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(`exam-section-${resultId}`);
+      if (saved) setSectionIndex(Number(saved) || 0);
+    } catch {
+      // Private browsing / storage disabled — just starts from section 0.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore, resultId is stable for this component's lifetime
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(`exam-section-${resultId}`, String(sectionIndex));
+    } catch {
+      // Private browsing / storage disabled — position just won't be remembered, no functional loss.
+    }
+  }, [resultId, sectionIndex]);
   const [navOpen, setNavOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
@@ -187,6 +215,16 @@ export function ExamRunner({
       return next;
     });
     void toggleFlagAction(resultId, questionId);
+  }
+
+  function handleToggleBookmark(questionId: string) {
+    setBookmarks((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) next.delete(questionId);
+      else next.add(questionId);
+      return next;
+    });
+    void toggleQuestionBookmarkAction(questionId);
   }
 
   /** Finds the first real focusable answer control inside a question's container — works generically across every question type (text inputs, selects, radios) without type-specific logic. */
@@ -296,6 +334,7 @@ export function ExamRunner({
         currentQuestions.map((question) => {
           const number = sortedQuestions.findIndex((q) => q.id === question.id) + 1;
           const flagged = flags.has(question.id);
+          const bookmarked = bookmarks.has(question.id);
           return (
             <div key={question.id} id={`question-${question.id}`} className="scroll-mt-24 space-y-3">
               <div className="flex items-start justify-between gap-3">
@@ -303,18 +342,32 @@ export function ExamRunner({
                   <span className="text-muted-foreground mr-1.5">{number}.</span>
                   {question.prompt}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => handleToggleFlag(question.id)}
-                  aria-pressed={flagged}
-                  aria-label={flagged ? `Remove flag from question ${number}` : `Flag question ${number} for review`}
-                  className={cn(
-                    "focus-visible:ring-ring/50 shrink-0 rounded-md p-1.5 outline-none focus-visible:ring-2",
-                    flagged ? "text-accent" : "text-muted-foreground hover:text-accent"
-                  )}
-                >
-                  <Flag className={cn("size-4", flagged && "fill-current")} />
-                </button>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleBookmark(question.id)}
+                    aria-pressed={bookmarked}
+                    aria-label={bookmarked ? `Remove bookmark from question ${number}` : `Bookmark question ${number} to revisit later`}
+                    className={cn(
+                      "focus-visible:ring-ring/50 rounded-md p-1.5 outline-none focus-visible:ring-2",
+                      bookmarked ? "text-accent" : "text-muted-foreground hover:text-accent"
+                    )}
+                  >
+                    <Bookmark className={cn("size-4", bookmarked && "fill-current")} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleFlag(question.id)}
+                    aria-pressed={flagged}
+                    aria-label={flagged ? `Remove flag from question ${number}` : `Flag question ${number} for review`}
+                    className={cn(
+                      "focus-visible:ring-ring/50 rounded-md p-1.5 outline-none focus-visible:ring-2",
+                      flagged ? "text-accent" : "text-muted-foreground hover:text-accent"
+                    )}
+                  >
+                    <Flag className={cn("size-4", flagged && "fill-current")} />
+                  </button>
+                </div>
               </div>
               <QuestionRenderer
                 questionId={question.id}

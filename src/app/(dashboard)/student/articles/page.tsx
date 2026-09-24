@@ -5,6 +5,7 @@ import { BookOpenCheck, Clock, Newspaper, Type } from "lucide-react";
 import type { ArticleDifficulty } from "@prisma/client";
 
 import { requireStudentProfile } from "@/lib/session";
+import { hasActiveAccess } from "@/lib/subscription";
 import { listPublishedArticlesForStudent } from "@/lib/articles";
 import { ARTICLE_DIFFICULTY_LABELS } from "@/lib/labels";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -14,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Pagination } from "@/components/ui/pagination";
 import { ArticleFilters } from "@/components/student/article-filters";
+import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
 
 export const metadata: Metadata = { title: "Articles" };
 
@@ -23,6 +25,11 @@ export default async function StudentArticlesPage({
   searchParams: Promise<{ q?: string; category?: string; difficulty?: string; page?: string }>;
 }) {
   const { profile } = await requireStudentProfile();
+
+  if (!(await hasActiveAccess(profile.id))) {
+    return <PremiumLockScreen feature="Leveled Articles" />;
+  }
+
   const { q, category, difficulty, page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
 

@@ -4,7 +4,7 @@ import { Award, Clock, Coins, Flame, Gauge, Gem, Target, Trophy } from "lucide-r
 import { requireStudentProfile } from "@/lib/session";
 import { getStudentProfileDetails } from "@/lib/student-profile";
 import { getWalletSummary } from "@/lib/coins";
-import { getStreakSummary } from "@/lib/streaks";
+import { getStreakBreakdown } from "@/lib/streaks";
 import { getAchievementsForStudent, syncAchievements } from "@/lib/achievements";
 import { getStudyTimeSummary } from "@/lib/study-activity";
 import { getSubscriptionSummary } from "@/lib/subscription";
@@ -32,7 +32,7 @@ export default async function StudentProfilePage() {
   const [details, wallet, streak, achievements, studyTime, subscription, vocabularyStats] = await Promise.all([
     getStudentProfileDetails(user.id, profile.id),
     getWalletSummary(profile.id),
-    getStreakSummary(profile.id),
+    getStreakBreakdown(profile.id),
     getAchievementsForStudent(profile.id),
     getStudyTimeSummary(profile.id),
     getSubscriptionSummary(profile.id),
@@ -138,12 +138,24 @@ export default async function StudentProfilePage() {
 
       <section className="space-y-4">
         <h2 className="font-display text-xl font-medium tracking-tight">Streak &amp; Premium Status</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Current Streak"
             value={streak.currentStreak > 0 ? `${streak.currentStreak} ${"🔥".repeat(Math.min(streak.currentStreak, 5))}` : "0"}
             icon={Flame}
             caption={`Longest: ${streak.longestStreak} day${streak.longestStreak === 1 ? "" : "s"}`}
+          />
+          <StatCard
+            label="Weekly Streak"
+            value={String(streak.weeklyStreak)}
+            icon={Flame}
+            caption={streak.weeklyStreak > 0 ? `${streak.weeklyStreak} week${streak.weeklyStreak === 1 ? "" : "s"} in a row` : "Study this week to start one"}
+          />
+          <StatCard
+            label="Monthly Streak"
+            value={String(streak.monthlyStreak)}
+            icon={Flame}
+            caption={streak.monthlyStreak > 0 ? `${streak.monthlyStreak} month${streak.monthlyStreak === 1 ? "" : "s"} in a row` : "Study this month to start one"}
           />
           <Card className="gap-0 py-5">
             <CardContent className="flex items-center justify-between gap-4">

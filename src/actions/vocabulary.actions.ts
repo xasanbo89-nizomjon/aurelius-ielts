@@ -9,8 +9,10 @@ import {
   deleteWord,
   getStudentVocabulary,
   logVocabularyLookup,
+  getWordsPanelEntries,
   type WordDetails,
   type SaveWordResult,
+  type WordsPanelEntry,
 } from "@/lib/vocabulary";
 import { getOrGenerateWordDetails } from "@/lib/ai/vocabulary-assistant";
 import { friendlyErrorMessage } from "@/lib/validation-error";
@@ -120,6 +122,19 @@ export async function deleteWordAction(word: string): Promise<DeleteWordResult> 
     return { success: true };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not remove that word.") };
+  }
+}
+
+export type GetWordsPanelEntriesResult = { success: true; entries: WordsPanelEntry[] } | { success: false; error: string };
+
+/** Phase 20 — the article reader's floating "Words" panel, refetched fresh every time it's opened so words clicked earlier in the same session already show up. */
+export async function getWordsPanelEntriesAction(): Promise<GetWordsPanelEntriesResult> {
+  try {
+    const { profile } = await requireStudentProfile();
+    const entries = await getWordsPanelEntries(profile.id);
+    return { success: true, entries };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not load your searched words.") };
   }
 }
 

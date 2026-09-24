@@ -6,3 +6,4 @@
  */
 export const LISTENING_AUDIO_BUCKET = "listening-audio";
 export const ARTICLE_AUDIO_BUCKET = "article-audio";
+export const SPEAKING_AUDIO_BUCKET = "speaking-audio";

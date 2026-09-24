@@ -13,13 +13,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { RedeemPromoCodeForm } from "@/components/student/redeem-promo-code-form";
+import { PlanPicker } from "@/components/student/plan-picker";
+import { listActiveSubscriptionPlans } from "@/lib/subscription-plans";
 
 export const metadata: Metadata = { title: "Subscription" };
 
 export default async function StudentSubscriptionPage() {
   const { profile } = await requireStudentProfile();
 
-  const [summary, redemptions, teacher] = await Promise.all([
+  const [summary, redemptions, teacher, plans] = await Promise.all([
     getSubscriptionSummary(profile.id),
     listRedemptionsForStudent(profile.id),
     profile.teacherId
@@ -28,11 +30,19 @@ export default async function StudentSubscriptionPage() {
           select: { user: { select: { email: true, name: true } } },
         })
       : null,
+    listActiveSubscriptionPlans(),
   ]);
 
   return (
     <>
       <PageHeader title="Subscription" description="Your trial, premium status, and promo codes." />
+
+      {plans.length > 0 && (
+        <section className="space-y-4">
+          <h2 className="font-display text-xl font-medium tracking-tight">Plans</h2>
+          <PlanPicker plans={plans} currentPlanId={summary.subscription.planId} />
+        </section>
+      )}
 
       <Card>
         <CardHeader>

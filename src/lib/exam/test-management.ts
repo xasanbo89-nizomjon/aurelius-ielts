@@ -1,4 +1,4 @@
-import type { Prisma, QuestionType, TestType } from "@prisma/client";
+import type { MockTestCategory, Prisma, QuestionType, TestType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
@@ -46,13 +46,20 @@ export function validateQuestionPayload(type: QuestionType, options: unknown, co
 
 export async function createTest(
   teacherId: string,
-  input: { title: string; description?: string; type: TestType; durationMinutes?: number }
+  input: {
+    title: string;
+    description?: string;
+    type: TestType;
+    category?: MockTestCategory;
+    durationMinutes?: number;
+  }
 ) {
   return prisma.mockTest.create({
     data: {
       title: input.title,
       description: input.description,
       type: input.type,
+      category: input.category,
       durationMinutes: input.durationMinutes,
       createdById: teacherId,
     },
@@ -62,7 +69,7 @@ export async function createTest(
 export async function updateTest(
   testId: string,
   teacherId: string,
-  input: { title?: string; description?: string; durationMinutes?: number | null }
+  input: { title?: string; description?: string; durationMinutes?: number | null; category?: MockTestCategory }
 ) {
   await assertOwnsTest(testId, teacherId);
   return prisma.mockTest.update({ where: { id: testId }, data: input });

@@ -23,6 +23,8 @@ import {
   NotebookPen,
   UserCircle,
   Mic,
+  Settings,
+  Bookmark,
 } from "lucide-react";
 
 /**
@@ -58,6 +60,8 @@ export const NAV_ICONS = {
   NotebookPen,
   UserCircle,
   Mic,
+  Settings,
+  Bookmark,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;
