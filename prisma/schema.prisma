@@ -182,6 +182,12 @@ enum PremiumSource {
   COIN_REDEMPTION
   ADMIN_GRANT
   DIRECT_PAYMENT
+  /// Phase 30 — approved via the Telegram manual-purchase flow (no payment
+  /// gateway involved) — see src/lib/premium-requests.ts. Kept distinct
+  /// from DIRECT_PAYMENT (a real gateway charge) and ADMIN_GRANT (a
+  /// no-payment courtesy grant) so Premium Analytics (Phase 29) stays
+  /// accurate about how a student actually became Premium.
+  TELEGRAM_PURCHASE
 }
 
 /// Phase 26 — Payment Architecture: the providers this layer is built to
@@ -275,6 +281,7 @@ model StudentProfile {
   questionBookmarks      QuestionBookmark[]
   writingTaskBookmarks   WritingTaskBookmark[]
   invoices               Invoice[]
+  premiumRequests        PremiumRequest[]
 
   @@map("student_profiles")
 }
@@ -300,20 +307,21 @@ model TeacherProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  students             StudentProfile[]
-  mockTests            MockTest[]
-  assignments          Assignment[]
-  promoCodes           PromoCode[]
-  reviewedWritings     WritingSubmission[]   @relation("WritingReviewer")
-  reviewedSpeakings    SpeakingSubmission[]  @relation("SpeakingReviewer")
-  bandConversionRanges BandConversionRange[]
-  updates              Update[]
-  aiSettings           AiSettings?
-  grantedTeacherAccess TeacherAllowlist[]
-  articles             Article[]
-  trialAuditLogs       TrialAuditLog[]
-  writingTasks         WritingTask[]
-  speakingTasks        SpeakingTask[]
+  students                StudentProfile[]
+  mockTests               MockTest[]
+  assignments             Assignment[]
+  promoCodes              PromoCode[]
+  reviewedWritings        WritingSubmission[]   @relation("WritingReviewer")
+  reviewedSpeakings       SpeakingSubmission[]  @relation("SpeakingReviewer")
+  bandConversionRanges    BandConversionRange[]
+  updates                 Update[]
+  aiSettings              AiSettings?
+  grantedTeacherAccess    TeacherAllowlist[]
+  articles                Article[]
+  trialAuditLogs          TrialAuditLog[]
+  writingTasks            WritingTask[]
+  speakingTasks           SpeakingTask[]
+  reviewedPremiumRequests PremiumRequest[]      @relation("PremiumRequestReviewer")
 
   @@map("teacher_profiles")
 }
@@ -997,6 +1005,54 @@ model Subscription {
   @@map("subscriptions")
 }
 
+enum PremiumRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Phase 30 — the 3 fixed Telegram-sales plans. Deliberately not tied to the
+/// existing, teacher-configurable SubscriptionPlan model: these 3 have
+/// fixed prices/durations dictated by the phase spec, not per-teacher
+/// customization.
+enum PremiumPlanCode {
+  ONE_MONTH
+  THREE_MONTHS
+  SIX_MONTHS
+}
+
+/// Phase 30 — Telegram Premium Sales. A student "buying" Premium creates one
+/// of these (PENDING) and is redirected to Telegram with a prefilled
+/// message; there is no payment gateway, so this row IS the purchase
+/// record until a root teacher manually approves or rejects it — see
+/// src/lib/premium-requests.ts.
+model PremiumRequest {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  planCode     PremiumPlanCode
+  /// Denormalized snapshot of the plan's price/duration at request time, so
+  /// a later change to PREMIUM_PLANS never rewrites what an already-submitted
+  /// request actually asked for.
+  priceLabel   String
+  durationDays Int
+
+  status PremiumRequestStatus @default(PENDING)
+
+  reviewedById String?
+  reviewedBy   TeacherProfile? @relation("PremiumRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([status])
+  @@map("premium_requests")
+}
+
 model PromoCode {
   id             String        @id @default(cuid())
   /// Always system-generated, always "AZ" + 6 random uppercase
@@ -1339,6 +1395,10 @@ enum TrialAuditAction {
   /// student's subscription state" event, just a different real reason).
   PREMIUM_GRANT
   PREMIUM_REMOVE
+  /// Phase 30 — Telegram Premium Sales: a root teacher approving/rejecting
+  /// a student's PremiumRequest, logged into this same real audit trail.
+  PREMIUM_TELEGRAM_APPROVE
+  PREMIUM_TELEGRAM_REJECT
 }
 
 /// One row per root-teacher trial action — created once, never updated or

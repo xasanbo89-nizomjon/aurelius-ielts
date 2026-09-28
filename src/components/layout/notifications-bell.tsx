@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, BellRing, Check, CheckCheck, Megaphone, Newspaper, PenLine, Mic, AlertCircle } from "lucide-react";
+import { Bell, BellRing, Check, CheckCheck, Megaphone, Newspaper, PenLine, Mic, AlertCircle, Gem } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import {
@@ -31,6 +31,7 @@ const CATEGORY_META: Record<NotificationCategory, { label: string; icon: LucideI
   WRITING_REVIEW: { label: "Writing Reviews", icon: PenLine },
   SPEAKING_REVIEW: { label: "Speaking Reviews", icon: Mic },
   SYSTEM_NOTICE: { label: "System Notices", icon: AlertCircle },
+  PREMIUM_REQUEST: { label: "Premium Requests", icon: Gem },
 };
 
 const CATEGORY_FILTERS: (NotificationCategory | "ALL")[] = [
@@ -40,6 +41,7 @@ const CATEGORY_FILTERS: (NotificationCategory | "ALL")[] = [
   "WRITING_REVIEW",
   "SPEAKING_REVIEW",
   "SYSTEM_NOTICE",
+  "PREMIUM_REQUEST",
 ];
 
 /**
@@ -113,7 +115,7 @@ export function NotificationsBell() {
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-96">
+      <DropdownMenuContent align="end" className="w-[calc(100vw-2rem)] max-w-96 max-h-[70vh] overflow-y-auto">
         <div className="flex items-center justify-between px-2 py-1.5">
           <DropdownMenuLabel className="p-0">Notifications</DropdownMenuLabel>
           {items.length > 0 && unreadCount > 0 && (

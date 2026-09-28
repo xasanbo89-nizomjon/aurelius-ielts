@@ -16,7 +16,7 @@ export function PremiumBadge({ isPremium, daysRemaining }: { isPremium: boolean;
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
-          href="/student/subscription"
+          href={isPremium ? "/student/subscription" : "/student/premium"}
           aria-label={label}
           className={cn(
             "focus-visible:ring-ring/50 flex h-10 items-center gap-1 rounded-full px-2 outline-none transition-colors focus-visible:ring-2",

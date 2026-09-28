@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
 import { PwaRegister } from "@/components/pwa-register";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
+import { SITE_NAME, SITE_DESCRIPTION, getSiteUrl } from "@/lib/site-config";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -18,12 +19,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(getSiteUrl()),
   title: {
-    default: "Aurelius IELTS",
-    template: "%s · Aurelius IELTS",
+    default: SITE_NAME,
+    template: `%s · ${SITE_NAME}`,
   },
-  description:
-    "A premium IELTS learning platform for students and teachers — Listening, Reading, Writing, and full mock tests with real, verified progress tracking.",
+  description: SITE_DESCRIPTION,
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -31,6 +32,29 @@ export const metadata: Metadata = {
       { url: "/icons/favicon-16x16.png", sizes: "16x16", type: "image/png" },
     ],
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  // Phase 31 — Part 4, SEO. Page-specific opengraph-image.tsx/twitter-image.tsx
+  // (real, server-rendered, per route) override these defaults; this is the
+  // site-wide fallback for any route that doesn't define its own.
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
+  robots: {
+    // The real default: index the public marketing pages. Auth-gated
+    // dashboard routes are excluded explicitly in robots.ts/sitemap.ts
+    // instead of here, since search engines can't reach past the login
+    // wall anyway — this is the honest, correct policy per Part 4.
+    index: true,
+    follow: true,
   },
   appleWebApp: {
     // "Add to Home Screen" launches full-screen without Safari chrome, and

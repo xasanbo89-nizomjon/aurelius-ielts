@@ -18,6 +18,7 @@ import { TestPerformanceTable } from "@/components/analytics/test-performance-ta
 import { MostRequestedExplanationsTable } from "@/components/analytics/most-requested-explanations-table";
 import { MostConfusingQuestionsTable } from "@/components/analytics/most-confusing-questions-table";
 import { AiSettingsCard } from "@/components/teacher/ai-settings-card";
+import { AnalyticsSubNav } from "@/components/teacher/analytics-sub-nav";
 
 export const metadata: Metadata = { title: "Analytics" };
 
@@ -44,6 +45,8 @@ export default async function TeacherAnalyticsPage() {
   return (
     <>
       <PageHeader title="Analytics" description="Aggregate performance across every student you teach." />
+
+      <AnalyticsSubNav isRootTeacher={profile.isRootTeacher} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Students" value={String(overview.studentCount)} icon={Users} />

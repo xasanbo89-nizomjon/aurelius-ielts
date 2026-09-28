@@ -19,7 +19,12 @@ import { getSubscriptionHistory } from "@/lib/subscription-history";
 
 export const metadata: Metadata = { title: "Subscription" };
 
-const SOURCE_LABEL = { COIN_REDEMPTION: "Coin Redemption", ADMIN_GRANT: "Admin Grant", DIRECT_PAYMENT: "Direct Payment" } as const;
+const SOURCE_LABEL = {
+  COIN_REDEMPTION: "Coin Redemption",
+  ADMIN_GRANT: "Admin Grant",
+  DIRECT_PAYMENT: "Direct Payment",
+  TELEGRAM_PURCHASE: "Telegram Purchase",
+} as const;
 
 export default async function StudentSubscriptionPage() {
   const { profile } = await requireStudentProfile();
@@ -82,18 +87,20 @@ export default async function StudentSubscriptionPage() {
                 Your access has ended. You can still log in and view your profile, but starting or
                 submitting tests requires an active subscription.
               </p>
-              {teacher ? (
+              <div className="flex flex-wrap gap-2">
                 <Button asChild size="sm">
-                  <Link href={`mailto:${teacher.user.email}?subject=Upgrade%20to%20Aurelius%20IELTS%20Premium`}>
-                    <Gem className="size-4" /> Contact {teacher.user.name ?? "your teacher"} to upgrade
+                  <Link href="/student/premium">
+                    <Gem className="size-4" /> Buy Premium
                   </Link>
                 </Button>
-              ) : (
-                <p className="text-muted-foreground text-xs">
-                  You don&apos;t have a teacher assigned yet — ask your school&apos;s administrator for a
-                  promo code or Premium access.
-                </p>
-              )}
+                {teacher && (
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`mailto:${teacher.user.email}?subject=Upgrade%20to%20Aurelius%20IELTS%20Premium`}>
+                      Contact {teacher.user.name ?? "your teacher"}
+                    </Link>
+                  </Button>
+                )}
+              </div>
               <p className="text-muted-foreground text-xs">Or redeem a promo code below.</p>
             </div>
           )}

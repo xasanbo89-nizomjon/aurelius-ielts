@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Award, Clock, Coins, Flame, Gauge, Gem, Target, Trophy } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
@@ -164,6 +165,15 @@ export default async function StudentProfilePage() {
                 <Badge variant={SUBSCRIPTION_STATUS_VARIANTS[subscription.status]} className="mt-1.5">
                   {SUBSCRIPTION_STATUS_LABELS[subscription.status]}
                 </Badge>
+                {subscription.hasAccess && subscription.daysRemaining != null ? (
+                  <p className="text-muted-foreground mt-1.5 text-xs">
+                    {subscription.daysRemaining} day{subscription.daysRemaining === 1 ? "" : "s"} remaining
+                  </p>
+                ) : (
+                  <Link href="/student/premium" className="text-accent mt-1.5 block text-xs hover:underline">
+                    Buy Premium →
+                  </Link>
+                )}
               </div>
               <span className="bg-secondary text-accent flex size-10 shrink-0 items-center justify-center rounded-xl">
                 <Gem className="size-5" strokeWidth={1.75} />

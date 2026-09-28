@@ -71,9 +71,9 @@ export function DashboardShell({
         <main
           id="main-content"
           tabIndex={-1}
-          className={cn("flex-1 px-4 py-8 outline-none sm:px-6 lg:px-10 lg:py-10", isStudent && "pb-24 lg:pb-10")}
+          className={cn("flex-1 px-4 py-5 outline-none sm:px-6 sm:py-8 lg:px-10 lg:py-10", isStudent && "pb-24 lg:pb-10")}
         >
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">{children}</div>
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 sm:gap-8">{children}</div>
         </main>
       </div>
 

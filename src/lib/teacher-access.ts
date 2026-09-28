@@ -102,8 +102,18 @@ export type AddTeacherResult = { success: true; promoted: boolean } | { success:
  * Authorizes an email to be a teacher. If a real account already exists for
  * that email, promotes it immediately (role + a real TeacherProfile);
  * otherwise the grant simply takes effect the next time that email signs up.
+ *
+ * Phase 31 — Part 2 security hardening: `isActingTeacherRoot` is the real
+ * gate, checked here (never trust that the caller/UI already checked it) —
+ * same pattern as grantPremium/approvePremiumRequest. Previously this
+ * function let ANY teacher grant TEACHER access to an arbitrary email, a
+ * real privilege-escalation path found by a Phase 31 security audit.
  */
-export async function addTeacherByEmail(addedByTeacherId: string, rawEmail: string): Promise<AddTeacherResult> {
+export async function addTeacherByEmail(isActingTeacherRoot: boolean, addedByTeacherId: string, rawEmail: string): Promise<AddTeacherResult> {
+  if (!isActingTeacherRoot) {
+    return { success: false, error: "Only the root administrator can add teachers." };
+  }
+
   const email = normalizeEmail(rawEmail);
   if (isRootTeacherEmail(email)) {
     return { success: false, error: "This email is already the root administrator." };
@@ -144,8 +154,16 @@ export type RemoveTeacherResult = { success: true } | { success: false; error: s
  * TeacherProfile.isRootTeacher flag (see schema.prisma), since only the
  * bootstrap check alone would let a *second* root teacher be silently
  * demoted through this path.
+ *
+ * Phase 31 — Part 2 security hardening: `isActingTeacherRoot` gates the
+ * caller, same reasoning as addTeacherByEmail above — previously any
+ * teacher could demote any other non-root teacher back to STUDENT.
  */
-export async function removeTeacherByEmail(rawEmail: string): Promise<RemoveTeacherResult> {
+export async function removeTeacherByEmail(isActingTeacherRoot: boolean, rawEmail: string): Promise<RemoveTeacherResult> {
+  if (!isActingTeacherRoot) {
+    return { success: false, error: "Only the root administrator can remove teachers." };
+  }
+
   const email = normalizeEmail(rawEmail);
   if (isRootTeacherEmail(email)) {
     return { success: false, error: "The root administrator can't be removed." };

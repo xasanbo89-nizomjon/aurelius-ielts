@@ -31,6 +31,7 @@ export const STUDENT_SECONDARY_NAV_ITEMS: NavItem[] = [
   { label: "Bookmarks", href: "/student/bookmarks", icon: "Bookmark" },
   { label: "Coin Wallet", href: "/student/coins", icon: "Coins" },
   { label: "Leaderboard", href: "/student/leaderboard", icon: "Trophy" },
+  { label: "Premium", href: "/student/premium", icon: "Crown" },
   { label: "Subscription", href: "/student/subscription", icon: "Gem" },
   // Phase 28 — Offline learning. "Offline Articles" links straight to the
   // network-independent /offline/* viewer (not a /student/* page), since
@@ -61,6 +62,8 @@ export const TEACHER_NAV_ITEMS: NavItem[] = [
   { label: "Promo Codes", href: "/teacher/promo-codes", icon: "Ticket" },
   { label: "Payments", href: "/teacher/payments", icon: "CreditCard" },
   { label: "Coin Logs", href: "/teacher/coin-logs", icon: "Coins" },
+  { label: "Premium Requests", href: "/teacher/premium", icon: "Crown" },
+  { label: "System Health", href: "/teacher/system-health", icon: "Activity" },
   { label: "Subscription Plans", href: "/teacher/subscriptions", icon: "Gem" },
   { label: "Teacher Management", href: "/teacher/management", icon: "ShieldCheck" },
 ];

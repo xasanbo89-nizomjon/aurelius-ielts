@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
+import { reportClientErrorAction } from "@/actions/error-report.actions";
 import { Button } from "@/components/ui/button";
 
 export default function GlobalPageError({
@@ -15,6 +16,8 @@ export default function GlobalPageError({
 }) {
   useEffect(() => {
     console.error(error);
+    // Fire-and-forget — a failed error report should never itself surface an error.
+    void reportClientErrorAction(error.message, error.digest);
   }, [error]);
 
   return (

@@ -2,8 +2,9 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionSummary } from "@/lib/subscription";
+import { getPremiumPlan } from "@/lib/premium-plans";
 
-export type NotificationCategory = "TEACHER_UPDATE" | "NEW_ARTICLE" | "WRITING_REVIEW" | "SPEAKING_REVIEW" | "SYSTEM_NOTICE";
+export type NotificationCategory = "TEACHER_UPDATE" | "NEW_ARTICLE" | "WRITING_REVIEW" | "SPEAKING_REVIEW" | "SYSTEM_NOTICE" | "PREMIUM_REQUEST";
 
 export type NotificationItem = {
   /** Stable per-item key across every source — the read-state key (NotificationRead.itemKey), not necessarily the source row's own id. */
@@ -27,7 +28,7 @@ const PER_CATEGORY_LIMIT = 10;
  * generic key instead of a strict FK.
  */
 export async function getNotificationInbox(studentId: string, teacherId: string | null): Promise<NotificationItem[]> {
-  const [updates, articles, writingReviews, speakingReviews, subscriptionSummary, reads] = await Promise.all([
+  const [updates, articles, writingReviews, speakingReviews, premiumRequests, subscriptionSummary, reads] = await Promise.all([
     teacherId
       ? prisma.update.findMany({
           where: { createdById: teacherId, status: "PUBLISHED" },
@@ -58,6 +59,15 @@ export async function getNotificationInbox(studentId: string, teacherId: string 
       orderBy: { evaluatedAt: "desc" },
       take: PER_CATEGORY_LIMIT,
       select: { id: true, part: true, bandScore: true, evaluatedAt: true, task: { select: { title: true } } },
+    }),
+    // Phase 30 — Telegram Premium Sales: a real, reviewed (not pending)
+    // purchase request, so the student learns the outcome without needing
+    // to keep re-checking /student/premium/history.
+    prisma.premiumRequest.findMany({
+      where: { studentId, status: { not: "PENDING" }, reviewedAt: { not: null } },
+      orderBy: { reviewedAt: "desc" },
+      take: PER_CATEGORY_LIMIT,
+      select: { id: true, planCode: true, status: true, reviewedAt: true },
     }),
     getSubscriptionSummary(studentId),
     prisma.notificationRead.findMany({ where: { studentId }, select: { itemKey: true } }),
@@ -102,6 +112,18 @@ export async function getNotificationInbox(studentId: string, teacherId: string 
       at: submission.evaluatedAt as Date,
       isRead: readKeys.has(`speaking-review-${submission.id}`),
     })),
+    ...premiumRequests.map((request) => ({
+      key: `premium-request-${request.id}`,
+      category: "PREMIUM_REQUEST" as const,
+      title: request.status === "APPROVED" ? "Premium request approved" : "Premium request declined",
+      content:
+        request.status === "APPROVED"
+          ? `Your ${getPremiumPlan(request.planCode).title} purchase was approved — Premium is now active.`
+          : `Your ${getPremiumPlan(request.planCode).title} purchase request was declined. Message the owner on Telegram if you have questions.`,
+      href: request.status === "APPROVED" ? "/student/subscription" : "/student/premium",
+      at: request.reviewedAt as Date,
+      isRead: readKeys.has(`premium-request-${request.id}`),
+    })),
   ];
 
   // System Notices — computed live from real subscription state, never
@@ -116,7 +138,7 @@ export async function getNotificationInbox(studentId: string, teacherId: string 
       category: "SYSTEM_NOTICE",
       title: subscriptionSummary.status === "TRIAL" ? "Your trial is ending soon" : "Your Premium is ending soon",
       content: `${subscriptionSummary.daysRemaining} day${subscriptionSummary.daysRemaining === 1 ? "" : "s"} remaining on your ${subscriptionSummary.status === "TRIAL" ? "free trial" : "Premium plan"}.`,
-      href: "/student/subscription",
+      href: "/student/premium",
       at: new Date(),
       isRead: readKeys.has(key),
     });
@@ -127,7 +149,7 @@ export async function getNotificationInbox(studentId: string, teacherId: string 
       category: "SYSTEM_NOTICE",
       title: "Your access has ended",
       content: "Upgrade or redeem a promo code to keep using premium features.",
-      href: "/student/subscription",
+      href: "/student/premium",
       at: new Date(),
       isRead: readKeys.has(key),
     });

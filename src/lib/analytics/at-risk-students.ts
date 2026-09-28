@@ -6,8 +6,18 @@ const INACTIVE_DAYS_THRESHOLD = 7;
 const SCORE_DECLINE_THRESHOLD = 0.3; // band points
 const REPEATED_FAILURE_THRESHOLD = 50; // score percent
 const REPEATED_FAILURE_MIN_COUNT = 3;
+const PREMIUM_EXPIRING_DAYS_THRESHOLD = 7;
+/** "Stopped studying" needs real prior engagement to distinguish it from a student who simply never started — a longer silence and a real former streak, not just today's 7-day inactivity check. */
+const STOPPED_STUDYING_SILENCE_DAYS = 14;
+const STOPPED_STUDYING_MIN_PRIOR_STREAK = 5;
 
-export type AtRiskReasonCode = "INACTIVITY" | "STREAK_LOSS" | "DECLINING_SCORES" | "REPEATED_FAILURES";
+export type AtRiskReasonCode =
+  | "INACTIVITY"
+  | "STREAK_LOSS"
+  | "DECLINING_SCORES"
+  | "REPEATED_FAILURES"
+  | "PREMIUM_EXPIRING"
+  | "STOPPED_STUDYING";
 export type AtRiskReason = { code: AtRiskReasonCode; text: string; suggestedAction: string };
 export type RiskLevel = "HIGH" | "MEDIUM" | "LOW";
 
@@ -39,6 +49,11 @@ function riskLevelFor(reasonCount: number): RiskLevel {
  * system doing real pattern detection, not by routing a deterministic check
  * through OpenAI. V2 adds: risk level, a suggested action per reason, and a
  * 4th detection dimension (repeated low scores).
+ *
+ * Phase 29 — At-Risk V2 adds 2 more real detection dimensions: a Premium
+ * subscription genuinely expiring within a week (real Subscription.endDate),
+ * and "stopped studying" — a real, more severe dropout pattern distinct
+ * from plain inactivity (see the threshold constants above).
  */
 export async function getAtRiskStudents(teacherId: string): Promise<AtRiskStudent[]> {
   const students = await prisma.studentProfile.findMany({
@@ -48,6 +63,7 @@ export async function getAtRiskStudents(teacherId: string): Promise<AtRiskStuden
       createdAt: true,
       user: { select: { name: true, email: true } },
       studyStreak: { select: { currentStreak: true, longestStreak: true, lastActiveDate: true } },
+      subscriptions: { where: { status: "ACTIVE" }, select: { endDate: true }, take: 1 },
       results: {
         where: { completedAt: { not: null } },
         orderBy: { completedAt: "desc" },
@@ -83,6 +99,31 @@ export async function getAtRiskStudents(teacherId: string): Promise<AtRiskStuden
         text: `Streak reset to 0 (previous best was ${student.studyStreak.longestStreak} days)`,
         suggestedAction: "Encourage a small daily habit — even 5 minutes counts toward a new streak.",
       });
+    }
+
+    if (
+      student.studyStreak &&
+      student.studyStreak.longestStreak >= STOPPED_STUDYING_MIN_PRIOR_STREAK &&
+      student.studyStreak.lastActiveDate &&
+      daysSince(student.studyStreak.lastActiveDate) >= STOPPED_STUDYING_SILENCE_DAYS
+    ) {
+      reasons.push({
+        code: "STOPPED_STUDYING",
+        text: `Was a regular learner (${student.studyStreak.longestStreak}-day best streak) but hasn't studied in ${daysSince(student.studyStreak.lastActiveDate)} days`,
+        suggestedAction: "This is a real dropout, not just a quiet week — a personal check-in is more likely to work than an automated nudge.",
+      });
+    }
+
+    const activeSubscription = student.subscriptions[0];
+    if (activeSubscription?.endDate) {
+      const daysUntilExpiry = Math.ceil((activeSubscription.endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      if (daysUntilExpiry >= 0 && daysUntilExpiry <= PREMIUM_EXPIRING_DAYS_THRESHOLD) {
+        reasons.push({
+          code: "PREMIUM_EXPIRING",
+          text: `Premium expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"}`,
+          suggestedAction: "Remind them what they'd lose access to, or point them at the coin-redemption path if they're close to affording it.",
+        });
+      }
     }
 
     const bandedResults = student.results.filter((r) => r.bandScore != null);

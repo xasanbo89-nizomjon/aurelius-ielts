@@ -4,6 +4,8 @@ import type { z } from "zod";
 
 import { getOpenAIClient, getOpenAIModel } from "@/lib/ai/openai";
 import { AIServiceUnavailableError } from "@/lib/ai/errors";
+import { recordMetric, recordAiTokenUsage } from "@/lib/monitoring/metrics-store";
+import { logServerError } from "@/lib/error-logger";
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 
@@ -31,6 +33,7 @@ export async function createStructuredCompletion<T>({
   timeoutMs?: number;
 }): Promise<T> {
   const client = getOpenAIClient();
+  const start = performance.now();
 
   let completion;
   try {
@@ -50,10 +53,17 @@ export async function createStructuredCompletion<T>({
       { timeout: timeoutMs }
     );
   } catch (error) {
+    recordMetric(`ai:${schemaName}`, performance.now() - start, false);
+    logServerError(`ai:${schemaName}`, error);
     if (error instanceof OpenAI.APIError) {
       throw new AIServiceUnavailableError(`OpenAI request failed: ${error.message}`, { cause: error });
     }
     throw new AIServiceUnavailableError("OpenAI request failed.", { cause: error });
+  }
+
+  recordMetric(`ai:${schemaName}`, performance.now() - start, true);
+  if (completion.usage) {
+    recordAiTokenUsage(schemaName, completion.usage.prompt_tokens, completion.usage.completion_tokens);
   }
 
   const raw = completion.choices[0]?.message?.content;

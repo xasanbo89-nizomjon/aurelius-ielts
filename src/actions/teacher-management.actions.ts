@@ -18,7 +18,7 @@ export async function addTeacherAction(email: string): Promise<AddTeacherActionR
     return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid email." };
   }
 
-  const result = await addTeacherByEmail(profile.id, parsed.data);
+  const result = await addTeacherByEmail(profile.isRootTeacher, profile.id, parsed.data);
   if (!result.success) return result;
 
   revalidatePath("/teacher/management");
@@ -28,9 +28,9 @@ export async function addTeacherAction(email: string): Promise<AddTeacherActionR
 export type ActionResult = { success: true } | { success: false; error: string };
 
 export async function removeTeacherAction(email: string): Promise<ActionResult> {
-  await requireTeacherProfile();
+  const { profile } = await requireTeacherProfile();
 
-  const result = await removeTeacherByEmail(email);
+  const result = await removeTeacherByEmail(profile.isRootTeacher, email);
   if (!result.success) return result;
 
   revalidatePath("/teacher/management");

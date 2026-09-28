@@ -19,6 +19,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { AssignTeacherSelect } from "@/components/teacher/assign-teacher-select";
 import { TrialActionsCell } from "@/components/teacher/trial-actions-cell";
 import { AdminPremiumControls } from "@/components/teacher/admin-premium-controls";
+import { ExportReportButtons } from "@/components/teacher/export-report-buttons";
 
 function RankedList({ items, formatValue, emptyLabel }: { items: RankedStudent[]; formatValue: (value: number) => string; emptyLabel: string }) {
   if (items.length === 0) {
@@ -76,7 +77,12 @@ export default async function TeacherStudentsPage({
             ? "Every student on the platform — assign each one to a teacher."
             : "Everyone assigned to your teaching account."
         }
-        actions={<SearchInput name="q" placeholder="Search by name or email…" defaultValue={q} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {isRootView && <ExportReportButtons kind="student-performance" label="Export Student Report" />}
+            <SearchInput name="q" placeholder="Search by name or email…" defaultValue={q} />
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

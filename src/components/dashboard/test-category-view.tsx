@@ -32,7 +32,7 @@ export async function TestCategoryView({
           description="Your teacher hasn't published any tests in this category yet. Check back soon."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tests.map((test) => {
             const TypeIcon = test.type === "LISTENING" ? Headphones : BookOpen;
             return (
@@ -41,24 +41,30 @@ export async function TestCategoryView({
                 href={`/student/exam/${test.id}`}
                 className="focus-visible:ring-ring/50 block h-full rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
-                <Card className="h-full transition-all hover:-translate-y-0.5 hover:shadow-soft-lg">
-                  <CardHeader>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="flex items-center gap-1 capitalize">
-                        <TypeIcon className="size-3.5" aria-hidden="true" /> {test.type.toLowerCase()}
+                <Card className="h-full gap-3 py-4 transition-all hover:-translate-y-0.5 hover:shadow-soft-lg sm:gap-6 sm:py-6">
+                  <CardHeader className="gap-1 sm:gap-1.5">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <Badge variant="outline" className="flex items-center gap-1 text-[11px] capitalize sm:text-xs">
+                        <TypeIcon className="size-3 sm:size-3.5" aria-hidden="true" /> {test.type.toLowerCase()}
                       </Badge>
-                      {free && <Badge variant="success">Free</Badge>}
+                      {free && (
+                        <Badge variant="success" className="text-[11px] sm:text-xs">
+                          Free
+                        </Badge>
+                      )}
                     </div>
-                    <CardTitle>{test.title}</CardTitle>
-                    {test.description && <CardDescription>{test.description}</CardDescription>}
+                    <CardTitle className="line-clamp-1 text-base sm:line-clamp-none sm:text-lg">{test.title}</CardTitle>
+                    {test.description && (
+                      <CardDescription className="line-clamp-1 text-xs sm:line-clamp-none sm:text-sm">{test.description}</CardDescription>
+                    )}
                   </CardHeader>
-                  <CardContent className="text-muted-foreground flex items-center gap-4 text-xs">
+                  <CardContent className="text-muted-foreground flex items-center gap-3 text-[11px] sm:gap-4 sm:text-xs">
                     <span className="flex items-center gap-1">
-                      <FileQuestion className="size-3.5" aria-hidden="true" />
+                      <FileQuestion className="size-3 sm:size-3.5" aria-hidden="true" />
                       {test._count.questions} question{test._count.questions === 1 ? "" : "s"}
                     </span>
                     <span className="flex items-center gap-1">
-                      <Clock className="size-3.5" aria-hidden="true" />
+                      <Clock className="size-3 sm:size-3.5" aria-hidden="true" />
                       {test.durationMinutes ? `${test.durationMinutes} min` : "Untimed"}
                     </span>
                   </CardContent>
