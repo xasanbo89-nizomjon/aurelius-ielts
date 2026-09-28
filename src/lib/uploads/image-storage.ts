@@ -8,6 +8,7 @@ export type UploadedImage = UploadedFile;
 
 const ARTICLE_COVERS_BUCKET = "article-covers";
 const PROFILE_PHOTOS_BUCKET = "profile-photos";
+const FULL_MOCK_COVERS_BUCKET = "full-mock-covers";
 
 /**
  * Uploads an article cover image to the public `article-covers` Supabase
@@ -44,6 +45,20 @@ export async function uploadProfilePhoto(userId: string, file: File): Promise<Up
   const buffer = Buffer.from(await file.arrayBuffer());
   const objectPath = `${userId}/${randomUUID()}${validation.extension}`;
   const servedPath = await uploadBuffer(PROFILE_PHOTOS_BUCKET, objectPath, buffer, validation.contentType);
+
+  return { path: servedPath, fileName: file.name, mimeType: validation.contentType, size: file.size };
+}
+
+/** Phase 34 — Full Mock Test builder's optional cover image (Step 1). */
+export async function uploadFullMockCoverImage(teacherId: string, file: File): Promise<UploadedImage> {
+  const validation = validateImageFile({ name: file.name, size: file.size, type: file.type });
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const objectPath = `${teacherId}/${randomUUID()}${validation.extension}`;
+  const servedPath = await uploadBuffer(FULL_MOCK_COVERS_BUCKET, objectPath, buffer, validation.contentType);
 
   return { path: servedPath, fileName: file.name, mimeType: validation.contentType, size: file.size };
 }

@@ -20,7 +20,7 @@ export function FilterPills({
   label: string;
 }) {
   return (
-    <nav aria-label={label} className="bg-secondary/70 inline-flex w-fit items-center gap-1 rounded-full p-1">
+    <nav aria-label={label} className="bg-secondary/70 flex w-fit flex-wrap items-center gap-1 rounded-full p-1">
       {options.map((option) => {
         const isActive = option.value === activeValue;
         return (

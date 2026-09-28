@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileText, Plus } from "lucide-react";
+import { FileText, Layers, Plus } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { listFullMockTestsForTeacher } from "@/lib/full-mock-tests";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -31,7 +32,7 @@ export default async function TeacherTestsPage({
     ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}),
   };
 
-  const [tests, total] = await Promise.all([
+  const [tests, total, fullMockTests] = await Promise.all([
     prisma.mockTest.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -48,6 +49,7 @@ export default async function TeacherTestsPage({
       },
     }),
     prisma.mockTest.count({ where }),
+    listFullMockTestsForTeacher(profile.id),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -64,8 +66,13 @@ export default async function TeacherTestsPage({
         title="Tests"
         description="Reading and listening mock tests you've authored."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <SearchInput name="q" placeholder="Search tests…" defaultValue={q} />
+            <Button asChild variant="outline">
+              <Link href="/teacher/tests/full-mock/new">
+                <Layers className="size-4" /> Create Full Mock Test
+              </Link>
+            </Button>
             <Button asChild>
               <Link href="/teacher/tests/new">
                 <Plus className="size-4" /> Create test
@@ -146,6 +153,37 @@ export default async function TeacherTestsPage({
           <Pagination page={page} totalPages={totalPages} buildHref={buildHref} />
         </>
       )}
+
+      <div className="space-y-3">
+        <h2 className="font-display text-lg font-medium">Full Mock Tests</h2>
+        {fullMockTests.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            No full mock tests yet — combine a Reading, Listening, Writing and Speaking section into one timed exam.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {fullMockTests.map((test) => (
+              <Link
+                key={test.id}
+                href={`/teacher/tests/full-mock/${test.id}`}
+                className="focus-visible:ring-ring/50 block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <div className="border-border/70 hover:shadow-soft-lg rounded-2xl border p-4 transition-all hover:-translate-y-0.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-medium">{test.title}</p>
+                    <Badge variant={test.status === "PUBLISHED" ? "success" : "outline"}>
+                      {test.status === "PUBLISHED" ? "Published" : test.status === "ARCHIVED" ? "Archived" : "Draft"}
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {test.sectionsFilled}/4 sections filled · {test.attemptCount} attempt{test.attemptCount === 1 ? "" : "s"}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
     </>
   );
 }

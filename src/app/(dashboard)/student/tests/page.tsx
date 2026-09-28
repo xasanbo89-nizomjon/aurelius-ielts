@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import { ClipboardCheck, Landmark, BookOpenCheck, Plus } from "lucide-react";
+import { BookOpen, ClipboardCheck, Headphones, Landmark } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
 import { HomeHubCard } from "@/components/dashboard/home-hub-card";
-import { Card } from "@/components/ui/card";
 
 export const metadata: Metadata = { title: "Tests" };
 
@@ -20,23 +19,23 @@ export default function StudentTestsHubPage() {
           icon={Landmark}
         />
         <HomeHubCard
-          title="Reading + Listening Tests"
-          description="Practice tests from your teacher, timed the same way as the real exam."
-          href="/student/tests/practice"
-          icon={BookOpenCheck}
+          title="Reading Tests"
+          description="Practice reading tests from your teacher, timed the same way as the real exam."
+          href="/student/tests/reading"
+          icon={BookOpen}
         />
         <HomeHubCard
-          title="Mock Tests"
+          title="Listening Tests"
+          description="Practice listening tests from your teacher, timed the same way as the real exam."
+          href="/student/tests/listening"
+          icon={Headphones}
+        />
+        <HomeHubCard
+          title="Full Mock Tests"
           description="Sit all four sections back-to-back under real exam timing."
-          href="/student/mock-test"
+          href="/student/tests/mock"
           icon={ClipboardCheck}
         />
-        <Card className="flex h-full flex-row items-center gap-3 rounded-2xl border border-dashed p-4 opacity-70 sm:flex-col sm:justify-center sm:gap-2 sm:rounded-3xl sm:p-8">
-          <span className="bg-secondary text-muted-foreground flex size-11 shrink-0 items-center justify-center rounded-xl sm:size-14 sm:rounded-2xl">
-            <Plus className="size-5 sm:size-7" strokeWidth={1.5} />
-          </span>
-          <p className="text-muted-foreground text-sm sm:text-center">More test types coming soon</p>
-        </Card>
       </div>
     </>
   );

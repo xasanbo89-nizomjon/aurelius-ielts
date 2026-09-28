@@ -6,6 +6,7 @@ import { CheckCircle2, Gauge } from "lucide-react";
 import { requireStudentProfile } from "@/lib/session";
 import { getAttemptSummary } from "@/lib/exam/attempts";
 import { isResponseAnswered } from "@/lib/exam/grading";
+import { findInProgressFullMockLinkForResult } from "@/lib/full-mock-attempts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,8 @@ export default async function ExamResultsPage({
   const attempt = await getAttemptSummary(resultId, profile.id);
   if (!attempt) notFound();
   if (!attempt.completedAt) redirect(`/student/exam/attempt/${resultId}`);
+
+  const fullMockAttemptId = await findInProgressFullMockLinkForResult(resultId);
 
   const answerByQuestion = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
   const skillHref = attempt.skill === "LISTENING" ? "/student/listening" : "/student/reading";
@@ -122,15 +125,23 @@ export default async function ExamResultsPage({
         </div>
 
         <div className="flex flex-wrap justify-center gap-3">
-          <Button asChild variant="outline">
-            <Link href={`/student/exam/attempt/${resultId}/review`}>Review answers</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href={skillHref}>Back to {attempt.skill === "LISTENING" ? "Listening" : "Reading"}</Link>
-          </Button>
-          <Button asChild>
-            <Link href="/student/dashboard">Go to home</Link>
-          </Button>
+          {fullMockAttemptId ? (
+            <Button asChild>
+              <Link href={`/student/full-mock/attempt/${fullMockAttemptId}`}>Continue to next section</Link>
+            </Button>
+          ) : (
+            <>
+              <Button asChild variant="outline">
+                <Link href={`/student/exam/attempt/${resultId}/review`}>Review answers</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={skillHref}>Back to {attempt.skill === "LISTENING" ? "Listening" : "Reading"}</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/student/dashboard">Go to home</Link>
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>

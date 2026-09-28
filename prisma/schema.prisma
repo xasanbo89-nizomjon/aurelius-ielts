@@ -43,6 +43,16 @@ enum MockTestCategory {
   GENERAL
 }
 
+/// Phase 34 — real difficulty badge for Reading/Listening test listings.
+/// Nullable/optional on MockTest: every test that existed before this phase
+/// has no difficulty set, and the badge simply doesn't render for those
+/// rather than showing an invented value.
+enum MockTestDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
 enum SpeakingTaskStatus {
   DRAFT
   PUBLISHED
@@ -282,6 +292,7 @@ model StudentProfile {
   writingTaskBookmarks   WritingTaskBookmark[]
   invoices               Invoice[]
   premiumRequests        PremiumRequest[]
+  fullMockAttempts       FullMockAttempt[]
 
   @@map("student_profiles")
 }
@@ -322,6 +333,7 @@ model TeacherProfile {
   writingTasks            WritingTask[]
   speakingTasks           SpeakingTask[]
   reviewedPremiumRequests PremiumRequest[]      @relation("PremiumRequestReviewer")
+  fullMockTests           FullMockTest[]
 
   @@map("teacher_profiles")
 }
@@ -331,23 +343,26 @@ model TeacherProfile {
 // ---------------------------------------------------------------------------
 
 model MockTest {
-  id              String           @id @default(cuid())
+  id              String              @id @default(cuid())
   title           String
-  description     String?          @db.Text
+  description     String?             @db.Text
   type            TestType
   /// Phase 20 — Tests Hub grouping for READING/LISTENING tests, and the
   /// platform's one free-without-subscription tier (see hasActiveAccess).
   /// Meaningless for FULL_MOCK, which always defaults to GENERAL and is
   /// never surfaced as "Cambridge".
-  category        MockTestCategory @default(GENERAL)
-  isPublished     Boolean          @default(false)
+  category        MockTestCategory    @default(GENERAL)
+  isPublished     Boolean             @default(false)
   /// Retired tests stay out of the student-facing catalog but keep their
   /// historical results intact. Independent of isPublished so a test can
   /// never be simultaneously "live" and "archived".
-  isArchived      Boolean          @default(false)
+  isArchived      Boolean             @default(false)
   /// Recommended time limit shown before starting and used to drive the
   /// in-exam countdown. Null means untimed.
   durationMinutes Int?
+  /// Phase 34 — real, teacher-set difficulty badge (Part 2/3's "Difficulty
+  /// badge"). Null for every test created before this phase existed.
+  difficulty      MockTestDifficulty?
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -355,10 +370,12 @@ model MockTest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  passages    Passage[]
-  questions   Question[]
-  results     Result[]
-  assignments Assignment[]
+  passages              Passage[]
+  questions             Question[]
+  results               Result[]
+  assignments           Assignment[]
+  fullMockReadingUses   FullMockReadingSection[]
+  fullMockListeningUses FullMockListeningSection[]
 
   @@map("mock_tests")
 }
@@ -466,9 +483,12 @@ model Result {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  answers    Answer[]
-  highlights Highlight[]
-  notes      Note[]
+  answers               Answer[]
+  highlights            Highlight[]
+  notes                 Note[]
+  /// Phase 34 — set only when this attempt was taken as the Reading or
+  /// Listening section of a Full Mock Test, not a standalone attempt.
+  fullMockSectionResult FullMockSectionResult?
 
   @@map("results")
 }
@@ -561,9 +581,12 @@ model WritingSubmission {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  analysis             WritingAnalysis?
-  rewrites             WritingRewrite[]
-  sentenceImprovements SentenceImprovement[]
+  analysis              WritingAnalysis?
+  rewrites              WritingRewrite[]
+  sentenceImprovements  SentenceImprovement[]
+  /// Phase 34 — set only when this submission was made as the Writing
+  /// section of a Full Mock Test attempt.
+  fullMockSectionResult FullMockSectionResult?
 
   @@map("writing_submissions")
 }
@@ -713,6 +736,10 @@ model WritingTask {
   submissions WritingSubmission[]
   assignments WritingTaskAssignment[]
   bookmarks   WritingTaskBookmark[]
+  /// Phase 34 — set when this task was authored inside the Full Mock Test
+  /// builder (Step 4) rather than the general Writing Task bank. Nullable:
+  /// every pre-Phase-34 task has none.
+  fullMockUse FullMockWritingSection?
 
   @@index([createdById, status])
   @@map("writing_tasks")
@@ -839,6 +866,9 @@ model SpeakingTask {
   updatedAt DateTime @updatedAt
 
   submissions SpeakingSubmission[]
+  /// Phase 34 — set when this task was authored inside the Full Mock Test
+  /// builder (Step 5) rather than the general Speaking Task bank.
+  fullMockUse FullMockSpeakingSection?
 
   @@index([createdById, status])
   @@map("speaking_tasks")
@@ -899,9 +929,201 @@ model SpeakingSubmission {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Phase 34 — set only when this submission was made as one of the 3
+  /// Speaking parts of a Full Mock Test attempt.
+  fullMockSectionResult FullMockSectionResult?
+
   @@index([taskId])
   @@index([studentId])
   @@map("speaking_submissions")
+}
+
+// ---------------------------------------------------------------------------
+// Full Mock Tests (Phase 34) — a composite Listening→Reading→Writing→Speaking
+// exam assembled from the SAME real engines every skill already uses
+// standalone. Named `FullMockTest`, not `MockTest`, to avoid colliding with
+// the existing MockTest model (Reading/Listening's own exam definition,
+// unchanged and still the thing a Reading/Listening section actually reuses).
+//
+// Design: every section is a thin junction row pointing at real content
+// (an existing MockTest for Reading/Listening, a WritingTask/SpeakingTask
+// authored in the builder for Writing/Speaking) — no content is ever
+// duplicated. A student's real progress reuses the exact same Result /
+// WritingSubmission / SpeakingSubmission rows every standalone attempt
+// already produces; FullMockSectionResult only links them to the umbrella
+// FullMockAttempt so they can be queried together.
+// ---------------------------------------------------------------------------
+
+enum FullMockTestStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model FullMockTest {
+  id               String             @id @default(cuid())
+  title            String
+  description      String?            @db.Text
+  coverImagePath   String?
+  status           FullMockTestStatus @default(DRAFT)
+  /// A real, teacher-set guidance range shown on the card (e.g. 6.0-7.5) —
+  /// never computed/invented; null until the teacher sets it in Step 1/6.
+  estimatedBandMin Float?
+  estimatedBandMax Float?
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  readingSections   FullMockReadingSection[]
+  listeningSections FullMockListeningSection[]
+  writingSections   FullMockWritingSection[]
+  speakingSections  FullMockSpeakingSection[]
+  attempts          FullMockAttempt[]
+
+  @@map("full_mock_tests")
+}
+
+/// Junction only — reuses an existing Reading-type MockTest wholesale
+/// (Part 7: "no duplicate content storage"). orderIndex lets a mock combine
+/// more than one Reading test, though the builder's default flow selects one.
+model FullMockReadingSection {
+  id String @id @default(cuid())
+
+  fullMockTestId String
+  fullMockTest   FullMockTest @relation(fields: [fullMockTestId], references: [id], onDelete: Cascade)
+  mockTestId     String
+  mockTest       MockTest     @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+
+  orderIndex Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@unique([fullMockTestId, mockTestId])
+  @@map("full_mock_reading_sections")
+}
+
+/// Same shape as FullMockReadingSection, for a Listening-type MockTest.
+model FullMockListeningSection {
+  id String @id @default(cuid())
+
+  fullMockTestId String
+  fullMockTest   FullMockTest @relation(fields: [fullMockTestId], references: [id], onDelete: Cascade)
+  mockTestId     String
+  mockTest       MockTest     @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+
+  orderIndex Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@unique([fullMockTestId, mockTestId])
+  @@map("full_mock_listening_sections")
+}
+
+/// Junction to a real WritingTask the builder created (Step 4) — Task 1 and
+/// Task 2 are 2 rows, ordered. The WritingTask itself carries the real
+/// prompt/instructions; nothing is duplicated here.
+model FullMockWritingSection {
+  id String @id @default(cuid())
+
+  fullMockTestId String
+  fullMockTest   FullMockTest @relation(fields: [fullMockTestId], references: [id], onDelete: Cascade)
+  writingTaskId  String       @unique
+  writingTask    WritingTask  @relation(fields: [writingTaskId], references: [id], onDelete: Cascade)
+
+  orderIndex Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@map("full_mock_writing_sections")
+}
+
+/// Junction to a real SpeakingTask the builder created (Step 5) — Part 1/2/3
+/// are 3 rows, ordered. Same no-duplication reasoning as Writing above.
+model FullMockSpeakingSection {
+  id String @id @default(cuid())
+
+  fullMockTestId String
+  fullMockTest   FullMockTest @relation(fields: [fullMockTestId], references: [id], onDelete: Cascade)
+  speakingTaskId String       @unique
+  speakingTask   SpeakingTask @relation(fields: [speakingTaskId], references: [id], onDelete: Cascade)
+
+  orderIndex Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@map("full_mock_speaking_sections")
+}
+
+enum FullMockSectionType {
+  LISTENING
+  READING
+  WRITING
+  SPEAKING
+}
+
+enum FullMockAttemptStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// One row per student per real sitting of a Full Mock Test — Part 8's
+/// "auto progression" state machine lives here (`currentSection`), and
+/// Part 9's results are assembled by joining `sectionResults`' real,
+/// already-scored underlying rows, never recomputed or invented here.
+model FullMockAttempt {
+  id String @id @default(cuid())
+
+  fullMockTestId String
+  fullMockTest   FullMockTest   @relation(fields: [fullMockTestId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  status         FullMockAttemptStatus @default(IN_PROGRESS)
+  /// The section the student should be routed to next. Always advances
+  /// Listening -> Reading -> Writing -> Speaking, never backward.
+  currentSection FullMockSectionType   @default(LISTENING)
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  sectionResults FullMockSectionResult[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([fullMockTestId])
+  @@map("full_mock_attempts")
+}
+
+/// Links ONE real completed Result / WritingSubmission / SpeakingSubmission
+/// row to its FullMockAttempt — exactly one of the 3 optional FKs is set,
+/// matching `section`. `partNumber` distinguishes Writing's 2 tasks and
+/// Speaking's 3 parts (null for Reading/Listening, which are single-shot).
+model FullMockSectionResult {
+  id String @id @default(cuid())
+
+  attemptId  String
+  attempt    FullMockAttempt     @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  section    FullMockSectionType
+  partNumber Int?
+
+  resultId String? @unique
+  result   Result? @relation(fields: [resultId], references: [id], onDelete: SetNull)
+
+  writingSubmissionId String?            @unique
+  writingSubmission   WritingSubmission? @relation(fields: [writingSubmissionId], references: [id], onDelete: SetNull)
+
+  speakingSubmissionId String?             @unique
+  speakingSubmission   SpeakingSubmission? @relation(fields: [speakingSubmissionId], references: [id], onDelete: SetNull)
+
+  completedAt DateTime @default(now())
+
+  @@index([attemptId])
+  @@map("full_mock_section_results")
 }
 
 enum AIInsightKind {

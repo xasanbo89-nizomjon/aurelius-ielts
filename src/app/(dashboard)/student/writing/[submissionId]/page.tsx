@@ -5,6 +5,7 @@ import { ArrowLeft, MessageCircle } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getSubmissionReportForStudent } from "@/lib/ai/writing";
+import { findInProgressFullMockLinkForWritingSubmission } from "@/lib/full-mock-attempts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,13 +29,21 @@ export default async function WritingReportPage({
   // A draft has no report to show yet — send the student straight to the editor.
   if (report.status === "DRAFT") redirect(`/student/writing/new?draftId=${submissionId}`);
 
+  const fullMockAttemptId = await findInProgressFullMockLinkForWritingSubmission(submissionId);
+
   return (
     <div className="space-y-6">
-      <Button asChild variant="ghost" size="sm" className="-ml-2">
-        <Link href="/student/writing">
-          <ArrowLeft className="size-4" /> Back to writing
-        </Link>
-      </Button>
+      {fullMockAttemptId ? (
+        <Button asChild>
+          <Link href={`/student/full-mock/attempt/${fullMockAttemptId}`}>Continue to next section</Link>
+        </Button>
+      ) : (
+        <Button asChild variant="ghost" size="sm" className="-ml-2">
+          <Link href="/student/writing">
+            <ArrowLeft className="size-4" /> Back to writing
+          </Link>
+        </Button>
+      )}
 
       <div className="space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
