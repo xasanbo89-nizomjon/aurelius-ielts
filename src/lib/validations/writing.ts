@@ -11,6 +11,8 @@ export type SubmitWritingInput = z.infer<typeof submitWritingSchema>;
 
 export const teacherFeedbackSchema = z.object({
   feedback: z.string().trim().min(1, "Add some feedback.").max(4000),
+  /** Phase 42 — Part 15's separate "Corrections" field, distinct from general feedback comments. */
+  corrections: z.string().trim().max(4000).optional(),
   bandScore: z.number().min(0).max(9).optional(),
 });
 export type TeacherFeedbackInput = z.infer<typeof teacherFeedbackSchema>;
@@ -46,13 +48,20 @@ function categoryMatchesTaskNumber(taskNumber: z.infer<typeof writingTaskNumberS
 export const writingTaskStatusSchema = z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]);
 export type WritingTaskStatusValue = z.infer<typeof writingTaskStatusSchema>;
 
+/** Phase 42 — Part 2. Academic and General Training each have their own real Task 1/Task 2 — both share the same 4 IELTS criteria, so this is authoring/display metadata only. */
+export const writingTrainingTypeSchema = z.enum(["ACADEMIC", "GENERAL"]);
+export type WritingTrainingTypeValue = z.infer<typeof writingTrainingTypeSchema>;
+
 export const createWritingTaskSchema = z
   .object({
     title: z.string().trim().min(3, "Title must be at least 3 characters.").max(160),
+    trainingType: writingTrainingTypeSchema,
     taskNumber: writingTaskNumberSchema,
     category: writingTaskCategorySchema,
     prompt: z.string().trim().min(10, "Add the task prompt.").max(2000),
     visualDescription: z.string().trim().max(2000).optional(),
+    /** Phase 42 — Part 11's real uploaded Task 1 visual, a real MediaFile id from the Media Library (upload or reuse), same as PassageAttachment/ArticleAttachment. */
+    imageMediaFileId: z.string().trim().min(1).optional(),
     targetBand: z.number().min(0, "Target band must be between 0 and 9.").max(9, "Target band must be between 0 and 9.").optional(),
     dueDate: z.coerce.date().optional(),
     // No `.min(1)` here on purpose: a teacher with zero students currently

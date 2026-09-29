@@ -100,6 +100,17 @@ export default async function WritingCenterPage() {
         />
       </div>
 
+      {analytics.weakAreas.length > 0 && (
+        <div className="border-border/70 bg-secondary/30 flex flex-wrap items-center gap-2 rounded-xl border px-4 py-3">
+          <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Weak Areas</span>
+          {analytics.weakAreas.map((area) => (
+            <span key={area} className="bg-destructive/10 text-destructive rounded-full px-2.5 py-1 text-xs font-medium">
+              {area}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <WritingRecommendationCard result={recommendation} />
         <WritingPracticeCard result={practice} />

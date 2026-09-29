@@ -6,7 +6,7 @@
  * pricing page (client) and the request-creation action (server) need the
  * same real config.
  */
-export type PremiumPlanCode = "ONE_MONTH" | "THREE_MONTHS" | "SIX_MONTHS";
+export type PremiumPlanCode = "ONE_MONTH" | "THREE_MONTHS" | "SIX_MONTHS" | "TWELVE_MONTHS";
 
 export type PremiumPlan = {
   code: PremiumPlanCode;
@@ -49,8 +49,16 @@ export const PREMIUM_PLANS: PremiumPlan[] = [
     priceLabel: "$9",
     durationDays: 180,
     durationLabel: "180 Days",
+    features: ["Everything in Premium", "Bigger discount"],
+  },
+  {
+    code: "TWELVE_MONTHS",
+    title: "12 Months Premium",
+    priceLabel: "$15",
+    durationDays: 365,
+    durationLabel: "365 Days",
     badge: "BEST VALUE",
-    features: ["Everything in Premium", "Highest discount"],
+    features: ["Everything in Premium", "Lowest price per month"],
   },
 ];
 

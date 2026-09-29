@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Gauge, ListChecks, User } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Gauge, ListChecks, User } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getSubmissionReportForTeacher } from "@/lib/ai/writing";
@@ -38,6 +38,11 @@ export default async function TeacherWritingReviewPage({
           <Badge variant={report.status === "REVIEWED" ? "success" : "outline"}>
             {report.status.replace("_", " ").toLowerCase()}
           </Badge>
+          {report.isDuplicate && (
+            <Badge variant="destructive" className="flex items-center gap-1">
+              <AlertTriangle className="size-3" /> Exact duplicate detected
+            </Badge>
+          )}
         </div>
         <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
           <User className="size-3.5" aria-hidden="true" />
@@ -96,11 +101,17 @@ export default async function TeacherWritingReviewPage({
           <CardHeader>
             <CardTitle className="text-base">Your current feedback</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-3">
             {report.status === "REVIEWED" ? (
               <>
                 {report.bandScore != null && <p className="text-sm font-medium">Band score: {report.bandScore.toFixed(1)}</p>}
                 <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap">{report.feedback}</p>
+                {report.corrections && (
+                  <div className="border-border/70 border-t pt-2.5">
+                    <p className="text-xs font-medium">Corrections</p>
+                    <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap">{report.corrections}</p>
+                  </div>
+                )}
               </>
             ) : (
               <p className="text-muted-foreground text-sm">Not reviewed yet.</p>
@@ -109,7 +120,12 @@ export default async function TeacherWritingReviewPage({
         </Card>
       </div>
 
-      <WritingFeedbackForm submissionId={report.id} initialBandScore={report.bandScore} initialFeedback={report.feedback} />
+      <WritingFeedbackForm
+        submissionId={report.id}
+        initialBandScore={report.bandScore}
+        initialFeedback={report.feedback}
+        initialCorrections={report.corrections}
+      />
     </div>
   );
 }

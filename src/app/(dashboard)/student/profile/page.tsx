@@ -175,9 +175,15 @@ export default async function StudentProfilePage() {
                   {SUBSCRIPTION_STATUS_LABELS[subscription.status]}
                 </Badge>
                 {subscription.hasAccess && subscription.daysRemaining != null ? (
-                  <p className="text-muted-foreground mt-1.5 text-xs">
-                    {premium.planName ?? "Premium"} — {subscription.daysRemaining} day{subscription.daysRemaining === 1 ? "" : "s"} remaining
-                  </p>
+                  <>
+                    <p className="text-muted-foreground mt-1.5 text-xs">
+                      {premium.planName ?? "Premium"} — {subscription.daysRemaining} day{subscription.daysRemaining === 1 ? "" : "s"} remaining
+                    </p>
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      Started {subscription.subscription.startDate.toLocaleDateString()}
+                      {subscription.subscription.endDate && ` · Expires ${subscription.subscription.endDate.toLocaleDateString()}`}
+                    </p>
+                  </>
                 ) : (
                   <Link href="/student/premium" className="text-accent mt-1.5 block text-xs hover:underline">
                     Buy Premium →

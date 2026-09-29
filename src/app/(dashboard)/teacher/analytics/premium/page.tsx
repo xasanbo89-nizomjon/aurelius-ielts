@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Coins, CreditCard, Gem, Send, ShieldCheck } from "lucide-react";
+import { Coins, CreditCard, Gem, RefreshCw, Send, ShieldCheck, Users } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getPremiumAnalytics } from "@/lib/analytics/premium-analytics";
@@ -23,9 +23,14 @@ export default async function PremiumAnalyticsPage() {
     <>
       <PageHeader title="Premium Analytics" description="Real, platform-wide premium subscription numbers." />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Active Premium Users" value={String(premium.activePremiumUsers)} icon={ShieldCheck} />
-        <StatCard label="Expired Premium Users" value={String(premium.expiredPremiumUsers)} icon={Gem} />
+        <StatCard label="Expired Users" value={String(premium.expiredPremiumUsers)} icon={Gem} />
+        <StatCard label="Total Premium Accounts" value={String(premium.totalPremiumAccounts)} icon={Users} caption="All-time, ever premium" />
+        <StatCard label="Renewals" value={String(premium.renewals)} icon={RefreshCw} caption="Admin grants beyond the first" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Coin-Based Activations" value={String(premium.coinBasedActivations)} icon={Coins} caption="All-time" />
         <StatCard label="Direct Activations" value={String(premium.directActivations)} icon={CreditCard} caption="All-time" />
         <StatCard label="Telegram Activations" value={String(premium.telegramActivations)} icon={Send} caption="All-time" />

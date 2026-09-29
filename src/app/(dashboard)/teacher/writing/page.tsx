@@ -108,10 +108,13 @@ export default async function TeacherWritingPage() {
           tasks={tasks.map((task) => ({
             id: task.id,
             title: task.title,
+            trainingType: task.trainingType,
             taskNumber: task.taskNumber,
             category: task.category,
             prompt: task.prompt,
             visualDescription: task.visualDescription,
+            imageMediaFileId: task.imageMediaFile?.id ?? null,
+            imagePath: task.imageMediaFile?.path ?? null,
             targetBand: task.targetBand,
             dueDate: task.dueDate,
             status: task.status,

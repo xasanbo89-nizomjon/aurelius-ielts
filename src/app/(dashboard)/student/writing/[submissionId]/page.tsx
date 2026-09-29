@@ -35,7 +35,7 @@ export default async function WritingReportPage({
     <div className="space-y-6">
       {fullMockAttemptId ? (
         <Button asChild>
-          <Link href={`/student/full-mock/attempt/${fullMockAttemptId}`}>Continue to next section</Link>
+          <Link href={`/student/full-mock/attempt/${fullMockAttemptId}/transition?from=WRITING`}>Continue to next section</Link>
         </Button>
       ) : (
         <Button asChild variant="ghost" size="sm" className="-ml-2">
@@ -79,11 +79,17 @@ export default async function WritingReportPage({
               <MessageCircle className="text-accent size-4.5" aria-hidden="true" /> Teacher feedback
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-3">
             {report.bandScore != null && (
               <p className="text-sm font-medium">Band score: {report.bandScore.toFixed(1)}</p>
             )}
             <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap">{report.feedback}</p>
+            {report.corrections && (
+              <div className="border-border/70 border-t pt-2.5">
+                <p className="text-xs font-medium">Corrections</p>
+                <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap">{report.corrections}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

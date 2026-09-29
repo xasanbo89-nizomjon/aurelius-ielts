@@ -1,21 +1,40 @@
 import type { Metadata } from "next";
-import { Gem } from "lucide-react";
+import Link from "next/link";
+import { Gem, Users } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { listSubscriptionPlans } from "@/lib/subscription-plans";
+import { listSubscribersForRoot } from "@/lib/trial-management";
+import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_VARIANTS } from "@/lib/labels";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CreateSubscriptionPlanForm } from "@/components/teacher/create-subscription-plan-form";
 import { SubscriptionPlanActiveToggle } from "@/components/teacher/subscription-plan-active-toggle";
+import { AdminPremiumControls } from "@/components/teacher/admin-premium-controls";
 
 export const metadata: Metadata = { title: "Subscription Plans" };
 
-export default async function TeacherSubscriptionsPage() {
+const STATUS_FILTERS = ["ALL", "ACTIVE", "TRIAL", "EXPIRED", "CANCELLED"] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+export default async function TeacherSubscriptionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
   const { profile } = await requireTeacherProfile();
 
-  const plans = await listSubscriptionPlans();
+  const { status: statusParam } = await searchParams;
+  const status: StatusFilter = STATUS_FILTERS.includes(statusParam as StatusFilter) ? (statusParam as StatusFilter) : "ALL";
+
+  const [plans, subscribers] = await Promise.all([
+    listSubscriptionPlans(),
+    profile.isRootTeacher ? listSubscribersForRoot(status) : Promise.resolve([]),
+  ]);
 
   return (
     <>
@@ -57,6 +76,60 @@ export default async function TeacherSubscriptionsPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {profile.isRootTeacher && (
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-display flex items-center gap-2 text-xl font-medium tracking-tight">
+              <Users className="text-accent size-5" aria-hidden="true" /> Subscription Management
+            </h2>
+            <div className="flex flex-wrap gap-1.5">
+              {STATUS_FILTERS.map((filter) => (
+                <Button key={filter} asChild size="sm" variant={filter === status ? "default" : "outline"}>
+                  <Link href={filter === "ALL" ? "/teacher/subscriptions" : `/teacher/subscriptions?status=${filter}`}>
+                    {filter === "ALL" ? "All" : SUBSCRIPTION_STATUS_LABELS[filter]}
+                  </Link>
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {subscribers.length === 0 ? (
+            <EmptyState icon={Users} title="No subscribers" description="No students match this filter yet." />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Student</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Start Date</TableHead>
+                  <TableHead>End Date</TableHead>
+                  <TableHead>Remaining Days</TableHead>
+                  <TableHead className="sr-only">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {subscribers.map((row) => (
+                  <TableRow key={row.studentId}>
+                    <TableCell className="font-medium">{row.name ?? row.email}</TableCell>
+                    <TableCell className="text-muted-foreground">{row.planLabel}</TableCell>
+                    <TableCell>
+                      <Badge variant={SUBSCRIPTION_STATUS_VARIANTS[row.status]}>{SUBSCRIPTION_STATUS_LABELS[row.status]}</Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{row.startDate.toLocaleDateString()}</TableCell>
+                    <TableCell className="text-muted-foreground">{row.endDate ? row.endDate.toLocaleDateString() : "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{row.remainingDays != null ? row.remainingDays : "—"}</TableCell>
+                    <TableCell>
+                      <AdminPremiumControls studentId={row.studentId} studentLabel={row.name ?? row.email} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </section>
       )}
     </>
   );

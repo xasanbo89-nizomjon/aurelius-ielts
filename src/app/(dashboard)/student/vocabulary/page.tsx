@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Clock, History, Layers } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
+import { hasActiveAccess } from "@/lib/subscription";
 import { getStudentVocabulary, getStudentVocabularyStats } from "@/lib/vocabulary";
 import { toWordIntelligence } from "@/lib/ai/vocabulary-assistant";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { VocabularyNotebook } from "@/components/student/vocabulary-notebook";
 import { VocabularyStatsCards } from "@/components/analytics/vocabulary-stats-cards";
 import { ExportVocabularyButton } from "@/components/student/export-vocabulary-button";
+import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
 import type { WordDetailsEntry } from "@/components/student/word-details-modal";
 
 export const metadata: Metadata = { title: "Vocabulary" };
@@ -23,6 +25,10 @@ const NOTEBOOK_FETCH_CAP = 1000;
 
 export default async function VocabularyPage() {
   const { profile } = await requireStudentProfile();
+
+  if (!(await hasActiveAccess(profile.id))) {
+    return <PremiumLockScreen feature="the Vocabulary Learning Center" />;
+  }
 
   const [{ entries }, stats] = await Promise.all([
     getStudentVocabulary(profile.id, { pageSize: NOTEBOOK_FETCH_CAP }),

@@ -106,6 +106,26 @@ export function PassagePanel({
     });
   }, []);
 
+  // Phase 40 — Part 7's paragraph labels (A, B, C…), for skimming and
+  // "which paragraph contains X" style questions. Purely a display overlay:
+  // labels are computed from real paragraph-break offsets in `content` and
+  // rendered as separate elements, never spliced into the text itself — the
+  // character-offset space highlights/notes/search rely on is untouched.
+  const paragraphStarts = useMemo(() => {
+    const starts: number[] = [0];
+    const breakPattern = /\n{2,}/g;
+    let match: RegExpExecArray | null;
+    while ((match = breakPattern.exec(content)) !== null) {
+      starts.push(match.index + match[0].length);
+    }
+    return starts.length > 1 ? starts : [];
+  }, [content]);
+  const paragraphLabelAt = useMemo(() => {
+    const map = new Map<number, string>();
+    paragraphStarts.forEach((offset, i) => map.set(offset, String.fromCharCode(65 + i)));
+    return map;
+  }, [paragraphStarts]);
+
   // Part 3 — Skimming & Scanning: search within the passage, jump between matches.
   const matches = useMemo(() => findMatches(content, searchQuery), [content, searchQuery]);
   useEffect(() => setCurrentMatchIndex(0), [searchQuery]);
@@ -134,18 +154,21 @@ export function PassagePanel({
       points.add(m.start);
       points.add(m.end);
     }
+    for (const p of paragraphStarts) {
+      points.add(p);
+    }
     const sorted = [...points].sort((a, b) => a - b);
-    const pieces: { text: string; highlight?: PassageHighlight; matchIndex?: number }[] = [];
+    const pieces: { start: number; text: string; highlight?: PassageHighlight; matchIndex?: number }[] = [];
     for (let i = 0; i < sorted.length - 1; i++) {
       const start = sorted[i];
       const end = sorted[i + 1];
       if (start >= end) continue;
       const highlight = highlights.find((h) => h.startOffset <= start && h.endOffset >= end);
       const matchIndex = matches.findIndex((m) => m.start <= start && m.end >= end);
-      pieces.push({ text: content.slice(start, end), highlight, matchIndex: matchIndex >= 0 ? matchIndex : undefined });
+      pieces.push({ start, text: content.slice(start, end), highlight, matchIndex: matchIndex >= 0 ? matchIndex : undefined });
     }
     return pieces;
-  }, [content, highlights, matches]);
+  }, [content, highlights, matches, paragraphStarts]);
 
   return (
     <div ref={scrollContainerRef} className="relative h-full overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
@@ -277,16 +300,24 @@ export function PassagePanel({
             <>{segment.text}</>
           );
 
+          const paragraphLabel = paragraphLabelAt.get(segment.start);
+
           return (
-            <span
-              key={index}
-              data-match-index={isMatch ? segment.matchIndex : undefined}
-              className={cn(
-                isMatch && "rounded-sm",
-                isCurrentMatch ? "bg-accent/40 ring-accent ring-2" : isMatch ? "bg-accent/20" : undefined
+            <span key={index}>
+              {paragraphLabel && (
+                <span className="text-accent bg-accent/10 mr-2 inline-block rounded px-1.5 font-display text-sm font-semibold align-top" aria-hidden="true">
+                  {paragraphLabel}
+                </span>
               )}
-            >
-              {inner}
+              <span
+                data-match-index={isMatch ? segment.matchIndex : undefined}
+                className={cn(
+                  isMatch && "rounded-sm",
+                  isCurrentMatch ? "bg-accent/40 ring-accent ring-2" : isMatch ? "bg-accent/20" : undefined
+                )}
+              >
+                {inner}
+              </span>
             </span>
           );
         })}

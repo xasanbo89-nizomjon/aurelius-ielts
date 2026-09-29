@@ -79,6 +79,7 @@ export default async function ExamAttemptPage({
         passageId: note.passageId,
         content: note.content,
       }))}
+      initialLastSeenQuestionId={attempt.lastSeenQuestionId}
     />
   );
 }

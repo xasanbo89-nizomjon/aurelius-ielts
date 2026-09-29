@@ -7,10 +7,10 @@ import { hasActiveAccess } from "@/lib/subscription";
 import { getPublishedFullMockTestDetail } from "@/lib/full-mock-tests";
 import { findInProgressFullMockAttempt, getFullMockProgressSummary } from "@/lib/full-mock-attempts";
 import { startFullMockAttemptAction } from "@/actions/full-mock-attempts.actions";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
+import { FullMockStartForm } from "@/components/student/full-mock-start-form";
 
 export const metadata: Metadata = { title: "Start Full Mock Test" };
 
@@ -79,19 +79,23 @@ export default async function FullMockStartPage({
               ))}
             </div>
           ) : (
-            <div className="bg-secondary/50 rounded-xl px-4 py-3.5 text-left">
-              <dt className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
-                <Clock className="size-3.5" aria-hidden="true" /> Total duration
-              </dt>
-              <dd className="font-display mt-1 text-xl font-medium">~{test.totalDurationMinutes} minutes</dd>
+            <div className="grid grid-cols-2 gap-3 text-left">
+              <div className="bg-secondary/50 rounded-xl px-4 py-3.5">
+                <dt className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
+                  <Clock className="size-3.5" aria-hidden="true" /> Duration
+                </dt>
+                <dd className="font-display mt-1 text-xl font-medium">~{test.totalDurationMinutes} min</dd>
+              </div>
+              <div className="bg-secondary/50 rounded-xl px-4 py-3.5">
+                <dt className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
+                  <ClipboardCheck className="size-3.5" aria-hidden="true" /> Questions
+                </dt>
+                <dd className="font-display mt-1 text-xl font-medium">{test.totalQuestionCount}</dd>
+              </div>
             </div>
           )}
 
-          <form action={boundStart}>
-            <Button type="submit" size="lg" className="w-full">
-              {progress ? "Resume Full Mock" : "Start Full Mock"}
-            </Button>
-          </form>
+          <FullMockStartForm action={boundStart} buttonLabel={progress ? "Resume Full Mock" : "Start Full Mock"} requireAcknowledgement={!progress} />
           <p className="text-muted-foreground text-xs">
             {progress
               ? `${progress.completedCount}/${progress.totalCount} sections complete · ~${progress.estimatedMinutesRemaining} min remaining`

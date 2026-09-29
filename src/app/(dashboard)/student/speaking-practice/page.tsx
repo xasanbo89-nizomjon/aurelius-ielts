@@ -3,9 +3,11 @@ import Link from "next/link";
 import { MessageCircle, Presentation, Shuffle, Users } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
+import { hasActiveAccess } from "@/lib/subscription";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
 
 export const metadata: Metadata = { title: "Speaking Practice" };
 
@@ -45,7 +47,10 @@ export default async function SpeakingPracticePage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  await requireStudentProfile();
+  const { profile } = await requireStudentProfile();
+  if (!(await hasActiveAccess(profile.id))) {
+    return <PremiumLockScreen feature="Speaking Practice AI" />;
+  }
   const { error } = await searchParams;
 
   return (

@@ -107,6 +107,19 @@ export async function saveAnswer(
   });
 }
 
+/**
+ * Phase 41 — Part 14/15's real "return to exactly where I was" recovery.
+ * Best-effort by design (called on every question navigation, debounced
+ * client-side): silently ignored once the attempt is already submitted,
+ * since there's nothing left to resume.
+ */
+export async function updateLastSeenQuestion(resultId: string, studentId: string, questionId: string): Promise<void> {
+  await prisma.result.updateMany({
+    where: { id: resultId, studentId, completedAt: null },
+    data: { lastSeenQuestionId: questionId },
+  });
+}
+
 export async function toggleFlag(resultId: string, studentId: string, questionId: string) {
   const result = await prisma.result.findFirst({
     where: { id: resultId, studentId, completedAt: null },

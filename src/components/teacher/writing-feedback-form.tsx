@@ -19,10 +19,12 @@ export function WritingFeedbackForm({
   submissionId,
   initialBandScore,
   initialFeedback,
+  initialCorrections,
 }: {
   submissionId: string;
   initialBandScore: number | null;
   initialFeedback: string | null;
+  initialCorrections: string | null;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -33,7 +35,7 @@ export function WritingFeedbackForm({
     formState: { errors },
   } = useForm<TeacherFeedbackInput>({
     resolver: zodResolver(teacherFeedbackSchema),
-    defaultValues: { feedback: initialFeedback ?? "", bandScore: initialBandScore ?? undefined },
+    defaultValues: { feedback: initialFeedback ?? "", corrections: initialCorrections ?? "", bandScore: initialBandScore ?? undefined },
   });
 
   async function onSubmit(values: TeacherFeedbackInput) {
@@ -73,6 +75,16 @@ export function WritingFeedbackForm({
             <Label htmlFor="feedback">Feedback</Label>
             <Textarea id="feedback" rows={6} placeholder="Write your feedback for the student…" {...register("feedback")} />
             {errors.feedback && <p className="text-destructive text-xs">{errors.feedback.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="corrections">Corrections (optional)</Label>
+            <Textarea
+              id="corrections"
+              rows={4}
+              placeholder="Specific line-level corrections, separate from your general feedback…"
+              {...register("corrections")}
+            />
+            {errors.corrections && <p className="text-destructive text-xs">{errors.corrections.message}</p>}
           </div>
           <Button type="submit" disabled={submitting}>
             {submitting && <Loader2 className="size-4 animate-spin" />}

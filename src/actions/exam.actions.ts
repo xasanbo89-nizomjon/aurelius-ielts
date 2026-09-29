@@ -115,6 +115,12 @@ export async function toggleFlagAction(
   }
 }
 
+/** Phase 41 — real last-seen-question persistence for cross-refresh recovery. Fire-and-forget from the client; never blocks navigation. */
+export async function updateLastSeenQuestionAction(resultId: string, questionId: string): Promise<void> {
+  const { profile } = await requireStudentProfile();
+  await attempts.updateLastSeenQuestion(resultId, profile.id, questionId);
+}
+
 export async function addHighlightAction(
   resultId: string,
   input: { passageId: string; text: string; startOffset: number; endOffset: number; color?: "YELLOW" | "BLUE" | "GREEN" }

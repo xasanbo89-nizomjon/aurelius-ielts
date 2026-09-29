@@ -4,17 +4,15 @@ import { redirect } from "next/navigation";
 import { requireStudentProfile } from "@/lib/session";
 import { getDraftForEdit } from "@/lib/ai/writing";
 import { getAssignedTaskForStudent } from "@/lib/writing-tasks";
-import { PageHeader } from "@/components/dashboard/page-header";
-import { WritingSubmissionForm } from "@/components/student/writing-submission-form";
+import { WritingExamWorkspace } from "@/components/student/writing-exam-workspace";
 
 export const metadata: Metadata = { title: "Writing Assignment" };
 
 /**
- * Architecture Fix — a student can only ever open a real, teacher-assigned
- * task here. `taskId` (a fresh attempt) or `draftId` (resuming one already
- * started) must resolve to a real assignment; anything else sends the
- * student back to their Assignments list rather than falling back to any
- * kind of "write your own prompt" mode.
+ * Phase 40 — moved from (dashboard) into (exam): active essay composition
+ * is real exam-taking, not dashboard browsing, so it gets the same
+ * no-sidebar/no-nav/no-streak/no-premium-badge chrome as Reading/Listening.
+ * Ownership/assignment resolution is unchanged from before the move.
  */
 export default async function NewWritingSubmissionPage({
   searchParams,
@@ -33,13 +31,5 @@ export default async function NewWritingSubmissionPage({
   const task = await getAssignedTaskForStudent(resolvedTaskId, profile.id);
   if (!task) redirect("/student/writing/tasks");
 
-  return (
-    <>
-      <PageHeader
-        title={draft ? "Continue your draft" : "Submit your writing"}
-        description="Respond to your teacher's assignment, save a draft anytime, and submit for instant AI feedback."
-      />
-      <WritingSubmissionForm task={task} draft={draft} />
-    </>
-  );
+  return <WritingExamWorkspace task={task} draft={draft} />;
 }

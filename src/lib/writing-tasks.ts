@@ -1,7 +1,8 @@
 import "server-only";
-import type { WritingTaskCategory, WritingTaskNumber, WritingTaskStatus } from "@prisma/client";
+import type { WritingTaskCategory, WritingTaskNumber, WritingTaskStatus, WritingTrainingType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { recordMediaUsage, removeMediaUsage } from "@/lib/media-library";
 import type { CreateWritingTaskInput, WritingTaskStatusValue } from "@/lib/validations/writing";
 
 /** Never trusts client-supplied student ids blindly — a teacher may only ever assign their OWN students, same single-tenant rule as everywhere else in this codebase. */
@@ -14,19 +15,25 @@ async function assertOwnStudents(teacherId: string, studentIds: string[]): Promi
 
 export async function createWritingTask(teacherId: string, input: CreateWritingTaskInput) {
   await assertOwnStudents(teacherId, input.assignedStudentIds);
-  return prisma.writingTask.create({
+  const task = await prisma.writingTask.create({
     data: {
       title: input.title,
+      trainingType: input.trainingType,
       taskNumber: input.taskNumber,
       category: input.category,
       prompt: input.prompt,
       visualDescription: input.visualDescription || null,
+      imageMediaFileId: input.imageMediaFileId || null,
       targetBand: input.targetBand ?? null,
       dueDate: input.dueDate ?? null,
       createdById: teacherId,
       assignments: { create: input.assignedStudentIds.map((studentId) => ({ studentId })) },
     },
   });
+  if (input.imageMediaFileId) {
+    await recordMediaUsage(input.imageMediaFileId, "WRITING_TASK_VISUAL", task.id);
+  }
+  return task;
 }
 
 /** Updates the task's own fields, then syncs its assignment rows to exactly match the new student list (adds the newly-assigned, removes the unassigned) — never a wholesale delete-and-recreate, so a student's real submissions against this task are never disturbed. */
@@ -48,10 +55,12 @@ export async function updateWritingTask(taskId: string, teacherId: string, input
       where: { id: taskId },
       data: {
         title: input.title,
+        trainingType: input.trainingType,
         taskNumber: input.taskNumber,
         category: input.category,
         prompt: input.prompt,
         visualDescription: input.visualDescription || null,
+        imageMediaFileId: input.imageMediaFileId || null,
         targetBand: input.targetBand ?? null,
         dueDate: input.dueDate ?? null,
       },
@@ -63,6 +72,13 @@ export async function updateWritingTask(taskId: string, teacherId: string, input
       ? [prisma.writingTaskAssignment.createMany({ data: toAdd.map((studentId) => ({ taskId, studentId })) })]
       : []),
   ]);
+
+  // Real reuse-tracking stays correct on every save, not just create: clear
+  // the old link (harmless no-op if there wasn't one) and record the new one.
+  await removeMediaUsage("WRITING_TASK_VISUAL", taskId);
+  if (input.imageMediaFileId) {
+    await recordMediaUsage(input.imageMediaFileId, "WRITING_TASK_VISUAL", taskId);
+  }
 }
 
 const VALID_STATUS_TRANSITIONS: Record<WritingTaskStatus, WritingTaskStatus[]> = {
@@ -100,6 +116,7 @@ export async function listWritingTasksForTeacher(teacherId: string) {
     include: {
       _count: { select: { submissions: true } },
       assignments: { select: { studentId: true, student: { select: { user: { select: { name: true, email: true } } } } } },
+      imageMediaFile: { select: { id: true, path: true } },
     },
   });
 }
@@ -107,17 +124,23 @@ export async function listWritingTasksForTeacher(teacherId: string) {
 export async function getWritingTaskForTeacher(taskId: string, teacherId: string) {
   return prisma.writingTask.findFirst({
     where: { id: taskId, createdById: teacherId },
-    include: { assignments: { select: { studentId: true } } },
+    include: {
+      assignments: { select: { studentId: true } },
+      imageMediaFile: { select: { id: true, path: true } },
+    },
   });
 }
 
 export type AssignedWritingTask = {
   id: string;
   title: string;
+  trainingType: WritingTrainingType;
   taskNumber: WritingTaskNumber;
   category: WritingTaskCategory;
   prompt: string;
   visualDescription: string | null;
+  /** Phase 42 — Part 11's real uploaded Task 1 visual, resolved to its real Media Library URL. Null for Task 2 or a task still only using the text description. */
+  imageUrl: string | null;
   targetBand: number | null;
   dueDate: Date | null;
 };
@@ -131,19 +154,24 @@ export type AssignedWritingTask = {
  * unpublished, archived, doesn't exist) — the caller never needs to know why.
  */
 export async function getAssignedTaskForStudent(taskId: string, studentId: string): Promise<AssignedWritingTask | null> {
-  return prisma.writingTask.findFirst({
+  const task = await prisma.writingTask.findFirst({
     where: { id: taskId, status: "PUBLISHED", assignments: { some: { studentId } } },
     select: {
       id: true,
       title: true,
+      trainingType: true,
       taskNumber: true,
       category: true,
       prompt: true,
       visualDescription: true,
+      imageMediaFile: { select: { path: true } },
       targetBand: true,
       dueDate: true,
     },
   });
+  if (!task) return null;
+  const { imageMediaFile, ...rest } = task;
+  return { ...rest, imageUrl: imageMediaFile?.path ?? null };
 }
 
 // ---------------------------------------------------------------------------
@@ -163,6 +191,7 @@ export type StudentTaskAttempt = {
 export type StudentTaskWithProgress = {
   id: string;
   title: string;
+  trainingType: WritingTrainingType;
   taskNumber: WritingTaskNumber;
   category: WritingTaskCategory;
   prompt: string;
@@ -189,6 +218,7 @@ export async function listWritingTasksForStudentWithProgress(studentId: string):
     select: {
       id: true,
       title: true,
+      trainingType: true,
       taskNumber: true,
       category: true,
       prompt: true,
@@ -236,6 +266,7 @@ export async function listWritingTasksForStudentWithProgress(studentId: string):
     return {
       id: task.id,
       title: task.title,
+      trainingType: task.trainingType,
       taskNumber: task.taskNumber,
       category: task.category,
       prompt: task.prompt,

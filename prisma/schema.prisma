@@ -82,6 +82,13 @@ enum WritingTaskNumber {
   TASK_2
 }
 
+/// Phase 42 — Part 2. Academic and General Training each have their own
+/// real Task 1/Task 2, distinguished purely as authoring/display metadata.
+enum WritingTrainingType {
+  ACADEMIC
+  GENERAL
+}
+
 enum WritingTaskCategory {
   GRAPH
   TABLE
@@ -528,6 +535,11 @@ model Result {
   durationSeconds    Int?
   /// Question ids the student flagged for review during this attempt.
   flaggedQuestionIds Json      @default("[]")
+  /// Phase 41 — the question the student was last viewing, for real
+  /// cross-refresh/cross-device "return to exactly where I was" recovery.
+  /// Not a foreign key (the question may later be deleted by the teacher) —
+  /// just an id the UI falls back past if it no longer resolves.
+  lastSeenQuestionId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -626,9 +638,19 @@ model WritingSubmission {
 
   bandScore    Float?
   feedback     String?         @db.Text
+  /// Phase 42 — Part 15's "Corrections", deliberately separate from the
+  /// general `feedback` comments field so a teacher can leave specific
+  /// line-level correction notes distinct from overall commentary.
+  corrections  String?         @db.Text
   reviewedById String?
   reviewedBy   TeacherProfile? @relation("WritingReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   reviewedAt   DateTime?
+
+  /// Phase 42 — Part 17's basic plagiarism check: set at submission time when
+  /// this essay's trimmed content exactly matches another real submission's.
+  /// A real, cheap, honest "exact duplicate" signal — never a fuzzy/AI
+  /// similarity score, which the spec explicitly didn't ask for.
+  isDuplicate Boolean @default(false)
 
   /// Set the moment a DRAFT becomes a real submission (PENDING). Null for a
   /// still-unsubmitted draft. Existing pre-Phase-13 rows were never drafts,
@@ -768,13 +790,23 @@ model WritingTask {
   id String @id @default(cuid())
 
   title             String
+  /// Phase 42 — Academic vs General Training, a real teacher-chosen field
+  /// (both share the same 4 IELTS Writing criteria, so this never changes
+  /// grading/AI analysis — it's authoring metadata + student-facing label).
+  trainingType      WritingTrainingType @default(ACADEMIC)
   taskNumber        WritingTaskNumber
   category          WritingTaskCategory
   prompt            String              @db.Text
   /// For Task 1 visual tasks (Graph/Table/Process/Map) — a text description
-  /// of the chart/diagram/map to describe, since there's no image-upload
-  /// pipeline in this phase. Null for Task 2.
+  /// of the chart/diagram/map, kept for tasks authored before real image
+  /// upload existed and as an accessible fallback. Null for Task 2.
   visualDescription String?             @db.Text
+  /// Phase 42 — Part 11's real uploaded Task 1 visual (chart/graph/table/
+  /// map/process image), reusing the Phase 38 Media Library exactly like
+  /// PassageAttachment/ArticleAttachment do. Null for Task 2 and for Task 1
+  /// tasks still only using the text description above.
+  imageMediaFileId String?
+  imageMediaFile   MediaFile? @relation(fields: [imageMediaFileId], references: [id], onDelete: SetNull)
   /// Phase 14 — supersedes the old `isPublished` boolean with a real
   /// 3-state lifecycle (Create -> Publish -> Archive), matching the Root
   /// Teacher Writing Tasks workflow. Only PUBLISHED tasks are ever visible
@@ -1433,6 +1465,8 @@ enum PremiumPlanCode {
   ONE_MONTH
   THREE_MONTHS
   SIX_MONTHS
+  /// Phase 43 — the 4th real duration tier (Monthly/3/6/12 months).
+  TWELVE_MONTHS
 }
 
 /// Phase 30 — Telegram Premium Sales. A student "buying" Premium creates one
@@ -1813,6 +1847,11 @@ enum TrialAuditAction {
   /// a student's PremiumRequest, logged into this same real audit trail.
   PREMIUM_TELEGRAM_APPROVE
   PREMIUM_TELEGRAM_REJECT
+  /// Phase 43 — a real, distinct "Cancel Subscription" admin action (status
+  /// -> CANCELLED), separate from PREMIUM_REMOVE (status -> EXPIRED, used
+  /// for "ended/lapsed" access) so Premium Analytics and the Subscription
+  /// Management table can tell a deliberate cancellation from a natural expiry.
+  PREMIUM_CANCEL
 }
 
 /// One row per root-teacher trial action — created once, never updated or
@@ -2379,6 +2418,7 @@ model MediaFile {
   usages             MediaUsage[]
   passageAttachments PassageAttachment[]
   articleAttachments ArticleAttachment[]
+  writingTaskVisuals WritingTask[]
 
   @@index([ownerId, type])
   @@index([ownerId, folderId])
@@ -2399,6 +2439,7 @@ enum MediaUsageContext {
   PASSAGE_ATTACHMENT
   ARTICLE_COVER
   ARTICLE_ATTACHMENT
+  WRITING_TASK_VISUAL
 }
 
 model MediaUsage {

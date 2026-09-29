@@ -83,6 +83,10 @@ export type WritingSubmissionReport = {
   status: WritingSubmissionStatus;
   bandScore: number | null;
   feedback: string | null;
+  /** Phase 42 — Part 15's separate teacher "Corrections" field, distinct from general feedback comments. */
+  corrections: string | null;
+  /** Phase 42 — Part 17's basic plagiarism check result, set at submission time. */
+  isDuplicate: boolean;
   reviewedAt: Date | null;
   studentName: string | null;
   createdAt: Date;
@@ -250,12 +254,30 @@ export async function saveDraft(studentId: string, input: WritingDraftInput): Pr
 export type SubmitEssayResult = { success: true; submissionId: string; analysisWarning?: string } | { success: false; error: string };
 
 /** Submits a brand-new essay OR promotes an existing draft to PENDING, then immediately runs AI analysis. Same server-derived task fields as saveDraft — never trusts client-supplied assignment metadata. */
+/**
+ * Phase 42 — Part 17's basic plagiarism check: a real, cheap "does another
+ * real student's real submission to this exact same task have identical
+ * trimmed content" lookup — never a fuzzy similarity score. Scoped to the
+ * same task, since matching text on an unrelated prompt would be
+ * coincidence, not copying.
+ */
+async function checkExactDuplicate(taskId: string, studentId: string, content: string): Promise<boolean> {
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  const match = await prisma.writingSubmission.findFirst({
+    where: { taskId, content: trimmed, studentId: { not: studentId }, status: { not: "DRAFT" } },
+    select: { id: true },
+  });
+  return match !== null;
+}
+
 export async function submitEssay(studentId: string, input: SubmitEssayInput): Promise<SubmitEssayResult> {
   const task = await getAssignedTaskForStudent(input.taskId, studentId);
   if (!task) return { success: false, error: "This assignment isn't available to you." };
   const { taskType, category, prompt } = taskFields(task);
   const wordCount = countWords(input.content);
   const now = new Date();
+  const isDuplicate = await checkExactDuplicate(task.id, studentId, input.content);
 
   let submissionId: string;
   if (input.submissionId) {
@@ -265,12 +287,12 @@ export async function submitEssay(studentId: string, input: SubmitEssayInput): P
 
     await prisma.writingSubmission.update({
       where: { id: existing.id },
-      data: { taskId: task.id, taskType, category, prompt, content: input.content, wordCount, status: "PENDING", submittedAt: now },
+      data: { taskId: task.id, taskType, category, prompt, content: input.content, wordCount, status: "PENDING", submittedAt: now, isDuplicate },
     });
     submissionId = existing.id;
   } else {
     const created = await prisma.writingSubmission.create({
-      data: { studentId, taskId: task.id, taskType, category, prompt, content: input.content, wordCount, status: "PENDING", submittedAt: now },
+      data: { studentId, taskId: task.id, taskType, category, prompt, content: input.content, wordCount, status: "PENDING", submittedAt: now, isDuplicate },
     });
     submissionId = created.id;
   }
@@ -499,6 +521,7 @@ export async function addTeacherFeedback(submissionId: string, teacherId: string
     where: { id: submissionId },
     data: {
       feedback: input.feedback,
+      corrections: input.corrections?.trim() || null,
       bandScore: input.bandScore ?? null,
       status: "REVIEWED",
       reviewedById: teacherId,
@@ -536,6 +559,8 @@ function toReport(submission: {
   status: WritingSubmissionStatus;
   bandScore: number | null;
   feedback: string | null;
+  corrections: string | null;
+  isDuplicate: boolean;
   reviewedAt: Date | null;
   createdAt: Date;
   student: { user: { name: string | null } };
@@ -553,6 +578,8 @@ function toReport(submission: {
     status: submission.status,
     bandScore: submission.bandScore,
     feedback: submission.feedback,
+    corrections: submission.corrections,
+    isDuplicate: submission.isDuplicate,
     reviewedAt: submission.reviewedAt,
     studentName: submission.student.user.name,
     createdAt: submission.createdAt,
@@ -598,7 +625,16 @@ export type WritingAnalytics = {
   latestBand: number | null;
   essaysSubmitted: number;
   trend: WritingTrend;
+  /** Phase 42 — Part 16's real "Weak Areas": the real IELTS criteria with the lowest average band across every analyzed essay, never a fabricated label. */
+  weakAreas: string[];
 };
+
+const CRITERION_LABELS = {
+  grammarBand: "Grammar",
+  vocabularyBand: "Vocabulary",
+  coherenceBand: "Coherence & Cohesion",
+  taskResponseBand: "Task Achievement",
+} as const;
 
 /** Every number here is a real query against WritingSubmission/WritingAnalysis — no placeholder data. Drafts never count as "submitted". */
 export async function getWritingAnalytics(studentId: string): Promise<WritingAnalytics> {
@@ -606,14 +642,18 @@ export async function getWritingAnalytics(studentId: string): Promise<WritingAna
     prisma.writingSubmission.findMany({
       where: { studentId, status: { not: "DRAFT" }, analysis: { isNot: null } },
       orderBy: { createdAt: "asc" },
-      select: { analysis: { select: { estimatedBand: true } } },
+      select: {
+        analysis: {
+          select: { estimatedBand: true, grammarBand: true, vocabularyBand: true, coherenceBand: true, taskResponseBand: true },
+        },
+      },
     }),
     prisma.writingSubmission.count({ where: { studentId, status: { not: "DRAFT" } } }),
   ]);
 
   const bands = analyzed.map((s) => s.analysis!.estimatedBand);
   if (bands.length === 0) {
-    return { averageBand: null, bestBand: null, latestBand: null, essaysSubmitted, trend: "NOT_ENOUGH_DATA" };
+    return { averageBand: null, bestBand: null, latestBand: null, essaysSubmitted, trend: "NOT_ENOUGH_DATA", weakAreas: [] };
   }
 
   const averageBand = Math.round((bands.reduce((sum, b) => sum + b, 0) / bands.length) * 10) / 10;
@@ -630,7 +670,20 @@ export async function getWritingAnalytics(studentId: string): Promise<WritingAna
     trend = diff > 0.25 ? "IMPROVING" : diff < -0.25 ? "DECLINING" : "STABLE";
   }
 
-  return { averageBand, bestBand, latestBand, essaysSubmitted, trend };
+  const criterionAverages = (Object.keys(CRITERION_LABELS) as (keyof typeof CRITERION_LABELS)[])
+    .map((key) => {
+      const values = analyzed.map((s) => s.analysis![key]).filter((v): v is number => v != null);
+      return values.length > 0 ? { key, average: values.reduce((sum, v) => sum + v, 0) / values.length } : null;
+    })
+    .filter((c): c is { key: keyof typeof CRITERION_LABELS; average: number } => c !== null);
+
+  let weakAreas: string[] = [];
+  if (criterionAverages.length > 0) {
+    const lowest = Math.min(...criterionAverages.map((c) => c.average));
+    weakAreas = criterionAverages.filter((c) => c.average <= lowest + 0.25).map((c) => CRITERION_LABELS[c.key]);
+  }
+
+  return { averageBand, bestBand, latestBand, essaysSubmitted, trend, weakAreas };
 }
 
 // ---------------------------------------------------------------------------

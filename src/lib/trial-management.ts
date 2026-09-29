@@ -1,8 +1,9 @@
 import "server-only";
-import type { TrialAuditAction } from "@prisma/client";
+import type { TrialAuditAction, SubscriptionStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { addDays, getSubscriptionSummary, TRIAL_DURATION_DAYS, type SubscriptionSummary } from "@/lib/subscription";
+import { PREMIUM_PLANS } from "@/lib/premium-plans";
 
 const TRIAL_EXTENSION_DAYS = 30;
 
@@ -193,10 +194,132 @@ export async function removePremium(isActingTeacherRoot: boolean, rootTeacherId:
   return { success: true, summary: await getSubscriptionSummary(studentId) };
 }
 
+/**
+ * Phase 43 — "Cancel Subscription": root-teacher-only, a real, distinct
+ * CANCELLED status — separate from removePremium's EXPIRED (a natural
+ * lapse) so Premium Analytics and the Subscription Management table can
+ * tell a deliberate cancellation from an ordinary expiry. Access ends
+ * immediately either way, since hasAccess only ever checks TRIAL/ACTIVE.
+ */
+export async function cancelSubscription(isActingTeacherRoot: boolean, rootTeacherId: string, studentId: string): Promise<TrialActionResult> {
+  if (!isActingTeacherRoot) {
+    return { success: false, error: "Only a root administrator can manage student subscriptions." };
+  }
+  try {
+    await assertStudentExists(studentId);
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Student not found." };
+  }
+
+  await getSubscriptionSummary(studentId);
+
+  await prisma.$transaction(async (tx) => {
+    const latest = await tx.subscription.findFirstOrThrow({ where: { studentId }, orderBy: { createdAt: "desc" } });
+    const previousExpiryDate = latest.endDate;
+
+    await tx.subscription.update({ where: { id: latest.id }, data: { status: "CANCELLED" } });
+
+    await tx.trialAuditLog.create({
+      data: { rootTeacherId, studentId, action: "PREMIUM_CANCEL", previousExpiryDate, newExpiryDate: previousExpiryDate ?? new Date() },
+    });
+  });
+
+  return { success: true, summary: await getSubscriptionSummary(studentId) };
+}
+
 /** Batched for the student roster page — bounded by pagination (≤10 rows), reuses the same single-source-of-truth summary every other surface uses. */
 export async function getStudentTrialInfoForRoster(studentIds: string[]): Promise<Record<string, SubscriptionSummary>> {
   const entries = await Promise.all(studentIds.map(async (id) => [id, await getSubscriptionSummary(id)] as const));
   return Object.fromEntries(entries);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 43 — Admin Subscription Management
+// ---------------------------------------------------------------------------
+
+export type SubscriberRow = {
+  studentId: string;
+  name: string | null;
+  email: string;
+  planLabel: string;
+  status: SubscriptionStatus;
+  startDate: Date;
+  endDate: Date | null;
+  remainingDays: number | null;
+};
+
+const ADMIN_GRANT_LABEL = "Admin Grant";
+const COIN_REDEMPTION_LABEL = "Coin Redemption";
+
+/**
+ * Every real Subscription row, platform-wide, joined with the real plan it
+ * actually came from — never a guess. A Telegram-sourced row's real plan
+ * name comes from its own most recent APPROVED PremiumRequest (the actual
+ * plan the student bought); everything else is derived from the
+ * Subscription's own real `source`/`planId`. Root-teacher-only, same
+ * scope as every other platform-wide admin view in this codebase.
+ */
+export async function listSubscribersForRoot(status?: SubscriptionStatus | "ALL"): Promise<SubscriberRow[]> {
+  const subscriptions = await prisma.subscription.findMany({
+    where: status && status !== "ALL" ? { status } : undefined,
+    orderBy: { updatedAt: "desc" },
+    include: {
+      student: { select: { user: { select: { name: true, email: true } } } },
+      plan: { select: { name: true } },
+    },
+  });
+  if (subscriptions.length === 0) return [];
+
+  const telegramStudentIds = subscriptions.filter((s) => s.source === "TELEGRAM_PURCHASE").map((s) => s.studentId);
+  const approvedRequests =
+    telegramStudentIds.length > 0
+      ? await prisma.premiumRequest.findMany({
+          where: { studentId: { in: telegramStudentIds }, status: "APPROVED" },
+          orderBy: { reviewedAt: "desc" },
+          select: { studentId: true, planCode: true },
+        })
+      : [];
+  const latestPlanCodeByStudent = new Map<string, string>();
+  for (const request of approvedRequests) {
+    if (!latestPlanCodeByStudent.has(request.studentId)) latestPlanCodeByStudent.set(request.studentId, request.planCode);
+  }
+
+  const now = new Date();
+
+  return subscriptions.map((sub) => {
+    let planLabel: string;
+    if (sub.source === "TELEGRAM_PURCHASE") {
+      const planCode = latestPlanCodeByStudent.get(sub.studentId);
+      planLabel = planCode ? (PREMIUM_PLANS.find((p) => p.code === planCode)?.title ?? "Telegram Purchase") : "Telegram Purchase";
+    } else if (sub.source === "ADMIN_GRANT") {
+      planLabel = ADMIN_GRANT_LABEL;
+    } else if (sub.source === "COIN_REDEMPTION") {
+      planLabel = COIN_REDEMPTION_LABEL;
+    } else if (sub.source === "DIRECT_PAYMENT") {
+      planLabel = sub.plan?.name ?? "Direct Payment";
+    } else {
+      planLabel = "Free Trial";
+    }
+
+    // A CANCELLED row deliberately keeps its historical endDate (see
+    // cancelSubscription) rather than overwriting it — so remainingDays must
+    // only ever reflect real, currently-possible access (TRIAL/ACTIVE),
+    // never a leftover future timestamp on a status that already grants zero access.
+    const hasRealAccess = sub.status === "TRIAL" || sub.status === "ACTIVE";
+    const remainingDays =
+      hasRealAccess && sub.endDate ? Math.max(0, Math.ceil((sub.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : hasRealAccess ? null : 0;
+
+    return {
+      studentId: sub.studentId,
+      name: sub.student.user.name,
+      email: sub.student.user.email,
+      planLabel,
+      status: sub.status,
+      startDate: sub.startDate,
+      endDate: sub.endDate,
+      remainingDays,
+    };
+  });
 }
 
 export type TrialAnalytics = {

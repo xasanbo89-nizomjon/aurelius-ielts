@@ -6,6 +6,7 @@ import type {
   WritingTaskCategory,
   WritingTaskNumber,
   WritingTaskStatus,
+  WritingTrainingType,
 } from "@prisma/client";
 import type { GrammarIssueCategory } from "@/lib/ai/prompts/writing-analysis";
 import { Headphones, BookOpen, PenLine, Mic, type LucideIcon } from "lucide-react";
@@ -69,6 +70,11 @@ export const SUBSCRIPTION_STATUS_VARIANTS: Record<SubscriptionStatus, "accent" |
 export const WRITING_TASK_NUMBER_LABELS: Record<WritingTaskNumber, string> = {
   TASK_1: "Task 1",
   TASK_2: "Task 2",
+};
+
+export const WRITING_TRAINING_TYPE_LABELS: Record<WritingTrainingType, string> = {
+  ACADEMIC: "Academic",
+  GENERAL: "General Training",
 };
 
 export const WRITING_TASK_CATEGORY_LABELS: Record<WritingTaskCategory, string> = {

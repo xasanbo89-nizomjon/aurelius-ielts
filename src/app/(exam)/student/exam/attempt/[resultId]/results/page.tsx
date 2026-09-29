@@ -172,7 +172,7 @@ export default async function ExamResultsPage({
         <div className="flex flex-wrap justify-center gap-3">
           {fullMockAttemptId ? (
             <Button asChild>
-              <Link href={`/student/full-mock/attempt/${fullMockAttemptId}`}>Continue to next section</Link>
+              <Link href={`/student/full-mock/attempt/${fullMockAttemptId}/transition?from=${attempt.skill}`}>Continue to next section</Link>
             </Button>
           ) : (
             <>

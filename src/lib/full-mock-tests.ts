@@ -174,6 +174,7 @@ export async function saveFullMockWritingTask(fullMockTestId: string, teacherId:
 
   const task = await createWritingTask(teacherId, {
     title: input.title,
+    trainingType: "ACADEMIC",
     taskNumber: input.taskNumber,
     category: input.category,
     prompt: input.prompt,
@@ -431,6 +432,8 @@ export async function getPublishedFullMockTestDetail(id: string) {
 
   const readingMinutes = test.readingSections.reduce((sum, s) => sum + (s.mockTest.durationMinutes ?? 0), 0);
   const listeningMinutes = test.listeningSections.reduce((sum, s) => sum + (s.mockTest.durationMinutes ?? 0), 0);
+  const readingQuestionCount = test.readingSections.reduce((sum, s) => sum + s.mockTest._count.questions, 0);
+  const listeningQuestionCount = test.listeningSections.reduce((sum, s) => sum + s.mockTest._count.questions, 0);
 
   return {
     id: test.id,
@@ -439,5 +442,7 @@ export async function getPublishedFullMockTestDetail(id: string) {
     estimatedBandMin: test.estimatedBandMin,
     estimatedBandMax: test.estimatedBandMax,
     totalDurationMinutes: readingMinutes + listeningMinutes + FULL_MOCK_WRITING_MINUTES + FULL_MOCK_SPEAKING_MINUTES,
+    /** Phase 40 — Part 11's "Number of Questions" on the instructions screen. Reading/Listening only — Writing/Speaking are open-response, not question-counted. */
+    totalQuestionCount: readingQuestionCount + listeningQuestionCount,
   };
 }

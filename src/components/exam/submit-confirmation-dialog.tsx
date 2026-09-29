@@ -20,6 +20,7 @@ export function SubmitConfirmationDialog({
   flaggedCount,
   submitting,
   onConfirm,
+  onReview,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -28,6 +29,8 @@ export function SubmitConfirmationDialog({
   flaggedCount: number;
   submitting: boolean;
   onConfirm: () => void;
+  /** Phase 41 — Part 8's "Review Answers" escape hatch, opens the Review Center filtered to what needs attention instead of submitting blind. */
+  onReview: () => void;
 }) {
   const unansweredCount = totalQuestions - answeredCount;
 
@@ -37,7 +40,9 @@ export function SubmitConfirmationDialog({
         <DialogHeader>
           <DialogTitle>Submit your test?</DialogTitle>
           <DialogDescription>
-            Once submitted, you won&apos;t be able to change your answers.
+            {unansweredCount > 0
+              ? `You still have ${unansweredCount} unanswered question${unansweredCount === 1 ? "" : "s"}. Once submitted, you won't be able to change your answers.`
+              : "Once submitted, you won't be able to change your answers."}
           </DialogDescription>
         </DialogHeader>
 
@@ -71,13 +76,27 @@ export function SubmitConfirmationDialog({
         </dl>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Keep working
-          </Button>
-          <Button onClick={onConfirm} disabled={submitting}>
-            {submitting && <Loader2 className="size-4 animate-spin" />}
-            Submit test
-          </Button>
+          {unansweredCount > 0 ? (
+            <>
+              <Button variant="outline" onClick={onReview} disabled={submitting}>
+                Review Answers
+              </Button>
+              <Button onClick={onConfirm} disabled={submitting}>
+                {submitting && <Loader2 className="size-4 animate-spin" />}
+                Submit Anyway
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+                Keep working
+              </Button>
+              <Button onClick={onConfirm} disabled={submitting}>
+                {submitting && <Loader2 className="size-4 animate-spin" />}
+                Submit test
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -8,6 +8,7 @@ import {
   extendStudentTrial,
   grantPremium,
   removePremium,
+  cancelSubscription,
   type TrialActionResult,
 } from "@/lib/trial-management";
 import { adminAdjustCoins, type AdminCoinAdjustmentResult } from "@/lib/coins";
@@ -38,14 +39,30 @@ export async function extendStudentTrialAction(studentId: string): Promise<Trial
 export async function grantPremiumAction(studentId: string, days?: number): Promise<TrialActionResult> {
   const { profile } = await requireTeacherProfile();
   const result = await grantPremium(profile.isRootTeacher, profile.id, studentId, days);
-  if (result.success) revalidatePath("/teacher/students");
+  if (result.success) {
+    revalidatePath("/teacher/students");
+    revalidatePath("/teacher/subscriptions");
+  }
+  return result;
+}
+
+export async function cancelSubscriptionAction(studentId: string): Promise<TrialActionResult> {
+  const { profile } = await requireTeacherProfile();
+  const result = await cancelSubscription(profile.isRootTeacher, profile.id, studentId);
+  if (result.success) {
+    revalidatePath("/teacher/students");
+    revalidatePath("/teacher/subscriptions");
+  }
   return result;
 }
 
 export async function removePremiumAction(studentId: string): Promise<TrialActionResult> {
   const { profile } = await requireTeacherProfile();
   const result = await removePremium(profile.isRootTeacher, profile.id, studentId);
-  if (result.success) revalidatePath("/teacher/students");
+  if (result.success) {
+    revalidatePath("/teacher/students");
+    revalidatePath("/teacher/subscriptions");
+  }
   return result;
 }
 

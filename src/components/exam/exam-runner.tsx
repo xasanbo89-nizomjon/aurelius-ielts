@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { HighlightColor, QuestionType } from "@prisma/client";
-import { Bookmark, ChevronLeft, ChevronRight, Flag, Home, List, Loader2, Maximize2, Minimize2, NotebookPen } from "lucide-react";
+import { Bookmark, ChevronLeft, ChevronRight, ClipboardList, Flag, Home, List, Loader2, Maximize2, Minimize2, NotebookPen } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -14,6 +14,7 @@ import {
   saveNoteAction,
   submitAttemptAction,
   toggleFlagAction,
+  updateLastSeenQuestionAction,
 } from "@/actions/exam.actions";
 import { toggleQuestionBookmarkAction } from "@/actions/bookmarks.actions";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ import { QuestionNavigator, type NavigatorQuestionState } from "@/components/exa
 import { YourAnswersPanel, type AnswerSummaryQuestion } from "@/components/exam/your-answers-panel";
 import { ListeningPartNav, type ListeningPart } from "@/components/exam/listening-part-nav";
 import { SubmitConfirmationDialog } from "@/components/exam/submit-confirmation-dialog";
+import { ReviewCenter } from "@/components/exam/review-center";
 import { LeaveTestDialog } from "@/components/exam/leave-test-dialog";
 import { PassagePanel } from "@/components/exam/passage-panel";
 import { NotesDrawer, type ExamNote } from "@/components/exam/notes-drawer";
@@ -68,6 +70,7 @@ export function ExamRunner({
   initialBookmarks,
   initialHighlights,
   initialNotes,
+  initialLastSeenQuestionId,
 }: {
   resultId: string;
   testTitle: string;
@@ -81,6 +84,7 @@ export function ExamRunner({
   initialBookmarks: string[];
   initialHighlights: ExamHighlight[];
   initialNotes: ExamNoteRecord[];
+  initialLastSeenQuestionId: string | null;
 }) {
   const [answers, setAnswers] = useState<Record<string, unknown>>(initialAnswers);
   const [flags, setFlags] = useState<Set<string>>(() => new Set(initialFlags));
@@ -94,15 +98,31 @@ export function ExamRunner({
   // answers/timer/flags/bookmarks already restore for real from the server
   // regardless of whether this happens to be available.
   const [sectionIndex, setSectionIndex] = useState(0);
+  // Phase 41 — Part 3/14/15: the exact question the student was last on,
+  // real and server-backed (Result.lastSeenQuestionId) — takes priority over
+  // the older Phase 24 client-only section memory below, which now only
+  // serves as a fallback for attempts started before this field existed.
+  const [activeQuestionId, setActiveQuestionId] = useState<string>(
+    () => (initialLastSeenQuestionId && questions.some((q) => q.id === initialLastSeenQuestionId) ? initialLastSeenQuestionId : "")
+  );
 
   useEffect(() => {
+    if (initialLastSeenQuestionId) {
+      const question = questions.find((q) => q.id === initialLastSeenQuestionId);
+      const orderedPassages = [...passages].sort((a, b) => a.orderIndex - b.orderIndex);
+      const targetSection = question ? orderedPassages.findIndex((p) => p.id === question.passageId) : -1;
+      if (targetSection >= 0) {
+        setSectionIndex(targetSection);
+        return;
+      }
+    }
     try {
       const saved = window.localStorage.getItem(`exam-section-${resultId}`);
       if (saved) setSectionIndex(Number(saved) || 0);
     } catch {
       // Private browsing / storage disabled — just starts from section 0.
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore, resultId is stable for this component's lifetime
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore, resultId/initialLastSeenQuestionId are stable for this component's lifetime
   }, []);
 
   useEffect(() => {
@@ -116,6 +136,7 @@ export function ExamRunner({
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [submitting, startSubmitTransition] = useTransition();
   const [pendingSaves, setPendingSaves] = useState(0);
@@ -123,6 +144,7 @@ export function ExamRunner({
   const router = useRouter();
 
   const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const lastSeenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const examContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -172,6 +194,15 @@ export function ExamRunner({
 
   const answeredCount = navigatorItems.filter((item) => item.answered).length;
   const completionPercent = sortedQuestions.length > 0 ? Math.round((answeredCount / sortedQuestions.length) * 100) : 0;
+
+  // Phase 41 — Part 3's real current-question tracking, self-healing if
+  // activeQuestionId ever references a question outside the current data
+  // (stale localStorage, teacher edited the test) by falling back to the
+  // current section's first question.
+  const effectiveActiveQuestionId =
+    activeQuestionId && sortedQuestions.some((q) => q.id === activeQuestionId) ? activeQuestionId : (currentQuestions[0]?.id ?? "");
+  const activeQuestionNumber = sortedQuestions.findIndex((q) => q.id === effectiveActiveQuestionId) + 1;
+  const activeSectionLabel = testType === "LISTENING" ? currentPassage?.title || `Part ${sectionIndex + 1}` : `Passage ${sectionIndex + 1}`;
 
   const listeningParts: ListeningPart[] = useMemo(
     () =>
@@ -239,17 +270,57 @@ export function ExamRunner({
     control?.focus();
   }
 
+  /** Phase 41 — Part 14/15: debounced real persistence of "where the student currently is", so a refresh (or a different device) resumes at the exact question, not just the section. */
+  function persistLastSeenQuestion(questionId: string) {
+    if (lastSeenTimer.current) clearTimeout(lastSeenTimer.current);
+    lastSeenTimer.current = setTimeout(() => {
+      void updateLastSeenQuestionAction(resultId, questionId);
+    }, 800);
+  }
+
   function goToQuestion(questionId: string) {
     const question = sortedQuestions.find((q) => q.id === questionId);
     if (!question) return;
     const targetSection = sortedPassages.findIndex((p) => p.id === question.passageId);
     if (targetSection >= 0 && targetSection !== sectionIndex) setSectionIndex(targetSection);
+    setActiveQuestionId(questionId);
+    persistLastSeenQuestion(questionId);
     setNavOpen(false);
+    setReviewOpen(false);
     requestAnimationFrame(() => {
       document.getElementById(`question-${questionId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       focusQuestionInput(questionId);
     });
   }
+
+  /** Section-level navigation (Reading's Prev/Next, Listening's part tabs) also resets the tracked active question to that section's first one, keeping the navigator's "current question" ring accurate. */
+  function goToSection(index: number) {
+    setSectionIndex(index);
+    const passage = sortedPassages[index];
+    const first = sortedQuestions.find((q) => (passage ? q.passageId === passage.id : q.passageId == null));
+    if (first) {
+      setActiveQuestionId(first.id);
+      persistLastSeenQuestion(first.id);
+    }
+  }
+
+  /** Phase 41 — Part 11's keyboard shortcuts: Left/Right jump to the previous/next question in real test order. Only fires when nothing is specifically focused (no active input, textarea, radio, or combobox), so it never hijacks native arrow-key behavior inside an answer control. */
+  useEffect(() => {
+    function handleKeydown(event: KeyboardEvent) {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+      if (document.activeElement && document.activeElement !== document.body) return;
+      const currentIndex = sortedQuestions.findIndex((q) => q.id === effectiveActiveQuestionId);
+      if (currentIndex === -1) return;
+      const nextIndex = event.key === "ArrowRight" ? currentIndex + 1 : currentIndex - 1;
+      const target = sortedQuestions[nextIndex];
+      if (!target) return;
+      event.preventDefault();
+      goToQuestion(target.id);
+    }
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- goToQuestion reads fresh state via closure each call; sortedQuestions/effectiveActiveQuestionId are the real reactive deps
+  }, [sortedQuestions, effectiveActiveQuestionId]);
 
   // Listening: auto-focus the first answer box of a part the moment it loads (new part navigation, or the very first part on load) — a real IELTS Listening habit, since audio starts before the student has clicked anything.
   useEffect(() => {
@@ -427,9 +498,9 @@ export function ExamRunner({
           {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
           <span className="hidden xl:inline">{focusMode ? "Exit Focus" : "Focus Mode"}</span>
         </Button>
-        <Button variant="outline" size="sm" className="lg:hidden" onClick={() => setNavOpen(true)}>
-          <List className="size-4" />
-          <span className="hidden sm:inline">Questions</span>
+        <Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>
+          <ClipboardList className="size-4" />
+          <span className="hidden sm:inline">Review</span>
         </Button>
         {testType === "READING" && (
           <Button size="sm" onClick={() => setSubmitDialogOpen(true)}>
@@ -437,6 +508,19 @@ export function ExamRunner({
           </Button>
         )}
       </header>
+
+      {/* Phase 41 — Part 3/12: real current-position tracking + a top progress bar, always visible regardless of skill. */}
+      <div className="border-border/70 flex shrink-0 items-center gap-3 border-b px-4 py-1.5 sm:px-6">
+        <span className="text-muted-foreground shrink-0 text-xs font-medium tabular-nums">
+          {activeSectionLabel} · Question {activeQuestionNumber > 0 ? activeQuestionNumber : "–"} of {sortedQuestions.length}
+        </span>
+        <div className="bg-secondary h-1.5 min-w-0 flex-1 overflow-hidden rounded-full">
+          <div className="bg-success h-full rounded-full transition-all duration-500" style={{ width: `${completionPercent}%` }} />
+        </div>
+        <span className="text-muted-foreground hidden shrink-0 text-xs font-medium tabular-nums sm:inline">
+          {answeredCount} / {sortedQuestions.length} Answered
+        </span>
+      </div>
 
       <div className="flex flex-1 overflow-hidden">
         {testType === "READING" ? (
@@ -523,14 +607,14 @@ export function ExamRunner({
               <TabsContent value="navigator">
                 <QuestionNavigator
                   questions={navigatorItems}
-                  currentQuestionId={currentQuestions[0]?.id ?? ""}
+                  currentQuestionId={effectiveActiveQuestionId}
                   onSelect={goToQuestion}
                 />
               </TabsContent>
               <TabsContent value="answers">
                 <YourAnswersPanel
                   questions={answerSummaryQuestions}
-                  currentQuestionId={currentQuestions[0]?.id ?? ""}
+                  currentQuestionId={effectiveActiveQuestionId}
                   onSelect={goToQuestion}
                 />
               </TabsContent>
@@ -539,36 +623,33 @@ export function ExamRunner({
         )}
       </div>
 
+      {/* Phase 41 — Part 10's mobile floating navigator button. Replaces the old header "Questions" button (header was already crowded), badge shows how many questions still need attention. */}
+      <button
+        type="button"
+        onClick={() => setNavOpen(true)}
+        aria-label="Open question navigator"
+        className="bg-primary text-primary-foreground shadow-soft-lg fixed right-5 bottom-5 z-30 flex size-14 items-center justify-center rounded-full lg:hidden"
+      >
+        <List className="size-5" />
+        {sortedQuestions.length - answeredCount > 0 && (
+          <span className="bg-accent text-accent-foreground absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full text-[10px] font-semibold">
+            {sortedQuestions.length - answeredCount}
+          </span>
+        )}
+      </button>
+
       {testType === "LISTENING" ? (
         <footer className="border-border/70 bg-background/95 flex shrink-0 flex-col gap-2.5 border-t px-4 py-3 backdrop-blur-sm sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <ListeningPartNav parts={listeningParts} currentIndex={sectionIndex} onSelect={setSectionIndex} />
-            <div className="flex shrink-0 items-center gap-3">
-              <div className="hidden items-center gap-2 sm:flex">
-                <div className="bg-secondary h-1.5 w-24 overflow-hidden rounded-full">
-                  <div
-                    className="bg-success h-full rounded-full transition-all duration-500"
-                    style={{ width: `${completionPercent}%` }}
-                  />
-                </div>
-                <span className="text-muted-foreground w-9 shrink-0 text-xs font-medium tabular-nums">
-                  {completionPercent}%
-                </span>
-              </div>
-              <Button size="sm" onClick={() => setSubmitDialogOpen(true)}>
-                Submit
-              </Button>
-            </div>
+            <ListeningPartNav parts={listeningParts} currentIndex={sectionIndex} onSelect={goToSection} />
+            <Button size="sm" onClick={() => setSubmitDialogOpen(true)}>
+              Submit
+            </Button>
           </div>
         </footer>
       ) : (
         <footer className="border-border/70 flex h-16 shrink-0 items-center justify-between border-t px-4 sm:px-6">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setSectionIndex((i) => Math.max(0, i - 1))}
-            disabled={sectionIndex === 0}
-          >
+          <Button variant="outline" size="sm" onClick={() => goToSection(Math.max(0, sectionIndex - 1))} disabled={sectionIndex === 0}>
             <ChevronLeft className="size-4" /> Previous
           </Button>
           <span className="text-muted-foreground text-sm">
@@ -577,7 +658,7 @@ export function ExamRunner({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setSectionIndex((i) => Math.min(sortedPassages.length - 1, i + 1))}
+            onClick={() => goToSection(Math.min(sortedPassages.length - 1, sectionIndex + 1))}
             disabled={sectionIndex >= sortedPassages.length - 1}
           >
             Next <ChevronRight className="size-4" />
@@ -600,14 +681,14 @@ export function ExamRunner({
               <TabsContent value="navigator">
                 <QuestionNavigator
                   questions={navigatorItems}
-                  currentQuestionId={currentQuestions[0]?.id ?? ""}
+                  currentQuestionId={effectiveActiveQuestionId}
                   onSelect={goToQuestion}
                 />
               </TabsContent>
               <TabsContent value="answers">
                 <YourAnswersPanel
                   questions={answerSummaryQuestions}
-                  currentQuestionId={currentQuestions[0]?.id ?? ""}
+                  currentQuestionId={effectiveActiveQuestionId}
                   onSelect={goToQuestion}
                 />
               </TabsContent>
@@ -625,6 +706,18 @@ export function ExamRunner({
         onDelete={handleDeleteNote}
       />
 
+      <ReviewCenter
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        questions={navigatorItems}
+        currentQuestionId={effectiveActiveQuestionId}
+        onSelect={goToQuestion}
+        onSubmit={() => {
+          setReviewOpen(false);
+          setSubmitDialogOpen(true);
+        }}
+      />
+
       <SubmitConfirmationDialog
         open={submitDialogOpen}
         onOpenChange={setSubmitDialogOpen}
@@ -633,6 +726,10 @@ export function ExamRunner({
         flaggedCount={flags.size}
         submitting={submitting}
         onConfirm={handleSubmit}
+        onReview={() => {
+          setSubmitDialogOpen(false);
+          setReviewOpen(true);
+        }}
       />
 
       <LeaveTestDialog

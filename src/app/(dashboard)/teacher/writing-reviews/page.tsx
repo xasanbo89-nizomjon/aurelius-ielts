@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Clock, PenLine, TrendingUp, Users } from "lucide-react";
+import { AlertTriangle, Clock, PenLine, TrendingUp, Users } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -150,9 +150,12 @@ export default async function TeacherWritingReviewsPage({
                   <TableCell className="font-medium">
                     <Link
                       href={`/teacher/writing-reviews/${submission.id}`}
-                      className="hover:text-accent focus-visible:text-accent underline-offset-4 outline-none focus-visible:underline"
+                      className="hover:text-accent focus-visible:text-accent inline-flex items-center gap-1.5 underline-offset-4 outline-none focus-visible:underline"
                     >
                       {submission.student.user.name ?? "—"}
+                      {submission.isDuplicate && (
+                        <AlertTriangle className="text-destructive size-3.5 shrink-0" aria-label="Exact duplicate detected" />
+                      )}
                     </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{submission.taskType}</TableCell>

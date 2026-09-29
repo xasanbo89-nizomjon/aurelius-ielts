@@ -1,17 +1,30 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarClock, CheckCircle2, History, Send } from "lucide-react";
+import { CalendarClock, Check, CheckCircle2, History, Send, X } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getSubscriptionSummary } from "@/lib/subscription";
 import { PREMIUM_PLANS } from "@/lib/premium-plans";
 import { getTelegramOwnerUsername } from "@/lib/telegram";
 import { PageHeader } from "@/components/dashboard/page-header";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PremiumPlanCard } from "@/components/student/premium-plan-card";
 
 export const metadata: Metadata = { title: "Premium" };
+
+/** Phase 43 — Part "Feature comparison". Every row names a real feature that already exists in the product — nothing hypothetical. */
+const FEATURE_COMPARISON: { feature: string; free: boolean; premium: boolean }[] = [
+  { feature: "Cambridge Reading & Listening Tests", free: true, premium: true },
+  { feature: "Full Mock Tests (Listening + Reading + Writing + Speaking)", free: false, premium: true },
+  { feature: "Speaking Practice AI feedback", free: false, premium: true },
+  { feature: "Writing AI Analysis (grammar, vocabulary, band estimate)", free: false, premium: true },
+  { feature: "Vocabulary Learning Center", free: false, premium: true },
+  { feature: "Advanced Analytics (Band Score Center)", free: false, premium: true },
+  { feature: "Leveled Articles", free: false, premium: true },
+  { feature: "AI Study Coach", free: false, premium: true },
+];
 
 export default async function StudentPremiumPage() {
   const { user, profile } = await requireStudentProfile();
@@ -56,11 +69,52 @@ export default async function StudentPremiumPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-6 pt-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 pt-2 sm:grid-cols-2 lg:grid-cols-4">
         {PREMIUM_PLANS.map((plan) => (
           <PremiumPlanCard key={plan.code} plan={plan} studentEmail={user.email ?? ""} studentId={profile.id} />
         ))}
       </div>
+
+      <section className="space-y-4">
+        <h2 className="font-display text-xl font-medium tracking-tight">Free vs Premium</h2>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Feature comparison</CardTitle>
+          </CardHeader>
+          <CardContent className="px-0 pt-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Feature</TableHead>
+                  <TableHead className="text-center">Free / Trial</TableHead>
+                  <TableHead className="text-center">Premium</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {FEATURE_COMPARISON.map((row) => (
+                  <TableRow key={row.feature}>
+                    <TableCell className="font-medium">{row.feature}</TableCell>
+                    <TableCell className="text-center">
+                      {row.free ? (
+                        <Check className="text-success mx-auto size-4" aria-label="Included" />
+                      ) : (
+                        <X className="text-muted-foreground/50 mx-auto size-4" aria-label="Not included" />
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {row.premium ? (
+                        <Check className="text-success mx-auto size-4" aria-label="Included" />
+                      ) : (
+                        <X className="text-muted-foreground/50 mx-auto size-4" aria-label="Not included" />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </section>
 
       <Card className="gap-0 py-5">
         <CardContent className="flex items-start gap-3">

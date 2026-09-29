@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { requireStudentProfile } from "@/lib/session";
+import { hasActiveAccess } from "@/lib/subscription";
 import {
   getProfileInsights,
   getProgressHistory,
@@ -24,11 +25,16 @@ import { WeeklyActivityChart } from "@/components/analytics/weekly-activity-char
 import { ProgressHistoryTable } from "@/components/analytics/progress-history-table";
 import { BandScoreHeader } from "@/components/analytics/band-score-header";
 import { BandScoreCenterTabs } from "@/components/analytics/band-score-center-tabs";
+import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
 
 export const metadata: Metadata = { title: "Band Score Center" };
 
 export default async function StudentAnalyticsPage() {
   const { profile } = await requireStudentProfile();
+
+  if (!(await hasActiveAccess(profile.id))) {
+    return <PremiumLockScreen feature="Advanced Analytics" />;
+  }
 
   const [
     resultCards,

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, Clock, History, Sparkles } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
+import { hasActiveAccess } from "@/lib/subscription";
 import { getVocabularyAiHistory } from "@/lib/ai/vocabulary-assistant";
 import { formatRelativeTime } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
 
 export const metadata: Metadata = { title: "AI Vocabulary History" };
 
@@ -17,6 +19,11 @@ const ACTION_LABEL = { WORD_INTELLIGENCE: "Viewed word insights", EXPLAIN_WORD: 
 
 export default async function VocabularyAiHistoryPage() {
   const { profile } = await requireStudentProfile();
+
+  if (!(await hasActiveAccess(profile.id))) {
+    return <PremiumLockScreen feature="the Vocabulary Learning Center" />;
+  }
+
   const history = await getVocabularyAiHistory(profile.id);
 
   return (

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireStudentProfile, requireTeacherProfile } from "@/lib/session";
+import { hasActiveAccess } from "@/lib/subscription";
 import * as speakingPractice from "@/lib/speaking-practice";
 import { friendlyErrorMessage } from "@/lib/validation-error";
 import {
@@ -134,6 +135,9 @@ export async function saveSpeakingDraftAction(input: unknown): Promise<ActionRes
 export async function submitSpeakingAnswerAction(input: unknown): Promise<ActionResult & { attemptId?: string }> {
   try {
     const { profile } = await requireStudentProfile();
+    if (!(await hasActiveAccess(profile.id))) {
+      return { success: false, error: "Speaking Practice AI feedback is a Premium feature. Upgrade to submit for evaluation." };
+    }
     const parsed = submitSpeakingAnswerSchema.parse(input);
     const result = await speakingPractice.submitSpeakingAttempt(profile.id, parsed.attemptId, parsed.content);
     if (!result.success) return result;
