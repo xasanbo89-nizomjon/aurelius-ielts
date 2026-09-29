@@ -140,7 +140,7 @@ export function ArticleAudioPlayer({
   const progressPercent = duration > 0 ? Math.min(100, (current / duration) * 100) : 0;
 
   return (
-    <div className="border-border/70 bg-card mb-6 flex flex-col gap-3 rounded-2xl border p-4 shadow-soft">
+    <div className="border-border/70 bg-card flex flex-col gap-3 rounded-2xl border p-4 shadow-soft">
       <audio ref={audioRef} src={src} preload="metadata" />
       <div className="flex flex-wrap items-center gap-3">
         <button

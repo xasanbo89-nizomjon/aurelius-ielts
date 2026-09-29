@@ -71,6 +71,7 @@ export function ArticleReader({
   initialProgress,
   initialHighlights,
   initialNotes,
+  audioPlayer,
 }: {
   articleId: string;
   content: string;
@@ -78,6 +79,13 @@ export function ArticleReader({
   initialProgress: { lastPosition: number; percentComplete: number } | null;
   initialHighlights: ArticleHighlightRecord[];
   initialNotes: ExamNote[];
+  /**
+   * Phase 42 fix — rendered by the parent page and passed through as a
+   * stable element, never reconstructed here, so toggling Focus Mode never
+   * unmounts/remounts it: playback (currentTime, playing, speed) survives
+   * entering/exiting Focus Mode exactly as the spec requires.
+   */
+  audioPlayer?: React.ReactNode;
 }) {
   useStudyHeartbeat("ARTICLE");
 
@@ -484,42 +492,42 @@ export function ArticleReader({
     </div>
   );
 
-  const progressBar = (
+  // Phase 42 fix — sticky header, always mounted in the same tree position
+  // regardless of focusMode (only its className changes), so the audio
+  // player passed in via `audioPlayer` never unmounts/remounts when
+  // entering/exiting Focus Mode: playback state survives untouched.
+  const stickyHeader = (
     <div
       className={cn(
-        "flex items-center gap-3 bg-background/95 backdrop-blur",
-        focusMode ? "border-border/70 border-b px-4 py-3 sm:px-8" : "sticky top-0 z-10 -mx-6 mb-6 px-6 py-3 sm:-mx-8 sm:px-8"
+        "bg-background/95 sticky top-0 z-10 backdrop-blur",
+        focusMode ? "border-border/70 border-b px-4 py-3 sm:px-8" : "-mx-6 mb-6 px-6 py-3 sm:-mx-8 sm:px-8"
       )}
     >
-      <Progress value={percentComplete} className="h-1.5" />
-      <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs font-medium">
-        {completed && <CheckCircle2 className="text-success size-3.5" />}
-        {percentComplete}%
-      </span>
-      <Button variant="ghost" size="sm" onClick={() => setFocusMode((v) => !v)} aria-pressed={focusMode} className="shrink-0">
-        {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-        <span className="hidden sm:inline">{focusMode ? "Exit Focus Mode" : "Enter Focus Mode"}</span>
-      </Button>
-      <Button variant="ghost" size="sm" onClick={() => setNotesOpen(true)} className="shrink-0">
-        <NotebookPen className="size-4" />
-        <span className="hidden sm:inline">Notes</span>
-      </Button>
+      {audioPlayer && <div className="mb-3">{audioPlayer}</div>}
+      <div className="flex items-center gap-3">
+        <Progress value={percentComplete} className="h-1.5" />
+        <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs font-medium">
+          {completed && <CheckCircle2 className="text-success size-3.5" />}
+          {percentComplete}%
+        </span>
+        <Button variant="ghost" size="sm" onClick={() => setFocusMode((v) => !v)} aria-pressed={focusMode} className="shrink-0">
+          {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          <span className="hidden sm:inline">{focusMode ? "Exit Focus Mode" : "Enter Focus Mode"}</span>
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setNotesOpen(true)} className="shrink-0">
+          <NotebookPen className="size-4" />
+          <span className="hidden sm:inline">Notes</span>
+        </Button>
+      </div>
     </div>
   );
 
   return (
     <>
-      {focusMode ? (
-        <div className="bg-background fixed inset-0 z-[45] overflow-y-auto">
-          {progressBar}
-          <div className="mx-auto max-w-2xl px-6 py-10 sm:px-8">{readingContent}</div>
-        </div>
-      ) : (
-        <>
-          {progressBar}
-          {readingContent}
-        </>
-      )}
+      <div className={cn(focusMode && "bg-background fixed inset-0 z-[45] overflow-y-auto")}>
+        {stickyHeader}
+        <div className={cn(focusMode && "mx-auto max-w-2xl px-6 py-10 sm:px-8")}>{readingContent}</div>
+      </div>
 
       <NotesDrawer
         open={notesOpen}

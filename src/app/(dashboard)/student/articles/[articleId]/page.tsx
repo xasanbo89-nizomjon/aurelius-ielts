@@ -95,14 +95,6 @@ export default async function StudentArticleReaderPage({
         </div>
       </div>
 
-      {article.audioUrl && (
-        <ArticleAudioPlayer
-          articleId={article.id}
-          src={article.audioUrl}
-          initialProgressPercent={progress?.audioProgress ?? 0}
-        />
-      )}
-
       <ArticleAttachments attachments={attachments.map((a) => ({ id: a.id, imagePath: a.imagePath, caption: a.caption }))} />
 
       <ArticleReader
@@ -114,6 +106,15 @@ export default async function StudentArticleReaderPage({
         }
         initialHighlights={highlights.map((h) => ({ id: h.id, startOffset: h.startOffset, endOffset: h.endOffset, color: h.color }))}
         initialNotes={notes.map((n) => ({ id: n.id, content: n.content }))}
+        audioPlayer={
+          article.audioUrl ? (
+            <ArticleAudioPlayer
+              articleId={article.id}
+              src={article.audioUrl}
+              initialProgressPercent={progress?.audioProgress ?? 0}
+            />
+          ) : undefined
+        }
       />
 
       <WordsPanelButton />
