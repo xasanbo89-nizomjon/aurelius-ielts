@@ -34,7 +34,7 @@ export default async function StudentArticlesPage({
   const { q, category, difficulty, page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
 
-  const validDifficulty = (["BEGINNER", "INTERMEDIATE", "ADVANCED"] as const).includes(
+  const validDifficulty = (["BEGINNER", "INTERMEDIATE", "ADVANCED", "IELTS_ACADEMIC"] as const).includes(
     difficulty as ArticleDifficulty
   )
     ? (difficulty as ArticleDifficulty)

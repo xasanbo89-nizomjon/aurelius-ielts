@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { HighlightColor } from "@prisma/client";
+import { CheckCircle2, Maximize2, Minimize2, NotebookPen, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -11,10 +12,18 @@ import {
   logVocabularyLookupAction,
 } from "@/actions/vocabulary.actions";
 import { saveReadingProgressAction } from "@/actions/reading.actions";
+import {
+  addArticleHighlightAction,
+  removeArticleHighlightAction,
+  addArticleNoteAction,
+  deleteArticleNoteAction,
+} from "@/actions/article-annotations.actions";
 import { useStudyHeartbeat } from "@/hooks/use-study-heartbeat";
 import { normalizeWord } from "@/lib/vocabulary-word";
 import { VOCABULARY_STATUS_COLORS, VOCABULARY_STATUS_LABELS, VOCABULARY_STATUS_EMOJI } from "@/lib/labels";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { NotesDrawer, type ExamNote } from "@/components/exam/notes-drawer";
 import { cn } from "@/lib/utils";
 
 type WordStatus = "UNKNOWN" | "LEARNING" | "KNOWN";
@@ -29,22 +38,46 @@ type WordDetails = {
   status: WordStatus | null;
 };
 
+export type ArticleHighlightRecord = { id: string; startOffset: number; endOffset: number; color: HighlightColor };
+
 const STATUS_ORDER: WordStatus[] = ["UNKNOWN", "LEARNING", "KNOWN"];
 const PROGRESS_SAVE_DEBOUNCE_MS = 1500;
 /** Matches the popup's `w-72` class — used to keep it fully on-screen (see handleWordClick) on narrow phones, where a word near either edge would otherwise push it half off-screen. */
 const POPUP_WIDTH_PX = 288;
 const POPUP_EDGE_MARGIN_PX = 12;
 
+const HIGHLIGHT_COLORS: { value: HighlightColor; swatchClass: string; markClass: string; label: string }[] = [
+  { value: "YELLOW", swatchClass: "bg-yellow-300", markClass: "bg-yellow-300/60", label: "Important" },
+  { value: "BLUE", swatchClass: "bg-sky-300", markClass: "bg-sky-300/60", label: "New Vocabulary" },
+  { value: "GREEN", swatchClass: "bg-emerald-300", markClass: "bg-emerald-300/60", label: "Review Later" },
+];
+const MARK_CLASS_BY_COLOR: Record<HighlightColor, string> = Object.fromEntries(
+  HIGHLIGHT_COLORS.map((c) => [c.value, c.markClass])
+) as Record<HighlightColor, string>;
+
+function getOffsetsWithinContainer(container: HTMLElement, range: Range) {
+  const preRange = document.createRange();
+  preRange.selectNodeContents(container);
+  preRange.setEnd(range.startContainer, range.startOffset);
+  const start = preRange.toString().length;
+  const end = start + range.toString().length;
+  return { start, end };
+}
+
 export function ArticleReader({
   articleId,
   content,
   initialStatuses,
   initialProgress,
+  initialHighlights,
+  initialNotes,
 }: {
   articleId: string;
   content: string;
   initialStatuses: Record<string, WordStatus>;
   initialProgress: { lastPosition: number; percentComplete: number } | null;
+  initialHighlights: ArticleHighlightRecord[];
+  initialNotes: ExamNote[];
 }) {
   useStudyHeartbeat("ARTICLE");
 
@@ -60,6 +93,12 @@ export function ArticleReader({
   const [loadingWord, setLoadingWord] = useState<string | null>(null);
   const [percentComplete, setPercentComplete] = useState(initialProgress?.percentComplete ?? 0);
   const [completed, setCompleted] = useState((initialProgress?.percentComplete ?? 0) >= 95);
+  const [highlights, setHighlights] = useState<ArticleHighlightRecord[]>(initialHighlights);
+  const [notes, setNotes] = useState<ExamNote[]>(initialNotes);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [focusMode, setFocusMode] = useState(false);
+  const [selectionToolbar, setSelectionToolbar] = useState<{ x: number; y: number; text: string; start: number; end: number } | null>(null);
 
   // Restore scroll position once, after the article has laid out.
   useEffect(() => {
@@ -117,7 +156,20 @@ export function ArticleReader({
     };
   }, [activeWord]);
 
+  // Escape also exits Focus Mode.
+  useEffect(() => {
+    if (!focusMode) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setFocusMode(false);
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [focusMode]);
+
   async function handleWordClick(raw: string, event: React.MouseEvent<HTMLSpanElement>) {
+    // A real text selection (drag) is handled by handleSelectionMouseUp instead — a click that ends a drag must not also open the word popup.
+    if (!window.getSelection()?.isCollapsed) return;
+
     const word = normalizeWord(raw);
     if (!word) return;
 
@@ -188,30 +240,150 @@ export function ArticleReader({
     setActiveWord(null);
   }
 
+  // Part 3 — Highlight system. Selecting a real span of text (not a plain click) shows a 3-color toolbar instead of the word popup.
+  const handleSelectionMouseUp = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !containerRef.current) {
+      setSelectionToolbar(null);
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    if (!containerRef.current.contains(range.commonAncestorContainer)) {
+      setSelectionToolbar(null);
+      return;
+    }
+    const text = selection.toString();
+    if (!text.trim()) {
+      setSelectionToolbar(null);
+      return;
+    }
+    const offsets = getOffsetsWithinContainer(containerRef.current, range);
+    const rect = range.getBoundingClientRect();
+    const containerRect = containerRef.current.getBoundingClientRect();
+    setSelectionToolbar({
+      x: rect.left - containerRect.left + rect.width / 2,
+      y: rect.top - containerRect.top,
+      text,
+      start: offsets.start,
+      end: offsets.end,
+    });
+  }, []);
+
+  function clearSelectionToolbar() {
+    window.getSelection()?.removeAllRanges();
+    setSelectionToolbar(null);
+  }
+
+  async function handleHighlight(color: HighlightColor) {
+    if (!selectionToolbar) return;
+    const { text, start, end } = selectionToolbar;
+    clearSelectionToolbar();
+    const result = await addArticleHighlightAction({ articleId, text, startOffset: start, endOffset: end, color });
+    if (result.success && result.highlightId) {
+      setHighlights((prev) => [...prev, { id: result.highlightId!, startOffset: start, endOffset: end, color }]);
+    } else if (!result.success) {
+      toast.error(result.error);
+    }
+  }
+
+  async function handleRemoveHighlight(highlightId: string) {
+    setHighlights((prev) => prev.filter((h) => h.id !== highlightId));
+    await removeArticleHighlightAction(highlightId);
+  }
+
+  function handleAddNoteFromSelection() {
+    if (!selectionToolbar) return;
+    setNoteDraft(`"${selectionToolbar.text}"\n\n`);
+    clearSelectionToolbar();
+    setNotesOpen(true);
+  }
+
+  async function handleSaveNote(text: string) {
+    const result = await addArticleNoteAction({ articleId, content: text });
+    if (!result.success || !result.noteId) {
+      toast.error(!result.success ? result.error : "Could not save the note.");
+      return;
+    }
+    setNotes((prev) => [{ id: result.noteId!, content: text }, ...prev]);
+  }
+
+  async function handleDeleteNote(noteId: string) {
+    setNotes((prev) => prev.filter((n) => n.id !== noteId));
+    await deleteArticleNoteAction(noteId);
+  }
+
   const parts = content.split(/([A-Za-z']+)/);
   const details = activeWord ? detailsCache[activeWord.word] : undefined;
 
-  return (
+  const sortedHighlights = useMemo(() => [...highlights].sort((a, b) => a.startOffset - b.startOffset), [highlights]);
+
+  let cursor = 0;
+  const readingContent = (
     <div className="relative">
-      <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center gap-3 bg-background/95 px-6 py-3 backdrop-blur sm:-mx-8 sm:px-8">
-        <Progress value={percentComplete} className="h-1.5" />
-        <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs font-medium">
-          {completed && <CheckCircle2 className="text-success size-3.5" />}
-          {percentComplete}%
-        </span>
-      </div>
+      {selectionToolbar && (
+        <div
+          style={{ left: selectionToolbar.x, top: selectionToolbar.y }}
+          className="absolute z-30 -translate-x-1/2 -translate-y-[calc(100%+8px)]"
+        >
+          <div className="bg-primary text-primary-foreground flex items-center gap-1 rounded-full p-1 shadow-soft-lg">
+            {HIGHLIGHT_COLORS.map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => handleHighlight(c.value)}
+                aria-label={`Highlight as ${c.label}`}
+                title={c.label}
+                className="hover:ring-2 hover:ring-white/60 flex size-6 shrink-0 items-center justify-center rounded-full p-0.5 outline-none"
+              >
+                <span className={cn("block size-4 rounded-full", c.swatchClass)} />
+              </button>
+            ))}
+            <span className="bg-white/20 mx-0.5 h-4 w-px" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={handleAddNoteFromSelection}
+              className="rounded-full px-3 py-1.5 text-xs font-medium hover:bg-white/10 focus-visible:bg-white/10 outline-none"
+            >
+              Add note
+            </button>
+          </div>
+        </div>
+      )}
 
       <div
         ref={containerRef}
-        className="font-display relative text-[15.5px] leading-[1.85] whitespace-pre-wrap"
+        onMouseUp={handleSelectionMouseUp}
+        className={cn(
+          "font-display relative whitespace-pre-wrap",
+          focusMode ? "text-[17px] leading-[2] sm:text-[19px]" : "text-[15.5px] leading-[1.85]"
+        )}
       >
         {parts.map((part, index) => {
-          if (index % 2 === 0) return <Fragment key={index}>{part}</Fragment>;
+          const partStart = cursor;
+          const partEnd = cursor + part.length;
+          cursor = partEnd;
+
+          if (index % 2 === 0) {
+            const highlight = sortedHighlights.find((h) => h.startOffset < partEnd && h.endOffset > partStart);
+            if (!highlight || !part) return <Fragment key={index}>{part}</Fragment>;
+            return (
+              <mark
+                key={index}
+                className={cn("cursor-pointer rounded-sm", MARK_CLASS_BY_COLOR[highlight.color])}
+                onClick={() => handleRemoveHighlight(highlight.id)}
+                title="Click to remove highlight"
+              >
+                {part}
+              </mark>
+            );
+          }
+
           const status = statuses[normalizeWord(part)];
           const colors = status ? VOCABULARY_STATUS_COLORS[status] : null;
-          return (
+          const highlight = sortedHighlights.find((h) => h.startOffset < partEnd && h.endOffset > partStart);
+
+          const wordSpan = (
             <span
-              key={index}
               role="button"
               tabIndex={0}
               onClick={(event) => handleWordClick(part, event)}
@@ -228,6 +400,14 @@ export function ArticleReader({
             >
               {part}
             </span>
+          );
+
+          if (!highlight) return <Fragment key={index}>{wordSpan}</Fragment>;
+          // Word lookup takes priority on a highlighted word (existing functionality must never be shadowed) — removing the highlight is done via the surrounding punctuation/whitespace marks below, which aren't word-clickable.
+          return (
+            <mark key={index} className={cn("rounded-sm", MARK_CLASS_BY_COLOR[highlight.color])}>
+              {wordSpan}
+            </mark>
           );
         })}
 
@@ -302,5 +482,53 @@ export function ArticleReader({
         )}
       </div>
     </div>
+  );
+
+  const progressBar = (
+    <div
+      className={cn(
+        "flex items-center gap-3 bg-background/95 backdrop-blur",
+        focusMode ? "border-border/70 border-b px-4 py-3 sm:px-8" : "sticky top-0 z-10 -mx-6 mb-6 px-6 py-3 sm:-mx-8 sm:px-8"
+      )}
+    >
+      <Progress value={percentComplete} className="h-1.5" />
+      <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs font-medium">
+        {completed && <CheckCircle2 className="text-success size-3.5" />}
+        {percentComplete}%
+      </span>
+      <Button variant="ghost" size="sm" onClick={() => setFocusMode((v) => !v)} aria-pressed={focusMode} className="shrink-0">
+        {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+        <span className="hidden sm:inline">{focusMode ? "Exit Focus Mode" : "Enter Focus Mode"}</span>
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => setNotesOpen(true)} className="shrink-0">
+        <NotebookPen className="size-4" />
+        <span className="hidden sm:inline">Notes</span>
+      </Button>
+    </div>
+  );
+
+  return (
+    <>
+      {focusMode ? (
+        <div className="bg-background fixed inset-0 z-[45] overflow-y-auto">
+          {progressBar}
+          <div className="mx-auto max-w-2xl px-6 py-10 sm:px-8">{readingContent}</div>
+        </div>
+      ) : (
+        <>
+          {progressBar}
+          {readingContent}
+        </>
+      )}
+
+      <NotesDrawer
+        open={notesOpen}
+        onOpenChange={setNotesOpen}
+        notes={notes}
+        draft={noteDraft}
+        onSave={handleSaveNote}
+        onDelete={handleDeleteNote}
+      />
+    </>
   );
 }

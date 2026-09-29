@@ -4,7 +4,15 @@ import type { CoinTransactionType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sumSecondsForDay, startOfDay } from "@/lib/study-activity";
 import { getSubscriptionSummary, addDays } from "@/lib/subscription";
-import { COINS_PER_HOUR_STUDIED, MAX_DAILY_STUDY_COINS, PREMIUM_REDEMPTION_COST, PREMIUM_REDEMPTION_DAYS } from "@/lib/coin-economy-constants";
+import {
+  COINS_PER_HOUR_STUDIED,
+  MAX_DAILY_STUDY_COINS,
+  PREMIUM_REDEMPTION_COST,
+  PREMIUM_REDEMPTION_DAYS,
+  LOGIN_DAILY_COINS,
+  PRACTICE_SESSION_COINS,
+  MOCK_TEST_COMPLETE_COINS,
+} from "@/lib/coin-economy-constants";
 
 export { COINS_PER_HOUR_STUDIED, MAX_DAILY_STUDY_COINS, PREMIUM_REDEMPTION_COST, PREMIUM_REDEMPTION_DAYS };
 
@@ -156,6 +164,33 @@ export async function settleMonthlyBonus(studentId: string): Promise<void> {
   if (activeDays.length < MONTHLY_BONUS_MIN_DAYS) return;
 
   await awardCoins(studentId, "MONTHLY_BONUS", MONTHLY_BONUS_COINS, idempotencyKey, `Monthly consistency bonus — studied ${activeDays.length} days this month.`);
+}
+
+/**
+ * Phase 39 — Part 4. Flat, real, once-per-day login reward — called from
+ * the dashboard page itself (a real visit, not a fabricated event), guarded
+ * by awardCoins()'s own idempotencyKey so revisiting the dashboard the same
+ * day never pays twice.
+ */
+export async function awardDailyLoginCoins(studentId: string): Promise<void> {
+  const today = dateKey(startOfDay(new Date()));
+  await awardCoins(studentId, "ACHIEVEMENT", LOGIN_DAILY_COINS, `LOGIN:${studentId}:${today}`, "Daily login reward.");
+}
+
+/**
+ * Phase 39 — Part 4. Flat reward for completing one real practice session
+ * (a Reading/Listening test, or a Speaking Practice attempt) — `sessionKey`
+ * is the real underlying row's id (a Result id or SpeakingAttempt id), so
+ * each real session can only ever pay out once, no matter how many times
+ * its results page is revisited.
+ */
+export async function awardPracticeSessionCoins(studentId: string, sessionKey: string, description: string): Promise<void> {
+  await awardCoins(studentId, "ACHIEVEMENT", PRACTICE_SESSION_COINS, `PRACTICE_SESSION:${sessionKey}`, description);
+}
+
+/** Phase 39 — Part 4. Flat reward for completing one real Full Mock Test attempt — `attemptKey` is the real FullMockAttempt id. */
+export async function awardMockTestCoins(studentId: string, attemptKey: string, description: string): Promise<void> {
+  await awardCoins(studentId, "ACHIEVEMENT", MOCK_TEST_COMPLETE_COINS, `MOCK_TEST:${attemptKey}`, description);
 }
 
 function startOfWeekMonday(date: Date): Date {

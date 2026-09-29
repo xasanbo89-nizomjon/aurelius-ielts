@@ -5,21 +5,8 @@ import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { exportReportAction, type ExportFormat, type ExportReportKind } from "@/actions/export.actions";
+import { downloadBase64File } from "@/lib/download-file";
 import { Button } from "@/components/ui/button";
-
-function downloadBase64File(filename: string, mimeType: string, base64: string) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-  const blob = new Blob([bytes], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
 
 /** Phase 29 — Part 12. Root-only report export, both formats, one small reusable control. */
 export function ExportReportButtons({ kind, label }: { kind: ExportReportKind; label: string }) {

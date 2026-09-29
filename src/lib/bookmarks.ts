@@ -122,3 +122,73 @@ export async function listBookmarkedWritingTasks(studentId: string): Promise<Boo
     bookmarkedAt: row.createdAt,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Articles (Phase 36) — bookmark an article to resume/revisit later (Reading Library)
+// ---------------------------------------------------------------------------
+
+export async function isArticleBookmarked(studentId: string, articleId: string): Promise<boolean> {
+  const row = await prisma.articleBookmark.findUnique({
+    where: { studentId_articleId: { studentId, articleId } },
+    select: { id: true },
+  });
+  return row != null;
+}
+
+export async function toggleArticleBookmark(studentId: string, articleId: string): Promise<{ bookmarked: boolean }> {
+  const existing = await prisma.articleBookmark.findUnique({
+    where: { studentId_articleId: { studentId, articleId } },
+  });
+
+  if (existing) {
+    await prisma.articleBookmark.delete({ where: { id: existing.id } });
+    return { bookmarked: false };
+  }
+
+  await prisma.articleBookmark.create({ data: { studentId, articleId } });
+  return { bookmarked: true };
+}
+
+export type BookmarkedArticleRow = {
+  id: string;
+  articleId: string;
+  title: string;
+  category: string;
+  difficulty: string;
+  readingMinutes: number;
+  bookmarkedAt: Date;
+  percentComplete: number;
+};
+
+/** The Reading Library (Part 8) — every article this student has bookmarked to resume/revisit, with their real progress on each. */
+export async function listBookmarkedArticles(studentId: string): Promise<BookmarkedArticleRow[]> {
+  const rows = await prisma.articleBookmark.findMany({
+    where: { studentId, article: { status: "PUBLISHED" } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      articleId: true,
+      createdAt: true,
+      article: {
+        select: {
+          title: true,
+          category: true,
+          difficulty: true,
+          readingMinutes: true,
+          readingProgress: { where: { studentId }, select: { percentComplete: true }, take: 1 },
+        },
+      },
+    },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    articleId: row.articleId,
+    title: row.article.title,
+    category: row.article.category,
+    difficulty: row.article.difficulty,
+    readingMinutes: row.article.readingMinutes,
+    bookmarkedAt: row.createdAt,
+    percentComplete: row.article.readingProgress[0]?.percentComplete ?? 0,
+  }));
+}

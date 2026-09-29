@@ -113,3 +113,32 @@ export async function prepareArticleAudioUploadAction(input: {
     return { success: false, error: errorMessage(error, "Could not prepare the audio upload.") };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Article attachments (Phase 38 — Part 5)
+// ---------------------------------------------------------------------------
+
+export async function addArticleAttachmentAction(
+  articleId: string,
+  input: { type: "IMAGE" | "INFOGRAPHIC" | "ATTACHMENT"; imagePath: string; caption?: string; mediaFileId?: string }
+): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    await articles.addArticleAttachment(articleId, profile.id, input);
+    revalidatePath(`/teacher/articles/${articleId}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not add the attachment.") };
+  }
+}
+
+export async function deleteArticleAttachmentAction(attachmentId: string, articleId: string): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    await articles.deleteArticleAttachment(attachmentId, profile.id);
+    revalidatePath(`/teacher/articles/${articleId}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not delete the attachment.") };
+  }
+}

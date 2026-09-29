@@ -3,15 +3,11 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { startOfDay, sumSecondsForDay } from "@/lib/study-activity";
 import { awardCoins } from "@/lib/coins";
+import { getSubscriptionSummary } from "@/lib/subscription";
+import { STREAK_MILESTONE_REWARDS } from "@/lib/coin-economy-constants";
 
 /** A calendar day only counts toward the streak once real study activity (any combination of types) reaches this — 5 minutes of genuine engagement, not just opening a tab. Anti-abuse threshold, not an arbitrary UX number. */
 export const MIN_DAILY_SECONDS_FOR_STREAK = 5 * 60;
-
-const STREAK_MILESTONES: { days: number; coins: number }[] = [
-  { days: 7, coins: 100 },
-  { days: 30, coins: 500 },
-  { days: 90, coins: 1000 },
-];
 
 function addDays(date: Date, days: number): Date {
   const result = new Date(date);
@@ -30,6 +26,12 @@ function isSameDay(a: Date, b: Date): boolean {
  * repeatedly, e.g. once per heartbeat). Milestone bonuses use a
  * date-scoped idempotencyKey, so even a duplicate settlement on the exact
  * milestone day can never double-award.
+ *
+ * Phase 39 — Part 6: a Premium student who studies today after missing
+ * EXACTLY one real day gets their one lifetime Streak Freeze consumed
+ * instead of the streak resetting — bridging that single gap, never more
+ * than one, and never twice (streakFreezeUsedAt is set the moment it's
+ * used and checked here on every future evaluation).
  */
 export async function settleStreakForToday(studentId: string): Promise<void> {
   const today = startOfDay(new Date());
@@ -45,16 +47,31 @@ export async function settleStreakForToday(studentId: string): Promise<void> {
   if (streak.lastActiveDate && isSameDay(streak.lastActiveDate, today)) return; // already counted today
 
   const yesterday = addDays(today, -1);
+  const twoDaysAgo = addDays(today, -2);
   const isConsecutive = streak.lastActiveDate != null && isSameDay(streak.lastActiveDate, yesterday);
-  const newCurrent = isConsecutive ? streak.currentStreak + 1 : 1;
+  const missedExactlyOneDay = streak.lastActiveDate != null && isSameDay(streak.lastActiveDate, twoDaysAgo);
+
+  let useFreeze = false;
+  if (!isConsecutive && missedExactlyOneDay && !streak.streakFreezeUsedAt) {
+    const subscription = await getSubscriptionSummary(studentId);
+    useFreeze = subscription.isPremium;
+  }
+
+  const bridgesGap = isConsecutive || useFreeze;
+  const newCurrent = bridgesGap ? streak.currentStreak + 1 : 1;
   const newLongest = Math.max(streak.longestStreak, newCurrent);
 
   await prisma.studyStreak.update({
     where: { studentId },
-    data: { currentStreak: newCurrent, longestStreak: newLongest, lastActiveDate: today },
+    data: {
+      currentStreak: newCurrent,
+      longestStreak: newLongest,
+      lastActiveDate: today,
+      ...(useFreeze && { streakFreezeUsedAt: today }),
+    },
   });
 
-  const milestone = STREAK_MILESTONES.find((m) => m.days === newCurrent);
+  const milestone = STREAK_MILESTONE_REWARDS.find((m) => m.days === newCurrent);
   if (milestone) {
     await awardCoins(
       studentId,
@@ -66,7 +83,12 @@ export async function settleStreakForToday(studentId: string): Promise<void> {
   }
 }
 
-export type StreakSummary = { currentStreak: number; longestStreak: number; lastActiveDate: Date | null };
+export type StreakSummary = {
+  currentStreak: number;
+  longestStreak: number;
+  lastActiveDate: Date | null;
+  streakFreezeUsedAt: Date | null;
+};
 
 export async function getStreakSummary(studentId: string): Promise<StreakSummary> {
   const streak = await prisma.studyStreak.findUnique({ where: { studentId } });
@@ -74,6 +96,7 @@ export async function getStreakSummary(studentId: string): Promise<StreakSummary
     currentStreak: streak?.currentStreak ?? 0,
     longestStreak: streak?.longestStreak ?? 0,
     lastActiveDate: streak?.lastActiveDate ?? null,
+    streakFreezeUsedAt: streak?.streakFreezeUsedAt ?? null,
   };
 }
 

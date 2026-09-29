@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireStudentProfile } from "@/lib/session";
-import { toggleQuestionBookmark, toggleWritingTaskBookmark } from "@/lib/bookmarks";
+import { toggleArticleBookmark, toggleQuestionBookmark, toggleWritingTaskBookmark } from "@/lib/bookmarks";
 import { friendlyErrorMessage } from "@/lib/validation-error";
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -27,6 +27,17 @@ export async function toggleWritingTaskBookmarkAction(taskId: string): Promise<T
   try {
     const { profile } = await requireStudentProfile();
     const result = await toggleWritingTaskBookmark(profile.id, taskId);
+    revalidatePath("/student/bookmarks");
+    return { success: true, ...result };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not update the bookmark.") };
+  }
+}
+
+export async function toggleArticleBookmarkAction(articleId: string): Promise<ToggleBookmarkResult> {
+  try {
+    const { profile } = await requireStudentProfile();
+    const result = await toggleArticleBookmark(profile.id, articleId);
     revalidatePath("/student/bookmarks");
     return { success: true, ...result };
   } catch (error) {

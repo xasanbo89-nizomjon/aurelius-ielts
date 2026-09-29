@@ -10,6 +10,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { Button } from "@/components/ui/button";
 import { VocabularyNotebook } from "@/components/student/vocabulary-notebook";
 import { VocabularyStatsCards } from "@/components/analytics/vocabulary-stats-cards";
+import { ExportVocabularyButton } from "@/components/student/export-vocabulary-button";
 import type { WordDetailsEntry } from "@/components/student/word-details-modal";
 
 export const metadata: Metadata = { title: "Vocabulary" };
@@ -43,11 +44,14 @@ export default async function VocabularyPage() {
         title="Vocabulary"
         description="Every word you've saved while reading, in one place for review."
         actions={
-          <Button asChild variant="outline" size="sm">
-            <Link href="/student/vocabulary/history">
-              <History className="size-4" /> AI History
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <ExportVocabularyButton />
+            <Button asChild variant="outline" size="sm">
+              <Link href="/student/vocabulary/history">
+                <History className="size-4" /> AI History
+              </Link>
+            </Button>
+          </div>
         }
       />
 

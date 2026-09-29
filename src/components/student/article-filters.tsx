@@ -50,6 +50,7 @@ export function ArticleFilters({
         <option value="BEGINNER">Beginner</option>
         <option value="INTERMEDIATE">Intermediate</option>
         <option value="ADVANCED">Advanced</option>
+        <option value="IELTS_ACADEMIC">IELTS Academic</option>
       </select>
 
       <button

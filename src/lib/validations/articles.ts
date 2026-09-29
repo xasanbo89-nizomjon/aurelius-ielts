@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-export const articleDifficultySchema = z.enum(["BEGINNER", "INTERMEDIATE", "ADVANCED"]);
+import { ARTICLE_SKILL_TAGS } from "@/lib/article-skill-tags";
+
+export const articleDifficultySchema = z.enum(["BEGINNER", "INTERMEDIATE", "ADVANCED", "IELTS_ACADEMIC"]);
 
 export const articleSchema = z.object({
   title: z.string().trim().min(3, "Title must be at least 3 characters").max(200),
@@ -18,6 +20,8 @@ export const articleSchema = z.object({
   // express on its own.
   audioUrl: z.string().trim().min(1).max(2048).nullable().optional(),
   audioDuration: z.number().int().positive().nullable().optional(),
+  /// Phase 36 — Part 11. Real IELTS reading skills this article practices.
+  skillTags: z.array(z.enum(ARTICLE_SKILL_TAGS)).optional(),
 });
 export type ArticleInput = z.infer<typeof articleSchema>;
 

@@ -4,6 +4,7 @@ import { randomInt } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { validateRecordedAudio } from "@/lib/uploads/audio-constraints";
 import { evaluateSpeakingRecording, SpeakingTranscriptTooShortError } from "@/lib/ai/services/speaking-evaluation";
+import { recordStudentActivity } from "@/lib/study-activity";
 
 export { SpeakingTranscriptTooShortError };
 
@@ -215,7 +216,7 @@ export async function submitAndEvaluateSpeakingResponse(
     prompt: task.prompt,
   });
 
-  return prisma.speakingSubmission.create({
+  const submission = await prisma.speakingSubmission.create({
     data: {
       studentId,
       taskId,
@@ -235,6 +236,15 @@ export async function submitAndEvaluateSpeakingResponse(
       evaluatedAt: new Date(),
     },
   });
+
+  // Phase 39 — real study-streak credit from the real, already-measured
+  // recording length (never heartbeat-based here, same anti-gaming
+  // reasoning as Reading/Listening's exam-duration credit).
+  if (evaluation.durationSeconds > 0) {
+    await recordStudentActivity(studentId, "SPEAKING", evaluation.durationSeconds);
+  }
+
+  return submission;
 }
 
 export type SpeakingAnalytics = { averageBand: number | null; reviewedCount: number };

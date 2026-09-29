@@ -1,4 +1,4 @@
-import type { MockTestCategory, Prisma, QuestionType, TestType } from "@prisma/client";
+import type { MockTestCategory, PassageAttachmentType, Prisma, QuestionType, TestType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
@@ -172,6 +172,59 @@ export async function deletePassage(passageId: string, teacherId: string) {
   }
 
   await prisma.passage.delete({ where: { id: passageId } });
+}
+
+// ---------------------------------------------------------------------------
+// Passage attachments (Phase 35) — real visual materials (charts, tables,
+// diagrams, maps), each an uploaded image shown alongside the passage text
+// or listening audio.
+// ---------------------------------------------------------------------------
+
+export async function addPassageAttachment(
+  passageId: string,
+  teacherId: string,
+  input: { type: PassageAttachmentType; imagePath: string; caption?: string; mediaFileId?: string }
+) {
+  await assertOwnsPassage(passageId, teacherId);
+
+  if (input.mediaFileId) {
+    const mediaFile = await prisma.mediaFile.findFirst({ where: { id: input.mediaFileId, ownerId: teacherId } });
+    if (!mediaFile) throw new OwnershipError("You don't have access to that media file.");
+  }
+
+  const maxOrder = await prisma.passageAttachment.aggregate({
+    where: { passageId },
+    _max: { orderIndex: true },
+  });
+
+  const attachment = await prisma.passageAttachment.create({
+    data: {
+      passageId,
+      type: input.type,
+      imagePath: input.imagePath,
+      caption: input.caption || null,
+      orderIndex: (maxOrder._max.orderIndex ?? -1) + 1,
+      mediaFileId: input.mediaFileId ?? null,
+    },
+  });
+
+  if (input.mediaFileId) {
+    await prisma.mediaUsage.create({ data: { mediaFileId: input.mediaFileId, context: "PASSAGE_ATTACHMENT", referenceId: attachment.id } });
+  }
+
+  return attachment;
+}
+
+export async function deletePassageAttachment(attachmentId: string, teacherId: string) {
+  const attachment = await prisma.passageAttachment.findFirst({
+    where: { id: attachmentId, passage: { mockTest: { createdById: teacherId } } },
+  });
+  if (!attachment) throw new OwnershipError("You don't have access to this attachment.");
+
+  await prisma.$transaction([
+    prisma.mediaUsage.deleteMany({ where: { context: "PASSAGE_ATTACHMENT", referenceId: attachmentId } }),
+    prisma.passageAttachment.delete({ where: { id: attachmentId } }),
+  ]);
 }
 
 // ---------------------------------------------------------------------------

@@ -7,3 +7,7 @@
 export const LISTENING_AUDIO_BUCKET = "listening-audio";
 export const ARTICLE_AUDIO_BUCKET = "article-audio";
 export const SPEAKING_AUDIO_BUCKET = "speaking-audio";
+/** Phase 38 — the Media Library's own bucket, shared by every file type it accepts (image/audio/pdf), keyed by teacherId/uuid same as every other upload. */
+export const MEDIA_LIBRARY_BUCKET = "media-library";
+/** Phase 38 — generated image thumbnails live in their own bucket so the originals bucket above stays a 1:1 mirror of what was actually uploaded. */
+export const MEDIA_LIBRARY_THUMBNAILS_BUCKET = "media-library-thumbnails";

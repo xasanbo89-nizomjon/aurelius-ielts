@@ -26,7 +26,10 @@ export default async function TestEditorPage({
   const test = await prisma.mockTest.findFirst({
     where: { id: testId, createdById: profile.id },
     include: {
-      passages: { orderBy: { orderIndex: "asc" } },
+      passages: {
+        orderBy: { orderIndex: "asc" },
+        include: { attachments: { orderBy: { orderIndex: "asc" } } },
+      },
       questions: { orderBy: { orderIndex: "asc" } },
       _count: { select: { results: true } },
     },

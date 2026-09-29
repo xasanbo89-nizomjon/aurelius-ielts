@@ -1,3 +1,5 @@
+import type { HighlightColor } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 
 /** Verifies the passage belongs to the same test as the attempt before writing. */
@@ -18,7 +20,7 @@ async function assertOwnsPassage(resultId: string, studentId: string, passageId:
 export async function addHighlight(
   resultId: string,
   studentId: string,
-  input: { passageId: string; text: string; startOffset: number; endOffset: number }
+  input: { passageId: string; text: string; startOffset: number; endOffset: number; color?: HighlightColor }
 ) {
   await assertOwnsPassage(resultId, studentId, input.passageId);
 
@@ -29,6 +31,7 @@ export async function addHighlight(
       text: input.text,
       startOffset: input.startOffset,
       endOffset: input.endOffset,
+      color: input.color ?? "YELLOW",
     },
   });
 }

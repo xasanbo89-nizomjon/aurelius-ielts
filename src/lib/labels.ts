@@ -28,6 +28,7 @@ export const ARTICLE_DIFFICULTY_LABELS: Record<ArticleDifficulty, string> = {
   BEGINNER: "Beginner",
   INTERMEDIATE: "Intermediate",
   ADVANCED: "Advanced",
+  IELTS_ACADEMIC: "IELTS Academic",
 };
 
 /**

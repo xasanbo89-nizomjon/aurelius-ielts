@@ -32,6 +32,8 @@ import {
   WifiOff,
   Crown,
   Activity,
+  MessageCircle,
+  Image,
 } from "lucide-react";
 
 /**
@@ -76,6 +78,8 @@ export const NAV_ICONS = {
   WifiOff,
   Crown,
   Activity,
+  MessageCircle,
+  Image,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;

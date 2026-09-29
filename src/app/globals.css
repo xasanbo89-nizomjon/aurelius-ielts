@@ -205,4 +205,51 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Phase 39 — Animated Streak Widget tiers (7+/30+/100+ days). Kept as
+     plain keyframes rather than Tailwind's built-in animate-pulse so the
+     three tiers stay visually distinct at a glance. */
+  .streak-glow {
+    animation: streak-glow-pulse 2.4s ease-in-out infinite;
+  }
+
+  .streak-pulse {
+    animation: streak-scale-pulse 1.6s ease-in-out infinite;
+  }
+
+  .streak-gold-flame {
+    animation:
+      streak-scale-pulse 1.4s ease-in-out infinite,
+      streak-gold-glow 2s ease-in-out infinite;
+  }
+}
+
+@keyframes streak-glow-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0px var(--accent));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px var(--accent));
+  }
+}
+
+@keyframes streak-scale-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+@keyframes streak-gold-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 2px var(--accent)) drop-shadow(0 0 0px var(--accent));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px var(--accent)) drop-shadow(0 0 16px var(--accent));
+  }
 }

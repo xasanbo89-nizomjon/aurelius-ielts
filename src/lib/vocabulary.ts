@@ -350,3 +350,30 @@ export async function getWordsPanelEntries(studentId: string, limit = 50): Promi
     })
     .filter((entry): entry is WordsPanelEntry => entry != null);
 }
+
+export type VocabularyExportRow = {
+  word: string;
+  status: VocabularyStatus;
+  meaning: string | null;
+  exampleSentence: string | null;
+  sourceArticle: string | null;
+  addedAt: Date;
+};
+
+/** Phase 36 — Part 5's Export. Every real saved word, with the same real fields the Vocabulary Vault shows on screen — nothing added here that isn't already stored. */
+export async function getVocabularyExportRows(studentId: string): Promise<VocabularyExportRow[]> {
+  const entries = await prisma.studentVocabulary.findMany({
+    where: { studentId },
+    orderBy: { addedAt: "desc" },
+    include: { vocabularyWord: true, article: { select: { title: true } } },
+  });
+
+  return entries.map((entry) => ({
+    word: entry.vocabularyWord.word,
+    status: entry.status,
+    meaning: entry.vocabularyWord.uzbekTranslation ?? entry.vocabularyWord.englishDefinition,
+    exampleSentence: entry.vocabularyWord.exampleSentence,
+    sourceArticle: entry.article?.title ?? null,
+    addedAt: entry.addedAt,
+  }));
+}

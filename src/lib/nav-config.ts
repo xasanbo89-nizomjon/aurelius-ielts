@@ -12,6 +12,14 @@ export type NavItem = {
 // or their data were removed — only how they're navigated to.
 export const STUDENT_NAV_ITEMS: NavItem[] = [
   { label: "Home", href: "/student/dashboard", icon: "LayoutDashboard" },
+  // Phase 37 — Speaking Practice Center, explicitly requested as a real
+  // sidebar item (an intentional exception to the Phase 20 minimalism
+  // above). Route is /student/speaking-practice, not /student/speaking —
+  // that path is already the existing audio-recording Speaking system
+  // (code entry + Whisper transcription); this is a separate, simpler
+  // typed-answer practice tool. See schema.prisma's Speaking Practice
+  // Center section comment for the full naming rationale.
+  { label: "Speaking Practice", href: "/student/speaking-practice", icon: "Mic" },
   { label: "Profile", href: "/student/profile", icon: "UserCircle" },
   { label: "Settings", href: "/student/settings", icon: "Settings" },
 ];
@@ -44,9 +52,14 @@ export const TEACHER_NAV_ITEMS: NavItem[] = [
   { label: "Overview", href: "/teacher/dashboard", icon: "LayoutDashboard" },
   { label: "AI Assistant", href: "/teacher/assistant", icon: "Sparkles" },
   { label: "Students", href: "/teacher/students", icon: "Users" },
+  // Phase 38 — central reusable file store for Reading/Listening/Articles.
+  { label: "Media Library", href: "/teacher/media", icon: "Image" },
   { label: "Tests", href: "/teacher/tests", icon: "FileText" },
   { label: "Articles", href: "/teacher/articles", icon: "Newspaper" },
   { label: "Speaking", href: "/teacher/speaking", icon: "Mic" },
+  // Phase 37 — Speaking Practice Center's teacher-side topic bank. Separate
+  // from "Speaking" above (the existing audio-recording task bank).
+  { label: "Speaking Topics", href: "/teacher/speaking-topics", icon: "MessageCircle" },
   { label: "Assignments", href: "/teacher/assignments", icon: "ListChecks" },
   { label: "Writing", href: "/teacher/writing", icon: "NotebookPen" },
   { label: "Writing Reviews", href: "/teacher/writing-reviews", icon: "PenLine" },

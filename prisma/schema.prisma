@@ -135,6 +135,8 @@ enum ArticleDifficulty {
   BEGINNER
   INTERMEDIATE
   ADVANCED
+  /// Phase 36 — Part 10's explicit 4th tier, for articles authored specifically as IELTS Academic Reading practice.
+  IELTS_ACADEMIC
 }
 
 enum ArticleStatus {
@@ -154,6 +156,8 @@ enum StudyActivityType {
   VOCABULARY
   WRITING
   ARTICLE
+  /// Phase 39 — credited at real submission time (not heartbeat, same anti-gaming reasoning as READING/LISTENING) from both the audio Speaking pipeline and the Speaking Practice Center.
+  SPEAKING
 }
 
 enum CoinTransactionType {
@@ -293,6 +297,10 @@ model StudentProfile {
   invoices               Invoice[]
   premiumRequests        PremiumRequest[]
   fullMockAttempts       FullMockAttempt[]
+  articleHighlights      ArticleHighlight[]
+  articleNotes           ArticleNote[]
+  articleBookmarks       ArticleBookmark[]
+  speakingAttempts       SpeakingAttempt[]
 
   @@map("student_profiles")
 }
@@ -334,6 +342,9 @@ model TeacherProfile {
   speakingTasks           SpeakingTask[]
   reviewedPremiumRequests PremiumRequest[]      @relation("PremiumRequestReviewer")
   fullMockTests           FullMockTest[]
+  speakingTopics          SpeakingTopic[]
+  mediaFiles              MediaFile[]
+  mediaFolders            MediaFolder[]
 
   @@map("teacher_profiles")
 }
@@ -406,11 +417,49 @@ model Passage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  questions  Question[]
-  highlights Highlight[]
-  notes      Note[]
+  questions   Question[]
+  highlights  Highlight[]
+  notes       Note[]
+  /// Phase 35 — real visual materials (images/charts/tables/diagrams/maps)
+  /// a teacher attaches to a Reading passage or Listening section, shown
+  /// alongside the text/audio in the split-screen exam layout.
+  attachments PassageAttachment[]
 
   @@map("passages")
+}
+
+enum PassageAttachmentType {
+  IMAGE
+  CHART
+  TABLE
+  DIAGRAM
+  MAP
+}
+
+/// Phase 35 — Part 4/7. Every real IELTS visual material (a chart, table,
+/// diagram or map) is realistically authored as an uploaded image, same as
+/// every other digital IELTS platform — not a live-editable table/diagram
+/// builder, which would be both fragile and out of scope. `type` is purely
+/// a teacher-facing label/icon; rendering is identical for all five.
+model PassageAttachment {
+  id         String                @id @default(cuid())
+  passageId  String
+  passage    Passage               @relation(fields: [passageId], references: [id], onDelete: Cascade)
+  type       PassageAttachmentType
+  imagePath  String
+  caption    String?
+  orderIndex Int                   @default(0)
+
+  /// Phase 38 — set only when this attachment was picked from the Media
+  /// Library rather than uploaded fresh. Null for every pre-Phase-38 row
+  /// and for any direct upload — imagePath alone is always enough to
+  /// render, this is purely for reuse tracking (MediaUsage).
+  mediaFileId String?
+  mediaFile   MediaFile? @relation(fields: [mediaFileId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@map("passage_attachments")
 }
 
 model Question {
@@ -510,6 +559,12 @@ model Answer {
   @@map("answers")
 }
 
+enum HighlightColor {
+  YELLOW
+  BLUE
+  GREEN
+}
+
 /// A student's highlighted span of passage text, scoped to one attempt
 /// (Result). Reading-only — cleared along with the attempt.
 model Highlight {
@@ -519,9 +574,12 @@ model Highlight {
   passageId String
   passage   Passage @relation(fields: [passageId], references: [id], onDelete: Cascade)
 
-  text        String @db.Text
+  text        String         @db.Text
   startOffset Int
   endOffset   Int
+  /// Phase 35 — Part 2's 3-color highlight tool. Defaulted for every
+  /// pre-Phase-35 row, which only ever had one implicit color.
+  color       HighlightColor @default(YELLOW)
 
   createdAt DateTime @default(now())
 
@@ -936,6 +994,140 @@ model SpeakingSubmission {
   @@index([taskId])
   @@index([studentId])
   @@map("speaking_submissions")
+}
+
+// ---------------------------------------------------------------------------
+// Speaking Practice Center (Phase 37) — a deliberately SEPARATE, simpler
+// practice tool from the audio-recording Speaking system above
+// (SpeakingTask/SpeakingSubmission): the student TYPES an answer instead of
+// recording audio, and gets AI feedback purely for practice. Never linked
+// to Result, never an "official" IELTS score, no teacher grading workflow.
+// Route note: the existing /student/speaking (audio + code entry) already
+// occupies that path, so this phase's student-facing routes live at
+// /student/speaking-practice instead — see the Phase 37 report.
+// ---------------------------------------------------------------------------
+
+enum SpeakingPracticePart {
+  PART_1
+  PART_2
+  PART_3
+}
+
+enum SpeakingTopicStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model SpeakingTopic {
+  id     String               @id @default(cuid())
+  title  String
+  part   SpeakingPracticePart
+  status SpeakingTopicStatus  @default(DRAFT)
+
+  /// Part 2 (Cue Card) only — null for Part 1/3 topics, which instead use child SpeakingQuestion rows.
+  cueCardDescription  String? @db.Text
+  /// string[]
+  cueCardBulletPoints Json?
+  cueCardFollowUp     String? @db.Text
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questions SpeakingQuestion[]
+  attempts  SpeakingAttempt[]
+
+  @@index([createdById, status])
+  @@map("speaking_topics")
+}
+
+/// Part 1/3 only — one short question or discussion prompt within a topic. Part 2 topics have none (the cue card fields on SpeakingTopic are the whole prompt).
+model SpeakingQuestion {
+  id      String        @id @default(cuid())
+  topicId String
+  topic   SpeakingTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  prompt     String @db.Text
+  orderIndex Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  attempts SpeakingAttempt[]
+
+  @@map("speaking_questions")
+}
+
+enum SpeakingAttemptStatus {
+  DRAFT
+  SUBMITTED
+}
+
+model SpeakingAttempt {
+  id String @id @default(cuid())
+
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  topicId String
+  topic   SpeakingTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  /// Set for Part 1/3 (which specific question within the topic); null for Part 2 (the topic's own cue card).
+  questionId String?
+  question   SpeakingQuestion? @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  /// Denormalized copy of topic.part at attempt time, so a later topic edit never rewrites history.
+  part SpeakingPracticePart
+
+  content   String @db.Text
+  wordCount Int    @default(0)
+
+  status SpeakingAttemptStatus @default(DRAFT)
+
+  startedAt   DateTime  @default(now())
+  submittedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  feedback SpeakingFeedback?
+
+  @@index([studentId, createdAt])
+  @@index([topicId])
+  @@map("speaking_attempts")
+}
+
+model SpeakingFeedback {
+  id String @id @default(cuid())
+
+  attemptId String          @unique
+  attempt   SpeakingAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  grammarBand    Float
+  vocabularyBand Float
+  fluencyBand    Float
+  coherenceBand  Float
+  structureBand  Float
+  overallBand    Float
+
+  grammarFeedback    String @db.Text
+  vocabularyFeedback String @db.Text
+  fluencyFeedback    String @db.Text
+  coherenceFeedback  String @db.Text
+  structureFeedback  String @db.Text
+
+  /// string[]
+  strengths   Json
+  /// string[]
+  weaknesses  Json
+  /// string[]
+  suggestions Json
+
+  createdAt DateTime @default(now())
+
+  @@map("speaking_feedback")
 }
 
 // ---------------------------------------------------------------------------
@@ -1683,6 +1875,13 @@ model Article {
   audioUrl      String?
   audioDuration Int?
 
+  /// Phase 36 — Part 11. string[] of ArticleSkillTag values (see
+  /// src/lib/articles-skill-tags.ts) — Json rather than a native Postgres
+  /// array, same convention as Result.flaggedQuestionIds, so the tag set
+  /// can evolve without a migration. Empty array for every pre-Phase-36
+  /// article and any article a teacher hasn't tagged.
+  skillTags Json @default("[]")
+
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
 
@@ -1693,9 +1892,73 @@ model Article {
   readingProgress   ReadingProgress[]
   vocabularyEvents  StudentVocabulary[]
   vocabularyLookups VocabularyLookup[]
+  /// Phase 36 — Part 3/6/8.
+  highlights        ArticleHighlight[]
+  notes             ArticleNote[]
+  bookmarks         ArticleBookmark[]
+  /// Phase 38 — inline images/infographics/attachments (Part 5).
+  attachments       ArticleAttachment[]
 
   @@index([createdById, status])
   @@map("articles")
+}
+
+/// Phase 36 — Part 3. A student's persistent (not attempt-scoped, unlike
+/// the exam Reading/Listening Highlight model) highlighted span of article
+/// text, in one of 3 purpose-colors — reuses the same HighlightColor enum
+/// Phase 35 introduced for exam passages, remapped here to Important
+/// (yellow) / New Vocabulary (blue) / Review Later (green).
+model ArticleHighlight {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  articleId String
+  article   Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  text        String         @db.Text
+  startOffset Int
+  endOffset   Int
+  color       HighlightColor @default(YELLOW)
+
+  createdAt DateTime @default(now())
+
+  @@index([studentId, articleId])
+  @@map("article_highlights")
+}
+
+/// Phase 36 — Part 4/6. General reading notes (observations, IELTS tips) a
+/// student attaches to an article — also what "Add Note" on a selected
+/// word writes into, prefixed with the word/quote, same UX convention as
+/// the exam Notes drawer.
+model ArticleNote {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  articleId String
+  article   Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  content String @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, articleId])
+  @@map("article_notes")
+}
+
+/// Phase 36 — Part 8. "Bookmark article, resume later" — same shape/convention as QuestionBookmark and WritingTaskBookmark.
+model ArticleBookmark {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  articleId String
+  article   Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, articleId])
+  @@index([studentId])
+  @@map("article_bookmarks")
 }
 
 /// One row per article open by a student — a real view event, not a
@@ -2002,6 +2265,12 @@ model StudyStreak {
   /// The last calendar day (truncated) that counted toward the streak.
   lastActiveDate DateTime?
 
+  /// Phase 39 — Part 6. Premium Streak Freeze: set the first time a Premium
+  /// student's freeze saves a missed day, so it can never fire twice. Null
+  /// means the freeze is still available (every free student too, though
+  /// free students never actually consume one — see settleStreakForToday).
+  streakFreezeUsedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2043,4 +2312,135 @@ model AchievementUnlock {
 
   @@unique([studentId, achievementId])
   @@map("achievement_unlocks")
+}
+
+// ---------------------------------------------------------------------------
+// Media Library (Phase 38) — a central, reusable file store sitting on top
+// of the SAME storage abstraction every upload already used
+// (src/lib/uploads/storage.ts's uploadBuffer, Supabase-backed today,
+// swappable to S3/R2 later without touching call sites). Existing
+// per-feature attachments (PassageAttachment from Phase 35) keep working
+// completely unchanged — MediaFile is additive, linked in via new optional
+// fields, never a replacement.
+// ---------------------------------------------------------------------------
+
+enum MediaFileType {
+  IMAGE
+  AUDIO
+  PDF
+  DOCUMENT
+}
+
+/// Teacher-created folders (Reading / Listening / Articles / Speaking /
+/// Resources are just the suggested starting set — not a DB enum, so a
+/// teacher can add their own too).
+model MediaFolder {
+  id   String @id @default(cuid())
+  name String
+
+  ownerId String
+  owner   TeacherProfile @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  files MediaFile[]
+
+  @@unique([ownerId, name])
+  @@map("media_folders")
+}
+
+/// One row per real uploaded file. `path`/`thumbnailPath` are servable
+/// URLs, same convention as every other upload field in this schema
+/// (Passage.audioPath, Article.coverImagePath, PassageAttachment.imagePath).
+model MediaFile {
+  id String @id @default(cuid())
+
+  fileName String
+  type     MediaFileType
+  mimeType String
+  path     String
+  /// Bytes — read from the real uploaded file, never estimated. The basis for the 5GB teacher storage quota.
+  size     Int
+
+  /// Real pixel dimensions, only ever set for type=IMAGE (read from the file itself via sharp, never guessed) — used to give next/image real width/height and avoid layout shift.
+  width         Int?
+  height        Int?
+  /// A real compressed+resized preview generated at upload time, only for type=IMAGE. Null for audio/pdf/documents, and for any image where thumbnail generation failed (the original still serves fine either way).
+  thumbnailPath String?
+
+  folderId String?
+  folder   MediaFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  ownerId String
+  owner   TeacherProfile @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  usages             MediaUsage[]
+  passageAttachments PassageAttachment[]
+  articleAttachments ArticleAttachment[]
+
+  @@index([ownerId, type])
+  @@index([ownerId, folderId])
+  @@index([ownerId, createdAt])
+  @@map("media_files")
+}
+
+/// What a MediaFile is reused BY — Reading/Listening (PassageAttachment) and
+/// Articles (cover or an ArticleAttachment) today, more contexts later
+/// without a schema change. Polymorphic by `context` + `referenceId` (the
+/// referenced row's own id) rather than several nullable FK columns, since
+/// the set of "things that can reuse a file" is expected to keep growing.
+/// `referenceId` is deliberately not a real FK (the target table varies by
+/// context) — the referencing side is responsible for deleting its own
+/// MediaUsage row when it deletes itself (see deletePassageAttachment /
+/// deleteArticleAttachment).
+enum MediaUsageContext {
+  PASSAGE_ATTACHMENT
+  ARTICLE_COVER
+  ARTICLE_ATTACHMENT
+}
+
+model MediaUsage {
+  id String @id @default(cuid())
+
+  mediaFileId String
+  mediaFile   MediaFile @relation(fields: [mediaFileId], references: [id], onDelete: Cascade)
+
+  context     MediaUsageContext
+  referenceId String
+
+  createdAt DateTime @default(now())
+
+  @@index([mediaFileId])
+  @@index([context, referenceId])
+  @@map("media_usages")
+}
+
+/// Phase 38 — Part 5's "Optional: Inline Images, Infographics, Attachments"
+/// for articles — same shape/reasoning as PassageAttachment (Phase 35): a
+/// real uploaded image, teacher-facing type label only.
+enum ArticleAttachmentType {
+  IMAGE
+  INFOGRAPHIC
+  ATTACHMENT
+}
+
+model ArticleAttachment {
+  id        String  @id @default(cuid())
+  articleId String
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  type       ArticleAttachmentType
+  imagePath  String
+  caption    String?
+  orderIndex Int                   @default(0)
+
+  /// Set only when this attachment was picked from the Media Library rather than uploaded fresh — null for a direct upload, same optionality convention as PassageAttachment.mediaFileId.
+  mediaFileId String?
+  mediaFile   MediaFile? @relation(fields: [mediaFileId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@map("article_attachments")
 }

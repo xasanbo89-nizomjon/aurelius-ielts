@@ -4,13 +4,15 @@ import { notFound } from "next/navigation";
 import { BarChart3 } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
-import { getArticleForTeacher } from "@/lib/articles";
+import { getArticleForTeacher, listArticleAttachments } from "@/lib/articles";
+import { parseArticleSkillTags } from "@/lib/article-skill-tags";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArticleForm } from "@/components/teacher/article-form";
 import { ArticleRowActions } from "@/components/teacher/article-row-actions";
+import { ArticleAttachmentsManager } from "@/components/teacher/article-attachments-manager";
 
 export const metadata: Metadata = { title: "Edit Article" };
 
@@ -28,6 +30,8 @@ export default async function EditArticlePage({
   ]);
 
   if (!article) notFound();
+
+  const attachments = await listArticleAttachments(article.id);
 
   return (
     <>
@@ -63,7 +67,13 @@ export default async function EditArticlePage({
           difficulty: article.difficulty,
           coverImagePath: article.coverImagePath,
           audioUrl: article.audioUrl,
+          skillTags: parseArticleSkillTags(article.skillTags),
         }}
+      />
+
+      <ArticleAttachmentsManager
+        articleId={article.id}
+        attachments={attachments.map((a) => ({ id: a.id, type: a.type, imagePath: a.imagePath, caption: a.caption }))}
       />
     </>
   );

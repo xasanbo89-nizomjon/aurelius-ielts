@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CheckCircle2, Gauge } from "lucide-react";
+import { CheckCircle2, Gauge, Lightbulb, TrendingDown } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getAttemptSummary } from "@/lib/exam/attempts";
 import { isResponseAnswered } from "@/lib/exam/grading";
-import { findInProgressFullMockLinkForResult } from "@/lib/full-mock-attempts";
+import { getResultInsights } from "@/lib/exam/result-insights";
+import { findInProgressFullMockLinkForResult, isResultPartOfAnyFullMockAttempt } from "@/lib/full-mock-attempts";
+import { awardPracticeSessionCoins } from "@/lib/coins";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +28,20 @@ export default async function ExamResultsPage({
   if (!attempt) notFound();
   if (!attempt.completedAt) redirect(`/student/exam/attempt/${resultId}`);
 
-  const fullMockAttemptId = await findInProgressFullMockLinkForResult(resultId);
+  const [fullMockAttemptId, partOfFullMock, insights] = await Promise.all([
+    findInProgressFullMockLinkForResult(resultId),
+    isResultPartOfAnyFullMockAttempt(resultId),
+    getResultInsights(resultId, profile.id),
+  ]);
+
+  // Phase 39 — Part 4's Practice Session reward. Skipped when this attempt
+  // is (or ever was) a Full Mock Test section — those earn the larger Mock
+  // Test bonus instead, never both for the same real attempt, even after
+  // the Full Mock attempt has since completed. Idempotent on resultId, so
+  // revisiting this results page can never pay twice.
+  if (!partOfFullMock) {
+    await awardPracticeSessionCoins(profile.id, resultId, `${attempt.skill === "LISTENING" ? "Listening" : "Reading"} practice session completed.`);
+  }
 
   const answerByQuestion = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
   const skillHref = attempt.skill === "LISTENING" ? "/student/listening" : "/student/reading";
@@ -123,6 +138,36 @@ export default async function ExamResultsPage({
             )}
           </div>
         </div>
+
+        {insights && insights.weakAreas.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Card>
+              <CardContent className="space-y-2 py-4">
+                <h2 className="text-destructive flex items-center gap-1.5 text-sm font-medium">
+                  <TrendingDown className="size-4" /> Weak Areas
+                </h2>
+                {insights.weakAreas.map((area) => (
+                  <p key={area.type} className="text-muted-foreground text-sm">
+                    {area.label} — {area.correct}/{area.total} correct
+                  </p>
+                ))}
+              </CardContent>
+            </Card>
+            {insights.recommendationText && insights.recommendedPracticeHref && (
+              <Card>
+                <CardContent className="space-y-2 py-4">
+                  <h2 className="text-accent flex items-center gap-1.5 text-sm font-medium">
+                    <Lightbulb className="size-4" /> Recommended Practice
+                  </h2>
+                  <p className="text-muted-foreground text-sm">{insights.recommendationText}</p>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={insights.recommendedPracticeHref}>Find more practice tests</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-wrap justify-center gap-3">
           {fullMockAttemptId ? (

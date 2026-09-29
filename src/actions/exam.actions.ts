@@ -117,7 +117,7 @@ export async function toggleFlagAction(
 
 export async function addHighlightAction(
   resultId: string,
-  input: { passageId: string; text: string; startOffset: number; endOffset: number }
+  input: { passageId: string; text: string; startOffset: number; endOffset: number; color?: "YELLOW" | "BLUE" | "GREEN" }
 ): Promise<ActionResult & { highlightId?: string }> {
   try {
     const { profile } = await requireStudentProfile();

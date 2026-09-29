@@ -10,11 +10,14 @@ import {
   getStudentVocabulary,
   logVocabularyLookup,
   getWordsPanelEntries,
+  getVocabularyExportRows,
   type WordDetails,
   type SaveWordResult,
   type WordsPanelEntry,
 } from "@/lib/vocabulary";
 import { getOrGenerateWordDetails } from "@/lib/ai/vocabulary-assistant";
+import { toCsv } from "@/lib/exports/csv";
+import { VOCABULARY_STATUS_LABELS } from "@/lib/labels";
 import { friendlyErrorMessage } from "@/lib/validation-error";
 import {
   getWordDetailsSchema,
@@ -153,5 +156,34 @@ export async function getStudentVocabularyAction(
     return { success: true, result };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not load your vocabulary.") };
+  }
+}
+
+export type ExportVocabularyResult =
+  | { success: true; filename: string; mimeType: string; base64: string }
+  | { success: false; error: string };
+
+/** Phase 36 — Part 5's Export, as a real downloadable CSV of every real saved word. */
+export async function exportVocabularyAction(): Promise<ExportVocabularyResult> {
+  try {
+    const { profile } = await requireStudentProfile();
+    const rows = await getVocabularyExportRows(profile.id);
+
+    const csv = toCsv(
+      ["Word", "Status", "Meaning", "Example Sentence", "Source Article", "Date Added"],
+      rows.map((row) => [
+        row.word,
+        VOCABULARY_STATUS_LABELS[row.status],
+        row.meaning,
+        row.exampleSentence,
+        row.sourceArticle,
+        row.addedAt.toISOString().slice(0, 10),
+      ])
+    );
+
+    const base64 = Buffer.from(csv, "utf-8").toString("base64");
+    return { success: true, filename: `vocabulary-${new Date().toISOString().slice(0, 10)}.csv`, mimeType: "text/csv", base64 };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not export your vocabulary.") };
   }
 }

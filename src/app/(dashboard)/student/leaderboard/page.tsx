@@ -3,6 +3,7 @@ import { Coins, Flame, Trophy } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getCoinLeaderboard, getActivityLeaderboard, getStreakLeaderboard, type LeaderboardRow } from "@/lib/leaderboard";
+import { getPremiumStatusMap } from "@/lib/premium-identity";
 import { formatDuration } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,17 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 
 export const metadata: Metadata = { title: "Leaderboard" };
 
-function LeaderboardList({ rows, currentStudentId, formatValue }: { rows: LeaderboardRow[]; currentStudentId: string; formatValue: (v: number) => string }) {
+function LeaderboardList({
+  rows,
+  currentStudentId,
+  formatValue,
+  premiumMap,
+}: {
+  rows: LeaderboardRow[];
+  currentStudentId: string;
+  formatValue: (v: number) => string;
+  premiumMap: Map<string, boolean>;
+}) {
   if (rows.length === 0) {
     return <p className="text-muted-foreground text-sm">No data yet.</p>;
   }
@@ -23,6 +34,7 @@ function LeaderboardList({ rows, currentStudentId, formatValue }: { rows: Leader
         >
           <span className="min-w-0 truncate">
             <span className="text-muted-foreground mr-2 tabular-nums">{index + 1}.</span>
+            {premiumMap.get(row.studentId) && <span aria-label="Premium member">👑 </span>}
             {row.name ?? row.email}
             {row.studentId === currentStudentId && " (you)"}
           </span>
@@ -41,6 +53,9 @@ export default async function StudentLeaderboardPage() {
     getActivityLeaderboard(profile.teacherId),
     getStreakLeaderboard(profile.teacherId),
   ]);
+
+  const allStudentIds = [...new Set([...coinRows, ...activityRows, ...streakRows].map((r) => r.studentId))];
+  const premiumMap = await getPremiumStatusMap(allStudentIds);
 
   if (!profile.teacherId) {
     return (
@@ -63,7 +78,7 @@ export default async function StudentLeaderboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <LeaderboardList rows={coinRows} currentStudentId={profile.id} formatValue={(v) => `${v} coins`} />
+            <LeaderboardList rows={coinRows} currentStudentId={profile.id} formatValue={(v) => `${v} coins`} premiumMap={premiumMap} />
           </CardContent>
         </Card>
 
@@ -74,7 +89,7 @@ export default async function StudentLeaderboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <LeaderboardList rows={activityRows} currentStudentId={profile.id} formatValue={formatDuration} />
+            <LeaderboardList rows={activityRows} currentStudentId={profile.id} formatValue={formatDuration} premiumMap={premiumMap} />
           </CardContent>
         </Card>
 
@@ -85,7 +100,12 @@ export default async function StudentLeaderboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <LeaderboardList rows={streakRows} currentStudentId={profile.id} formatValue={(v) => `${v} day${v === 1 ? "" : "s"}`} />
+            <LeaderboardList
+              rows={streakRows}
+              currentStudentId={profile.id}
+              formatValue={(v) => `${v} day${v === 1 ? "" : "s"}`}
+              premiumMap={premiumMap}
+            />
           </CardContent>
         </Card>
       </div>

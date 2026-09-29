@@ -32,6 +32,7 @@ function toCreateData(teacherId: string, input: ArticleInput) {
     wordCount,
     readingMinutes,
     createdById: teacherId,
+    skillTags: input.skillTags ?? [],
     ...(input.coverImagePath && { coverImagePath: input.coverImagePath }),
     ...audioFields(input),
   } satisfies Prisma.ArticleUncheckedCreateInput;
@@ -53,6 +54,7 @@ export async function updateArticle(articleId: string, teacherId: string, input:
       difficulty: input.difficulty,
       wordCount,
       readingMinutes,
+      skillTags: input.skillTags ?? [],
       // Only included when a new cover was uploaded this session — omitted
       // otherwise leaves the existing cover untouched (same convention as
       // Passage audio in test-management.ts).
@@ -180,4 +182,57 @@ export async function getArticleForStudent(articleId: string, studentId: string,
 /** A real view event — called once per article open, after access has been confirmed. */
 export async function recordArticleView(articleId: string, studentId: string) {
   await prisma.articleView.create({ data: { articleId, studentId } });
+}
+
+// ---------------------------------------------------------------------------
+// Article attachments (Phase 38) — Part 5's optional inline images,
+// infographics, and attachments. Same shape/reasoning as PassageAttachment
+// (Phase 35): a real uploaded image, teacher-facing type label only.
+// ---------------------------------------------------------------------------
+
+export async function addArticleAttachment(
+  articleId: string,
+  teacherId: string,
+  input: { type: "IMAGE" | "INFOGRAPHIC" | "ATTACHMENT"; imagePath: string; caption?: string; mediaFileId?: string }
+) {
+  const article = await prisma.article.findFirst({ where: { id: articleId, createdById: teacherId } });
+  if (!article) throw new Error("Article not found.");
+
+  if (input.mediaFileId) {
+    const mediaFile = await prisma.mediaFile.findFirst({ where: { id: input.mediaFileId, ownerId: teacherId } });
+    if (!mediaFile) throw new Error("You don't have access to that media file.");
+  }
+
+  const maxOrder = await prisma.articleAttachment.aggregate({ where: { articleId }, _max: { orderIndex: true } });
+
+  const attachment = await prisma.articleAttachment.create({
+    data: {
+      articleId,
+      type: input.type,
+      imagePath: input.imagePath,
+      caption: input.caption || null,
+      orderIndex: (maxOrder._max.orderIndex ?? -1) + 1,
+      mediaFileId: input.mediaFileId ?? null,
+    },
+  });
+
+  if (input.mediaFileId) {
+    await prisma.mediaUsage.create({ data: { mediaFileId: input.mediaFileId, context: "ARTICLE_ATTACHMENT", referenceId: attachment.id } });
+  }
+
+  return attachment;
+}
+
+export async function deleteArticleAttachment(attachmentId: string, teacherId: string): Promise<void> {
+  const attachment = await prisma.articleAttachment.findFirst({ where: { id: attachmentId, article: { createdById: teacherId } } });
+  if (!attachment) throw new Error("Attachment not found.");
+
+  await prisma.$transaction([
+    prisma.mediaUsage.deleteMany({ where: { context: "ARTICLE_ATTACHMENT", referenceId: attachmentId } }),
+    prisma.articleAttachment.delete({ where: { id: attachmentId } }),
+  ]);
+}
+
+export async function listArticleAttachments(articleId: string) {
+  return prisma.articleAttachment.findMany({ where: { articleId }, orderBy: { orderIndex: "asc" } });
 }

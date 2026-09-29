@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ImageIcon, Loader2, Music, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import type { ArticleDifficulty } from "@prisma/client";
 
 import {
   createArticleAction,
@@ -19,6 +20,7 @@ import { uploadToSignedUrl } from "@/lib/uploads/supabase-browser";
 import { getAudioDuration } from "@/lib/audio-duration";
 import { computeContentStats } from "@/lib/content-stats";
 import { ARTICLE_DIFFICULTY_LABELS } from "@/lib/labels";
+import { ARTICLE_SKILL_TAGS, ARTICLE_SKILL_TAG_LABELS, type ArticleSkillTag } from "@/lib/article-skill-tags";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,9 +34,10 @@ export type ExistingArticle = {
   description: string | null;
   content: string;
   category: string;
-  difficulty: "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+  difficulty: ArticleDifficulty;
   coverImagePath: string | null;
   audioUrl: string | null;
+  skillTags?: ArticleSkillTag[];
 };
 
 export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArticle }) {
@@ -44,6 +47,7 @@ export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArt
   const [content, setContent] = useState(existingArticle?.content ?? "");
   const [category, setCategory] = useState(existingArticle?.category ?? "");
   const [difficulty, setDifficulty] = useState<ExistingArticle["difficulty"]>(existingArticle?.difficulty ?? "INTERMEDIATE");
+  const [skillTags, setSkillTags] = useState<ArticleSkillTag[]>(existingArticle?.skillTags ?? []);
   const [newCoverPath, setNewCoverPath] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [newAudioPath, setNewAudioPath] = useState<string | null>(null);
@@ -136,6 +140,10 @@ export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArt
     if (!title.trim()) return toast.error("Give the article a title.");
     if (!category.trim()) return toast.error("Add a category.");
     if (!content.trim()) return toast.error("Add the article content.");
+    // Phase 38 — Part 5: mandatory cover image for every NEW article. Not
+    // enforced retroactively on existing articles (some predate this rule
+    // and still work fine without one — see coverPreview below).
+    if (!existingArticle && !coverPreview) return toast.error("Add a cover image before publishing.");
 
     setSubmitting(true);
     const input = {
@@ -144,6 +152,7 @@ export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArt
       content,
       category,
       difficulty,
+      skillTags,
       ...(newCoverPath && { coverImagePath: newCoverPath }),
       ...(audioRemoved
         ? { audioUrl: null, audioDuration: null }
@@ -220,7 +229,32 @@ export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArt
       </div>
 
       <div className="space-y-1.5">
-        <Label>Cover image (optional)</Label>
+        <Label>IELTS reading skills (optional)</Label>
+        <p className="text-muted-foreground text-xs">Tag which skills this article helps a student practice.</p>
+        <div className="flex flex-wrap gap-1.5">
+          {ARTICLE_SKILL_TAGS.map((tag) => {
+            const active = skillTags.includes(tag);
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() =>
+                  setSkillTags((prev) => (active ? prev.filter((t) => t !== tag) : [...prev, tag]))
+                }
+                className={cn(
+                  "rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors",
+                  active ? "bg-primary text-primary-foreground border-transparent" : "border-border/70 hover:bg-secondary/60"
+                )}
+              >
+                {ARTICLE_SKILL_TAG_LABELS[tag]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Cover image {existingArticle ? "(optional)" : "(required)"}</Label>
         <input ref={fileInputRef} type="file" accept={IMAGE_INPUT_ACCEPT} className="hidden" onChange={handleFileChange} />
         <div className="flex items-center gap-3">
           {coverPreview ? (

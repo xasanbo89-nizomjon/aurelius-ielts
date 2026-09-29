@@ -5,7 +5,7 @@ import { Award, Coins, Flame, Target, Users } from "lucide-react";
 import { requireTeacherProfile } from "@/lib/session";
 import { getStudentRoster, listAllTeachers, STUDENT_ROSTER_PAGE_SIZE } from "@/lib/teacher-students";
 import { getStudentTrialInfoForRoster } from "@/lib/trial-management";
-import { getTeacherEngagementInsights, type RankedStudent } from "@/lib/teacher-engagement-insights";
+import { getTeacherEngagementInsights, getMostActiveStudentsTable, type RankedStudent } from "@/lib/teacher-engagement-insights";
 import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_VARIANTS } from "@/lib/labels";
 import { formatDuration } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -54,6 +54,7 @@ export default async function TeacherStudentsPage({
   const { students, total, isRootView } = await getStudentRoster(profile.id, profile.isRootTeacher, { search: q, page });
   const teachers = isRootView ? await listAllTeachers() : [];
   const insights = await getTeacherEngagementInsights(profile.id);
+  const mostActiveByStreak = await getMostActiveStudentsTable(profile.id);
   // Trial Management (bonus feature) is root-teacher-only — bounded by
   // pagination (≤10 students), so a per-student summary lookup here never
   // becomes a real N+1 concern, and it stays perfectly consistent with
@@ -137,6 +138,48 @@ export default async function TeacherStudentsPage({
             </CardContent>
           </Card>
         </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="font-display text-xl font-medium tracking-tight">Most Active Students (by Streak)</h2>
+        {mostActiveByStreak.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No active streaks yet.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Current Streak</TableHead>
+                <TableHead>Longest Streak</TableHead>
+                <TableHead>Coin Balance</TableHead>
+                <TableHead>Premium</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {mostActiveByStreak.map((row) => (
+                <TableRow key={row.studentId}>
+                  <TableCell className="font-medium">
+                    <Link href={`/teacher/students/${row.studentId}`} className="hover:underline">
+                      {row.name ?? "—"}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{row.email}</TableCell>
+                  <TableCell>
+                    {row.currentStreak} day{row.currentStreak === 1 ? "" : "s"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {row.longestStreak} day{row.longestStreak === 1 ? "" : "s"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{row.coinBalance.toLocaleString()}</TableCell>
+                  <TableCell>
+                    {row.isPremium ? <Badge variant="accent">👑 Premium</Badge> : <span className="text-muted-foreground">Free</span>}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </section>
 
       {students.length === 0 ? (

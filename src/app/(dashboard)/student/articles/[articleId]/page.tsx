@@ -4,17 +4,22 @@ import { Clock, Type } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { hasActiveAccess } from "@/lib/subscription";
-import { getArticleForStudent, recordArticleView } from "@/lib/articles";
+import { getArticleForStudent, listArticleAttachments, recordArticleView } from "@/lib/articles";
 import { getReadingProgress } from "@/lib/reading-progress";
 import { getVocabularyStatusesForWords } from "@/lib/vocabulary";
+import { listArticleHighlights, listArticleNotes } from "@/lib/article-annotations";
+import { isArticleBookmarked } from "@/lib/bookmarks";
 import { extractWords } from "@/lib/content-stats";
 import { ARTICLE_DIFFICULTY_LABELS } from "@/lib/labels";
+import { parseArticleSkillTags, ARTICLE_SKILL_TAG_LABELS } from "@/lib/article-skill-tags";
 import { Badge } from "@/components/ui/badge";
 import { ArticleReader } from "@/components/student/article-reader";
 import { ArticleAudioPlayer } from "@/components/student/article-audio-player-lazy";
 import { WordsPanelButton } from "@/components/student/words-panel-button";
 import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
 import { SaveArticleOfflineButton } from "@/components/student/save-article-offline-button";
+import { ArticleBookmarkButton } from "@/components/student/article-bookmark-button";
+import { ArticleAttachments } from "@/components/student/article-attachments";
 
 export const metadata: Metadata = { title: "Article" };
 
@@ -33,11 +38,17 @@ export default async function StudentArticleReaderPage({
   const article = await getArticleForStudent(articleId, profile.id, profile.teacherId);
   if (!article) notFound();
 
-  const [, progress, statuses] = await Promise.all([
+  const [, progress, statuses, highlights, notes, bookmarked, attachments] = await Promise.all([
     recordArticleView(articleId, profile.id),
     getReadingProgress(profile.id, articleId),
     getVocabularyStatusesForWords(profile.id, extractWords(article.content)),
+    listArticleHighlights(profile.id, articleId),
+    listArticleNotes(profile.id, articleId),
+    isArticleBookmarked(profile.id, articleId),
+    listArticleAttachments(articleId),
   ]);
+
+  const skillTags = parseArticleSkillTags(article.skillTags);
 
   return (
     <>
@@ -45,6 +56,11 @@ export default async function StudentArticleReaderPage({
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="secondary">{article.category}</Badge>
           <Badge variant="outline">{ARTICLE_DIFFICULTY_LABELS[article.difficulty]}</Badge>
+          {skillTags.map((tag) => (
+            <Badge key={tag} variant="accent">
+              {ARTICLE_SKILL_TAG_LABELS[tag]}
+            </Badge>
+          ))}
         </div>
         <h1 className="font-display text-2xl leading-tight font-medium tracking-tight sm:text-3xl">{article.title}</h1>
         {article.description && <p className="text-muted-foreground max-w-2xl text-sm sm:text-base">{article.description}</p>}
@@ -57,18 +73,25 @@ export default async function StudentArticleReaderPage({
               <Type className="size-3.5" /> {article.wordCount.toLocaleString()} words
             </span>
           </div>
-          <SaveArticleOfflineButton
-            article={{
-              id: article.id,
-              title: article.title,
-              description: article.description,
-              category: article.category,
-              difficulty: article.difficulty,
-              content: article.content,
-              readingMinutes: article.readingMinutes,
-              wordCount: article.wordCount,
-            }}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <ArticleBookmarkButton articleId={article.id} initialBookmarked={bookmarked} />
+            <SaveArticleOfflineButton
+              article={{
+                id: article.id,
+                title: article.title,
+                description: article.description,
+                category: article.category,
+                difficulty: article.difficulty,
+                content: article.content,
+                readingMinutes: article.readingMinutes,
+                wordCount: article.wordCount,
+              }}
+              annotations={[
+                ...highlights.map((h) => ({ id: h.id, kind: "highlight" as const, text: h.text, createdAt: h.createdAt.toISOString() })),
+                ...notes.map((n) => ({ id: n.id, kind: "note" as const, text: n.content, createdAt: n.createdAt.toISOString() })),
+              ]}
+            />
+          </div>
         </div>
       </div>
 
@@ -80,6 +103,8 @@ export default async function StudentArticleReaderPage({
         />
       )}
 
+      <ArticleAttachments attachments={attachments.map((a) => ({ id: a.id, imagePath: a.imagePath, caption: a.caption }))} />
+
       <ArticleReader
         articleId={article.id}
         content={article.content}
@@ -87,6 +112,8 @@ export default async function StudentArticleReaderPage({
         initialProgress={
           progress ? { lastPosition: progress.lastPosition, percentComplete: progress.percentComplete } : null
         }
+        initialHighlights={highlights.map((h) => ({ id: h.id, startOffset: h.startOffset, endOffset: h.endOffset, color: h.color }))}
+        initialNotes={notes.map((n) => ({ id: n.id, content: n.content }))}
       />
 
       <WordsPanelButton />

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { QuestionType } from "@prisma/client";
+import type { HighlightColor, QuestionType } from "@prisma/client";
 import { Bookmark, ChevronLeft, ChevronRight, Flag, Home, List, Loader2, Maximize2, Minimize2, NotebookPen } from "lucide-react";
 import { toast } from "sonner";
 
@@ -30,6 +30,8 @@ import { LeaveTestDialog } from "@/components/exam/leave-test-dialog";
 import { PassagePanel } from "@/components/exam/passage-panel";
 import { NotesDrawer, type ExamNote } from "@/components/exam/notes-drawer";
 import { AudioPlayer } from "@/components/exam/audio-player";
+import { PassageAttachments, type ExamAttachment } from "@/components/exam/passage-attachments";
+import { MobileSplitTabs } from "@/components/exam/mobile-split-tabs";
 import { QuestionRenderer } from "@/components/exam/question-types/question-renderer";
 
 export type ExamQuestion = {
@@ -47,9 +49,10 @@ export type ExamPassage = {
   content: string;
   audioUrl: string | null;
   orderIndex: number;
+  attachments: ExamAttachment[];
 };
 
-export type ExamHighlight = { id: string; passageId: string; text: string; startOffset: number; endOffset: number };
+export type ExamHighlight = { id: string; passageId: string; text: string; startOffset: number; endOffset: number; color: HighlightColor };
 export type ExamNoteRecord = { id: string; passageId: string | null; content: string };
 
 export function ExamRunner({
@@ -269,12 +272,12 @@ export function ExamRunner({
     }
   }
 
-  async function handleHighlight(text: string, start: number, end: number) {
+  async function handleHighlight(text: string, start: number, end: number, color: HighlightColor) {
     if (!currentPassage) return;
     const passageId = currentPassage.id;
-    const result = await addHighlightAction(resultId, { passageId, text, startOffset: start, endOffset: end });
+    const result = await addHighlightAction(resultId, { passageId, text, startOffset: start, endOffset: end, color });
     if (result.success && result.highlightId) {
-      setHighlights((prev) => [...prev, { id: result.highlightId!, passageId, text, startOffset: start, endOffset: end }]);
+      setHighlights((prev) => [...prev, { id: result.highlightId!, passageId, text, startOffset: start, endOffset: end, color }]);
     } else if (!result.success) {
       toast.error(result.error);
     }
@@ -438,44 +441,76 @@ export function ExamRunner({
       <div className="flex flex-1 overflow-hidden">
         {testType === "READING" ? (
           <>
+            {/* Desktop split screen (Part 1) — independent scrolling, both panels always visible. */}
             <div className="border-border/70 hidden w-1/2 overflow-hidden border-r lg:block">
               {currentPassage && (
                 <PassagePanel
                   title={currentPassage.title}
                   content={currentPassage.content}
                   highlights={currentPassageHighlights}
+                  attachments={currentPassage.attachments}
                   onHighlight={handleHighlight}
                   onRemoveHighlight={handleRemoveHighlight}
                   onAddNote={handleAddNoteFromSelection}
                 />
               )}
             </div>
-            <div className="flex-1 overflow-y-auto lg:w-1/2">
-              <div className="lg:hidden">
-                {currentPassage && (
-                  <PassagePanel
-                    title={currentPassage.title}
-                    content={currentPassage.content}
-                    highlights={currentPassageHighlights}
-                    onHighlight={handleHighlight}
-                    onRemoveHighlight={handleRemoveHighlight}
-                    onAddNote={handleAddNoteFromSelection}
-                  />
-                )}
-                <div className="border-border/70 border-t" />
-              </div>
+            <div className="hidden flex-1 overflow-y-auto lg:block">
               <div className="px-6 py-6 sm:px-8 sm:py-8">{questionsList}</div>
+            </div>
+
+            {/* Mobile: tabs instead of split screen (Part 9) — no stacked double-scroll. */}
+            <div className="flex flex-1 flex-col overflow-hidden lg:hidden">
+              <MobileSplitTabs
+                leftLabel="Passage"
+                left={
+                  currentPassage && (
+                    <PassagePanel
+                      title={currentPassage.title}
+                      content={currentPassage.content}
+                      highlights={currentPassageHighlights}
+                      attachments={currentPassage.attachments}
+                      onHighlight={handleHighlight}
+                      onRemoveHighlight={handleRemoveHighlight}
+                      onAddNote={handleAddNoteFromSelection}
+                    />
+                  )
+                }
+                right={<div className="h-full overflow-y-auto px-4 py-5 sm:px-6">{questionsList}</div>}
+              />
             </div>
           </>
         ) : (
-          <div className="flex-1 overflow-y-auto">
-            {currentPassage?.audioUrl && (
-              <div className="border-border/70 bg-background/95 sticky top-0 z-10 border-b px-6 py-4 backdrop-blur-sm sm:px-8">
-                <AudioPlayer src={currentPassage.audioUrl} label={currentPassage.title} />
-              </div>
-            )}
-            <div className="mx-auto w-full max-w-3xl px-6 py-6 sm:px-8 sm:py-8">{questionsList}</div>
-          </div>
+          <>
+            {/* Desktop split screen (Part 5) — audio + visual materials on the left, questions on the right. */}
+            <div className="border-border/70 hidden w-1/2 overflow-y-auto border-r p-5 lg:block">
+              {currentPassage && (
+                <div className="space-y-5">
+                  {currentPassage.audioUrl && <AudioPlayer src={currentPassage.audioUrl} label={currentPassage.title} />}
+                  <PassageAttachments attachments={currentPassage.attachments} />
+                </div>
+              )}
+            </div>
+            <div className="hidden flex-1 overflow-y-auto lg:block">
+              <div className="mx-auto w-full max-w-3xl px-6 py-6 sm:px-8 sm:py-8">{questionsList}</div>
+            </div>
+
+            {/* Mobile: tabs (Part 9) — audio stays reachable behind its own tab instead of a sticky bar eating vertical space. */}
+            <div className="flex flex-1 flex-col overflow-hidden lg:hidden">
+              <MobileSplitTabs
+                leftLabel="Audio & Materials"
+                left={
+                  currentPassage && (
+                    <div className="space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
+                      {currentPassage.audioUrl && <AudioPlayer src={currentPassage.audioUrl} label={currentPassage.title} />}
+                      <PassageAttachments attachments={currentPassage.attachments} />
+                    </div>
+                  )
+                }
+                right={<div className="h-full overflow-y-auto px-4 py-5 sm:px-6">{questionsList}</div>}
+              />
+            </div>
+          </>
         )}
 
         {!focusMode && (

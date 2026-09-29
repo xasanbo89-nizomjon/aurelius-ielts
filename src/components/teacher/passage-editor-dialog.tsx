@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import { PassageAttachmentsManager, type ExistingPassageAttachment } from "@/components/teacher/passage-attachments-manager";
 
 export type ExistingPassage = {
   id: string;
@@ -26,6 +28,7 @@ export type ExistingPassage = {
   audioUrl: string | null;
   audioPath: string | null;
   audioFileName: string | null;
+  attachments?: ExistingPassageAttachment[];
 };
 
 type NewUpload = { path: string; fileName: string; mimeType: string; size: number };
@@ -203,6 +206,17 @@ export function PassageEditorDialog({
               className="font-display"
             />
           </div>
+
+          {existingPassage && (
+            <>
+              <Separator />
+              <PassageAttachmentsManager
+                passageId={existingPassage.id}
+                testId={testId}
+                attachments={existingPassage.attachments ?? []}
+              />
+            </>
+          )}
         </div>
 
         <DialogFooter>

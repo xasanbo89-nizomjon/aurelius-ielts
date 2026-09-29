@@ -10,6 +10,7 @@ import { getAchievementsForStudent, syncAchievements } from "@/lib/achievements"
 import { getStudyTimeSummary } from "@/lib/study-activity";
 import { getSubscriptionSummary } from "@/lib/subscription";
 import { getStudentVocabularyStats } from "@/lib/vocabulary";
+import { getPremiumIdentity } from "@/lib/premium-identity";
 import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_VARIANTS } from "@/lib/labels";
 import { formatDuration } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -21,6 +22,8 @@ import { ProfilePhotoUploader } from "@/components/student/profile-photo-uploade
 import { ProfileGoalsForm } from "@/components/student/profile-goals-form";
 import { RedeemPremiumButton } from "@/components/student/redeem-premium-button";
 import { VocabularyStatsCards } from "@/components/analytics/vocabulary-stats-cards";
+import { PremiumBadge } from "@/components/student/premium-badge";
+import { AnimatedStreakBadge } from "@/components/student/animated-streak-badge";
 
 export const metadata: Metadata = { title: "My Profile" };
 
@@ -30,7 +33,7 @@ export default async function StudentProfilePage() {
   // Lazy safety-net: real achievement conditions get re-checked here too, not just from the heartbeat/exam-completion path.
   await syncAchievements(profile.id);
 
-  const [details, wallet, streak, achievements, studyTime, subscription, vocabularyStats] = await Promise.all([
+  const [details, wallet, streak, achievements, studyTime, subscription, vocabularyStats, premium] = await Promise.all([
     getStudentProfileDetails(user.id, profile.id),
     getWalletSummary(profile.id),
     getStreakBreakdown(profile.id),
@@ -38,6 +41,7 @@ export default async function StudentProfilePage() {
     getStudyTimeSummary(profile.id),
     getSubscriptionSummary(profile.id),
     getStudentVocabularyStats(profile.id),
+    getPremiumIdentity(profile.id),
   ]);
 
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
@@ -47,8 +51,9 @@ export default async function StudentProfilePage() {
       <PageHeader title="My Profile" description="Your goals, study activity, and rewards." />
 
       <Card>
-        <CardContent>
+        <CardContent className="space-y-3">
           <ProfilePhotoUploader name={details.name} email={details.email} image={details.image} />
+          {premium.isPremium && <PremiumBadge size="lg" />}
         </CardContent>
       </Card>
 
@@ -140,12 +145,16 @@ export default async function StudentProfilePage() {
       <section className="space-y-4">
         <h2 className="font-display text-xl font-medium tracking-tight">Streak &amp; Premium Status</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            label="Current Streak"
-            value={streak.currentStreak > 0 ? `${streak.currentStreak} ${"🔥".repeat(Math.min(streak.currentStreak, 5))}` : "0"}
-            icon={Flame}
-            caption={`Longest: ${streak.longestStreak} day${streak.longestStreak === 1 ? "" : "s"}`}
-          />
+          <Card className="gap-0 py-5">
+            <CardContent className="space-y-1.5">
+              <p className="text-muted-foreground text-xs font-medium">Current Streak</p>
+              <AnimatedStreakBadge days={streak.currentStreak} size="lg" />
+              <p className="text-muted-foreground text-xs">
+                Longest: {streak.longestStreak} day{streak.longestStreak === 1 ? "" : "s"}
+                {streak.streakFreezeUsedAt && " · Streak Freeze used"}
+              </p>
+            </CardContent>
+          </Card>
           <StatCard
             label="Weekly Streak"
             value={String(streak.weeklyStreak)}
@@ -167,12 +176,17 @@ export default async function StudentProfilePage() {
                 </Badge>
                 {subscription.hasAccess && subscription.daysRemaining != null ? (
                   <p className="text-muted-foreground mt-1.5 text-xs">
-                    {subscription.daysRemaining} day{subscription.daysRemaining === 1 ? "" : "s"} remaining
+                    {premium.planName ?? "Premium"} — {subscription.daysRemaining} day{subscription.daysRemaining === 1 ? "" : "s"} remaining
                   </p>
                 ) : (
                   <Link href="/student/premium" className="text-accent mt-1.5 block text-xs hover:underline">
                     Buy Premium →
                   </Link>
+                )}
+                {premium.isPremium && (
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Streak Freeze: {streak.streakFreezeUsedAt ? "used" : "available"}
+                  </p>
                 )}
               </div>
               <span className="bg-secondary text-accent flex size-10 shrink-0 items-center justify-center rounded-xl">

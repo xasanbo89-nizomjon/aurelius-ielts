@@ -251,6 +251,23 @@ export async function findInProgressFullMockLinkForResult(resultId: string) {
   return link.attempt.id;
 }
 
+/**
+ * Phase 39 — Part 4/5. Unlike findInProgressFullMockLinkForResult (which is
+ * status-gated and exists only to drive the "Continue to next section"
+ * button), this checks whether a Result was EVER part of a Full Mock
+ * attempt, regardless of whether that attempt is still in progress or has
+ * since completed. Used to withhold the standalone Practice Session coin
+ * award for Full Mock legs — those earn the larger Mock Test bonus instead,
+ * even on a later revisit of the results page after the whole attempt is done.
+ */
+export async function isResultPartOfAnyFullMockAttempt(resultId: string): Promise<boolean> {
+  const link = await prisma.fullMockSectionResult.findUnique({
+    where: { resultId },
+    select: { id: true },
+  });
+  return link !== null;
+}
+
 export async function findInProgressFullMockLinkForWritingSubmission(writingSubmissionId: string) {
   const link = await prisma.fullMockSectionResult.findUnique({
     where: { writingSubmissionId },

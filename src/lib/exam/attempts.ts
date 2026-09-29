@@ -47,7 +47,10 @@ export async function getAttemptDetail(resultId: string, studentId: string) {
     include: {
       mockTest: {
         include: {
-          passages: { orderBy: { orderIndex: "asc" } },
+          passages: {
+            orderBy: { orderIndex: "asc" },
+            include: { attachments: { orderBy: { orderIndex: "asc" } } },
+          },
           questions: { orderBy: { orderIndex: "asc" } },
         },
       },

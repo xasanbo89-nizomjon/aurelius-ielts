@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { Prisma, QuestionType } from "@prisma/client";
+import type { Prisma, PassageAttachmentType, QuestionType } from "@prisma/client";
 
 import { requireTeacherProfile } from "@/lib/session";
 import * as tm from "@/lib/exam/test-management";
@@ -147,6 +147,32 @@ export async function deletePassageAction(passageId: string, testId: string): Pr
     return { success: true };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not delete the passage.") };
+  }
+}
+
+export async function addPassageAttachmentAction(
+  passageId: string,
+  testId: string,
+  input: { type: PassageAttachmentType; imagePath: string; caption?: string; mediaFileId?: string }
+): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    await tm.addPassageAttachment(passageId, profile.id, input);
+    revalidatePath(`/teacher/tests/${testId}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not add the attachment.") };
+  }
+}
+
+export async function deletePassageAttachmentAction(attachmentId: string, testId: string): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    await tm.deletePassageAttachment(attachmentId, profile.id);
+    revalidatePath(`/teacher/tests/${testId}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not delete the attachment.") };
   }
 }
 

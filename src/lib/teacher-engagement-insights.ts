@@ -2,8 +2,10 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { getStudentOverview } from "@/lib/dashboard-data";
+import { getPremiumStatusMap } from "@/lib/premium-identity";
 
 const TOP_N = 5;
+const MOST_ACTIVE_TABLE_TOP_N = 10;
 const ACTIVE_WINDOW_DAYS = 30;
 
 export type RankedStudent = { studentId: string; name: string | null; email: string; value: number };
@@ -109,4 +111,57 @@ export async function getTeacherEngagementInsights(teacherId: string): Promise<T
       ratePercent: studentsWithGoal.length > 0 ? Math.round((studentsAtOrAboveTarget / studentsWithGoal.length) * 100) : null,
     },
   };
+}
+
+export type MostActiveStudentRow = {
+  studentId: string;
+  name: string | null;
+  email: string;
+  currentStreak: number;
+  longestStreak: number;
+  coinBalance: number;
+  isPremium: boolean;
+};
+
+/**
+ * Phase 39 — Part 9. Additive, separate from getTeacherEngagementInsights
+ * above (which ranks "most active" by real study SECONDS): this ranks the
+ * same student roster by real current STREAK and also surfaces longest
+ * streak, coin balance, and premium status in one row, for the new
+ * dedicated table on the Students page. Same single-tenant `teacherId`
+ * scoping as every other teacher analytics function in this file.
+ */
+export async function getMostActiveStudentsTable(teacherId: string): Promise<MostActiveStudentRow[]> {
+  const students = await prisma.studentProfile.findMany({
+    where: { teacherId },
+    select: { id: true, user: { select: { name: true, email: true } } },
+  });
+  const studentIds = students.map((s) => s.id);
+  if (studentIds.length === 0) return [];
+
+  const [streaks, wallets, premiumMap] = await Promise.all([
+    prisma.studyStreak.findMany({ where: { studentId: { in: studentIds } } }),
+    prisma.coinWallet.findMany({ where: { studentId: { in: studentIds } } }),
+    getPremiumStatusMap(studentIds),
+  ]);
+
+  const streakByStudent = new Map(streaks.map((s) => [s.studentId, s]));
+  const walletByStudent = new Map(wallets.map((w) => [w.studentId, w]));
+
+  return students
+    .map((student) => {
+      const streak = streakByStudent.get(student.id);
+      const wallet = walletByStudent.get(student.id);
+      return {
+        studentId: student.id,
+        name: student.user.name,
+        email: student.user.email,
+        currentStreak: streak?.currentStreak ?? 0,
+        longestStreak: streak?.longestStreak ?? 0,
+        coinBalance: wallet?.balance ?? 0,
+        isPremium: premiumMap.get(student.id) ?? false,
+      };
+    })
+    .sort((a, b) => b.currentStreak - a.currentStreak)
+    .slice(0, MOST_ACTIVE_TABLE_TOP_N);
 }

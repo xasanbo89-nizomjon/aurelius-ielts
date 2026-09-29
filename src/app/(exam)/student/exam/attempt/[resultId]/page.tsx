@@ -48,6 +48,12 @@ export default async function ExamAttemptPage({
         content: passage.content,
         audioUrl: resolvePassageAudioSrc(passage),
         orderIndex: passage.orderIndex,
+        attachments: passage.attachments.map((attachment) => ({
+          id: attachment.id,
+          type: attachment.type,
+          imagePath: attachment.imagePath,
+          caption: attachment.caption,
+        })),
       }))}
       questions={attempt.mockTest.questions.map((question) => ({
         id: question.id,
@@ -66,6 +72,7 @@ export default async function ExamAttemptPage({
         text: highlight.text,
         startOffset: highlight.startOffset,
         endOffset: highlight.endOffset,
+        color: highlight.color,
       }))}
       initialNotes={attempt.notes.map((note) => ({
         id: note.id,

@@ -74,7 +74,8 @@ function roundToHalfBand(value: number): number {
   return Math.min(9, Math.max(0, Math.round(value * 2) / 2));
 }
 
-export type SpeakingEvaluationResult = SpeakingEvaluationResponse;
+/** Phase 39 — durationSeconds added (the real, already-computed transcription length) so callers can credit real study-streak activity without re-deriving it. */
+export type SpeakingEvaluationResult = SpeakingEvaluationResponse & { durationSeconds: number };
 
 /**
  * Transcribes a raw recording and scores it against the 4 official IELTS
@@ -126,5 +127,6 @@ export async function evaluateSpeakingRecording(
     lexicalBand: roundToHalfBand(result.lexicalBand),
     grammarBand: roundToHalfBand(result.grammarBand),
     pronunciationBand: roundToHalfBand(result.pronunciationBand),
+    durationSeconds: context.durationSeconds,
   };
 }
