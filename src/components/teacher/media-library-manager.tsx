@@ -1,9 +1,8 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import Image from "next/image";
 import type { MediaFileType } from "@prisma/client";
-import { FileText, Folder, FolderPlus, Loader2, Music, Search, Trash2, Upload, X } from "lucide-react";
+import { Eye, FileText, Folder, FolderPlus, Loader2, Music, Search, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -26,6 +25,8 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MediaPreviewDialog } from "@/components/teacher/media-preview-dialog";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -66,6 +67,7 @@ export function MediaLibraryManager({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [previewFile, setPreviewFile] = useState<MediaFileRow | null>(null);
   const [, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,6 +119,7 @@ export function MediaLibraryManager({
       return;
     }
     setFiles((prev) => prev.filter((f) => f.id !== fileId));
+    if (previewFile?.id === fileId) setPreviewFile(null);
     toast.success("File deleted.");
   }
 
@@ -251,18 +254,26 @@ export function MediaLibraryManager({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {files.map((file) => (
             <Card key={file.id} className="overflow-hidden py-0">
-              <div className="bg-secondary/40 relative aspect-video">
+              <button
+                type="button"
+                onClick={() => setPreviewFile(file)}
+                aria-label={`Preview ${file.title || file.fileName}`}
+                className="bg-secondary/40 group relative block aspect-video w-full"
+              >
                 {file.type === "IMAGE" ? (
-                  <Image src={file.thumbnailPath ?? file.path} alt={file.fileName} fill sizes="200px" className="object-cover" unoptimized />
+                  <FallbackImage src={file.thumbnailPath ?? file.path} alt={file.title ?? file.fileName} fill sizes="200px" className="object-cover" unoptimized />
                 ) : (
                   <div className="text-muted-foreground flex h-full items-center justify-center">
                     {file.type === "AUDIO" ? <Music className="size-8" /> : <FileText className="size-8" />}
                   </div>
                 )}
-              </div>
+                <span className="bg-background/0 group-hover:bg-background/30 absolute inset-0 flex items-center justify-center transition-colors">
+                  <Eye className="size-5 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
+                </span>
+              </button>
               <CardContent className="space-y-1.5 py-3">
-                <p className="truncate text-xs font-medium" title={file.fileName}>
-                  {file.fileName}
+                <p className="truncate text-xs font-medium" title={file.title || file.fileName}>
+                  {file.title || file.fileName}
                 </p>
                 <div className="text-muted-foreground flex items-center justify-between text-[11px]">
                   <span>{formatBytes(file.size)}</span>
@@ -272,22 +283,39 @@ export function MediaLibraryManager({
                     </Badge>
                   )}
                 </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive w-full"
-                  onClick={() => handleDelete(file.id)}
-                  disabled={deletingId === file.id || file.usageCount > 0}
-                  title={file.usageCount > 0 ? "Remove it from Reading/Listening/Articles first" : undefined}
-                >
-                  {deletingId === file.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                  Delete
-                </Button>
+                <div className="flex gap-1.5">
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => setPreviewFile(file)}>
+                    <Eye className="size-3.5" /> Preview
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => handleDelete(file.id)}
+                    disabled={deletingId === file.id || file.usageCount > 0}
+                    title={file.usageCount > 0 ? "Remove it from Reading/Listening/Articles first" : undefined}
+                  >
+                    {deletingId === file.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <MediaPreviewDialog
+        file={previewFile}
+        open={previewFile != null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewFile(null);
+        }}
+        onUpdated={(updated) => {
+          setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+          setPreviewFile(updated);
+        }}
+        onDeleted={handleDelete}
+      />
 
       <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
         <DialogContent>

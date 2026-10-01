@@ -46,6 +46,7 @@ export type GeneralTestRow = {
   durationMinutes: number | null;
   difficulty: MockTestDifficulty | null;
   questionCount: number;
+  coverImagePath: string | null;
 };
 
 /**
@@ -75,6 +76,7 @@ export async function getGeneralTestsByType(
       description: true,
       durationMinutes: true,
       difficulty: true,
+      coverImagePath: true,
       _count: { select: { questions: true } },
     },
   });
@@ -86,5 +88,6 @@ export async function getGeneralTestsByType(
     durationMinutes: t.durationMinutes,
     difficulty: t.difficulty,
     questionCount: t._count.questions,
+    coverImagePath: t.coverImagePath,
   }));
 }

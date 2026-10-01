@@ -43,11 +43,11 @@ export function PremiumPlanCard({ plan, studentEmail, studentId }: { plan: Premi
     <Card
       className={cn(
         "relative gap-0 py-6 transition-all duration-[250ms]",
-        plan.badge && "border-accent/40 shadow-soft-lg"
+        plan.badge && "border-accent/40 shadow-soft-lg bg-accent/[0.025] sm:scale-[1.03]"
       )}
     >
       {plan.badge && (
-        <Badge variant={BADGE_VARIANT[plan.badge]} className="absolute -top-3 left-1/2 -translate-x-1/2">
+        <Badge variant={BADGE_VARIANT[plan.badge]} className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 shadow-soft">
           {plan.badge}
         </Badge>
       )}

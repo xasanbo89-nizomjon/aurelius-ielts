@@ -1,5 +1,5 @@
 import "server-only";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import type { MediaFileType, MediaUsageContext } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -55,10 +55,14 @@ function inferMediaType(kind: "image" | "audio" | "document"): MediaFileType {
 export type UploadMediaFileResult = {
   id: string;
   fileName: string;
+  title: string | null;
+  description: string | null;
   type: MediaFileType;
   path: string;
   thumbnailPath: string | null;
   size: number;
+  /** True when this exact file (by content) was already in the teacher's library — the existing row was reused, nothing new was uploaded or created. */
+  reused: boolean;
 };
 
 /**
@@ -68,11 +72,15 @@ export type UploadMediaFileResult = {
  * Every other Phase 38 upload surface (passage attachments, article
  * attachments/cover) either calls this directly or links to a MediaFile it
  * already created here — there is exactly one upload code path, not one per feature.
+ *
+ * Phase 47 — "Avoid duplicate uploads": hashes the ORIGINAL bytes (before
+ * any compression) and, if this teacher already has a file with the same
+ * hash, returns that existing row instead of uploading/creating a new one.
  */
 export async function uploadMediaFile(
   teacherId: string,
   file: { name: string; size: number; type?: string; buffer: Buffer },
-  options: { folderId?: string; kind: "image" | "audio" | "document" }
+  options: { folderId?: string; kind: "image" | "audio" | "document"; title?: string; description?: string }
 ): Promise<UploadMediaFileResult> {
   const validation =
     options.kind === "image"
@@ -85,6 +93,22 @@ export async function uploadMediaFile(
   if (options.folderId) {
     const folder = await prisma.mediaFolder.findFirst({ where: { id: options.folderId, ownerId: teacherId } });
     if (!folder) throw new OwnershipError("That folder doesn't exist.");
+  }
+
+  const contentHash = createHash("sha256").update(file.buffer).digest("hex");
+  const existing = await prisma.mediaFile.findFirst({ where: { ownerId: teacherId, contentHash } });
+  if (existing) {
+    return {
+      id: existing.id,
+      fileName: existing.fileName,
+      title: existing.title,
+      description: existing.description,
+      type: existing.type,
+      path: existing.path,
+      thumbnailPath: existing.thumbnailPath,
+      size: existing.size,
+      reused: true,
+    };
   }
 
   let uploadBytes = file.buffer;
@@ -117,10 +141,13 @@ export async function uploadMediaFile(
   const created = await prisma.mediaFile.create({
     data: {
       fileName: file.name,
+      title: options.title?.trim() || null,
+      description: options.description?.trim() || null,
       type: inferMediaType(options.kind),
       mimeType: contentType,
       path,
       size: uploadBytes.length,
+      contentHash,
       width,
       height,
       thumbnailPath,
@@ -132,10 +159,13 @@ export async function uploadMediaFile(
   return {
     id: created.id,
     fileName: created.fileName,
+    title: created.title,
+    description: created.description,
     type: created.type,
     path: created.path,
     thumbnailPath: created.thumbnailPath,
     size: created.size,
+    reused: false,
   };
 }
 
@@ -173,6 +203,8 @@ export async function deleteMediaFolder(folderId: string, teacherId: string): Pr
 export type MediaFileRow = {
   id: string;
   fileName: string;
+  title: string | null;
+  description: string | null;
   type: MediaFileType;
   mimeType: string;
   path: string;
@@ -182,11 +214,12 @@ export type MediaFileRow = {
   height: number | null;
   folderId: string | null;
   folderName: string | null;
+  uploadedByName: string;
   usageCount: number;
   createdAt: Date;
 };
 
-/** Phase 38 — Part 7. Real search (file name) + real filter (type/folder), zero fabricated results. */
+/** Phase 38 — Part 7 (extended Phase 47 to also match `title`). Real search + real filter (type/folder), zero fabricated results. */
 export async function listMediaFiles(
   teacherId: string,
   options: { search?: string; type?: MediaFileType; folderId?: string } = {}
@@ -196,15 +229,24 @@ export async function listMediaFiles(
       ownerId: teacherId,
       ...(options.type ? { type: options.type } : {}),
       ...(options.folderId ? { folderId: options.folderId } : {}),
-      ...(options.search ? { fileName: { contains: options.search, mode: "insensitive" as const } } : {}),
+      ...(options.search
+        ? {
+            OR: [
+              { fileName: { contains: options.search, mode: "insensitive" as const } },
+              { title: { contains: options.search, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
     },
     orderBy: { createdAt: "desc" },
-    include: { folder: { select: { name: true } }, _count: { select: { usages: true } } },
+    include: { folder: { select: { name: true } }, owner: { select: { user: { select: { name: true } } } }, _count: { select: { usages: true } } },
   });
 
   return files.map((file) => ({
     id: file.id,
     fileName: file.fileName,
+    title: file.title,
+    description: file.description,
     type: file.type,
     mimeType: file.mimeType,
     path: file.path,
@@ -214,6 +256,7 @@ export async function listMediaFiles(
     height: file.height,
     folderId: file.folderId,
     folderName: file.folder?.name ?? null,
+    uploadedByName: file.owner.user.name ?? "You",
     usageCount: file._count.usages,
     createdAt: file.createdAt,
   }));
@@ -230,6 +273,85 @@ export async function deleteMediaFile(fileId: string, teacherId: string): Promis
     throw new Error("This file is still used by a Reading, Listening, or Article item — remove it there first.");
   }
   await prisma.mediaFile.delete({ where: { id: fileId } });
+}
+
+/** Phase 47 — the Media Library's "Preview Image" edit: real title/description, editable after upload. */
+export async function updateMediaFileMetadata(
+  fileId: string,
+  teacherId: string,
+  input: { title?: string; description?: string }
+): Promise<void> {
+  const file = await prisma.mediaFile.findFirst({ where: { id: fileId, ownerId: teacherId } });
+  if (!file) throw new OwnershipError("You don't have access to this file.");
+  await prisma.mediaFile.update({
+    where: { id: fileId },
+    data: { title: input.title?.trim() || null, description: input.description?.trim() || null },
+  });
+}
+
+/**
+ * Phase 47 — "Replace Image": re-uploads a fresh file into the SAME
+ * MediaFile row (same id, same title/description/folder/usages) rather than
+ * creating a new one — every place this file is already referenced (Passage
+ * attachments, Article covers, etc.) picks up the new image automatically,
+ * with nothing to re-link. Only ever allowed for type=IMAGE. The previous
+ * storage object is left in place (this codebase never deletes storage
+ * objects on replace/delete — same convention as deleteMediaFile above).
+ */
+export async function replaceMediaFile(
+  fileId: string,
+  teacherId: string,
+  file: { name: string; size: number; type?: string; buffer: Buffer }
+): Promise<UploadMediaFileResult> {
+  const existing = await prisma.mediaFile.findFirst({ where: { id: fileId, ownerId: teacherId } });
+  if (!existing) throw new OwnershipError("You don't have access to this file.");
+  if (existing.type !== "IMAGE") throw new Error("Only images can be replaced here.");
+
+  const validation = validateImageFile(file);
+  if (!validation.valid) throw new Error(validation.error);
+
+  const contentHash = createHash("sha256").update(file.buffer).digest("hex");
+
+  const compressed = await compressImage(file.buffer, validation.contentType);
+  const dimensions = await readImageDimensions(compressed.buffer);
+  const thumbnail = await generateThumbnail(compressed.buffer);
+
+  await assertWithinQuota(teacherId, Math.max(0, compressed.buffer.length - existing.size));
+
+  const objectPath = `${teacherId}/${randomUUID()}${validation.extension}`;
+  const path = await uploadBuffer(MEDIA_LIBRARY_BUCKET, objectPath, compressed.buffer, compressed.contentType);
+
+  let thumbnailPath: string | null = null;
+  if (thumbnail) {
+    const thumbObjectPath = `${teacherId}/${randomUUID()}.jpg`;
+    thumbnailPath = await uploadBuffer(MEDIA_LIBRARY_THUMBNAILS_BUCKET, thumbObjectPath, thumbnail, "image/jpeg");
+  }
+
+  const updated = await prisma.mediaFile.update({
+    where: { id: fileId },
+    data: {
+      fileName: file.name,
+      mimeType: compressed.contentType,
+      path,
+      size: compressed.buffer.length,
+      contentHash,
+      width: dimensions?.width ?? null,
+      height: dimensions?.height ?? null,
+      thumbnailPath,
+    },
+  });
+
+  return {
+    id: updated.id,
+    fileName: updated.fileName,
+    title: updated.title,
+    description: updated.description,
+    type: updated.type,
+    path: updated.path,
+    thumbnailPath: updated.thumbnailPath,
+    size: updated.size,
+    reused: false,
+  };
 }
 
 // ---------------------------------------------------------------------------

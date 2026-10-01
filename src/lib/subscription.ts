@@ -163,3 +163,16 @@ export async function hasActiveAccessForResult(studentId: string, resultId: stri
   if (result?.mockTest.category === "CAMBRIDGE") return true;
   return hasActiveAccess(studentId);
 }
+
+/**
+ * Phase 47 — the same Cambridge bypass, for FullMockTest's own `category`
+ * field: a CAMBRIDGE-category full mock is the "Free users: limited mock
+ * exams" tier's real free inventory (accessible with zero subscription),
+ * GENERAL stays premium-gated. This is the ONLY per-test access check for
+ * Full Mock — there is no separate attempt-count cap.
+ */
+export async function hasActiveAccessForFullMockTest(studentId: string, fullMockTestId: string): Promise<boolean> {
+  const test = await prisma.fullMockTest.findUnique({ where: { id: fullMockTestId }, select: { category: true } });
+  if (test?.category === "CAMBRIDGE") return true;
+  return hasActiveAccess(studentId);
+}

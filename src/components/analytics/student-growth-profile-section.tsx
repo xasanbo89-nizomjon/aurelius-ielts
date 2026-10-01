@@ -1,7 +1,7 @@
 import { History } from "lucide-react";
 
 import type { ProgressPoint } from "@/lib/analytics/student-insights";
-import type { BandTrendPoint, CoinTrendPoint } from "@/lib/analytics/student-growth-profile";
+import type { BandTrendPoint } from "@/lib/analytics/student-growth-profile";
 import type { DailyActivityPoint } from "@/lib/study-activity";
 import type { SubscriptionHistoryEntry } from "@/lib/subscription-history";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +40,6 @@ export function StudentGrowthProfileSection({
   writingTrend,
   speakingTrend,
   weeklyActivity,
-  coinTrend,
   subscriptionHistory,
 }: {
   readingHistory: ProgressPoint[];
@@ -48,7 +47,6 @@ export function StudentGrowthProfileSection({
   writingTrend: BandTrendPoint[];
   speakingTrend: BandTrendPoint[];
   weeklyActivity: DailyActivityPoint[];
-  coinTrend: CoinTrendPoint[];
   subscriptionHistory: SubscriptionHistoryEntry[];
 }) {
   const readingSeries = resultSeries(readingHistory, "var(--chart-1)", "Reading");
@@ -62,16 +60,6 @@ export function StudentGrowthProfileSection({
     value: Math.round(day.seconds / 60),
     tooltip: `${new Date(day.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })} — ${Math.round(day.seconds / 60)} min`,
   }));
-
-  const coinSeries: LineChartSeries = {
-    label: "Net coins",
-    color: "var(--accent)",
-    points: coinTrend.map((point, i) => ({
-      x: i + 1,
-      y: point.net,
-      tooltip: `Week of ${point.weekLabel} — ${point.net >= 0 ? "+" : ""}${point.net} coins`,
-    })),
-  };
 
   return (
     <section className="space-y-4">
@@ -90,29 +78,14 @@ export function StudentGrowthProfileSection({
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Study Hours (last 7 days)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <BarChart data={activityData} color="var(--chart-2)" ariaLabel="Minutes studied per day over the last 7 days" />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Coin Trend (last 8 weeks)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {coinTrend.every((p) => p.net === 0) ? (
-              <p className="text-muted-foreground py-10 text-center text-sm">No coin activity yet.</p>
-            ) : (
-              <LineChart series={[coinSeries]} ariaLabel="Net coins earned minus spent per week" />
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Study Hours (last 7 days)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <BarChart data={activityData} color="var(--chart-2)" ariaLabel="Minutes studied per day over the last 7 days" />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

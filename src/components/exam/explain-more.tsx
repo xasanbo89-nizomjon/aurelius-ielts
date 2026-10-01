@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Loader2, Sparkles } from "lucide-react";
 
 import { explainMoreAction } from "@/actions/ai.actions";
@@ -8,7 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button";
 import type { AiExplanationContent } from "@/lib/ai/explanations";
 
-type Status = "idle" | "loading" | "loaded" | "error";
+type Status = "idle" | "loading" | "loaded" | "error" | "not-premium";
 
 const SECTION_LABELS: { key: keyof AiExplanationContent; label: string }[] = [
   { key: "whyCorrect", label: "Why the correct answer is correct" },
@@ -31,6 +32,9 @@ export function ExplainMore({ resultId, questionId }: { resultId: string; questi
     if (result.success) {
       setExplanation(result.explanation);
       setStatus("loaded");
+    } else if (result.code === "NOT_PREMIUM") {
+      setError(result.error);
+      setStatus("not-premium");
     } else {
       setError(result.error);
       setStatus("error");
@@ -67,6 +71,15 @@ export function ExplainMore({ resultId, questionId }: { resultId: string; questi
               <p className="text-destructive">{error}</p>
               <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => void fetchExplanation()}>
                 Try again
+              </Button>
+            </div>
+          )}
+
+          {status === "not-premium" && (
+            <div className="space-y-2 py-3 text-sm">
+              <p className="text-muted-foreground">{error}</p>
+              <Button asChild variant="link" size="sm" className="text-accent h-auto p-0">
+                <Link href="/student/premium">Upgrade to Premium →</Link>
               </Button>
             </div>
           )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { Pause, Play, Volume1, Volume2, VolumeX } from "lucide-react";
+import { Loader2, Pause, Play, Volume1, Volume2, VolumeX } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -22,12 +22,15 @@ export function AudioPlayer({ src, label }: { src: string; label: string }) {
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [speed, setSpeed] = useState(1);
+  /** Phase 46 — CBT Listening's "Loading state": true from a fresh src until real audio metadata has actually loaded, and again whenever the browser has to re-buffer mid-playback. */
+  const [isLoading, setIsLoading] = useState(true);
 
   // A new `src` (e.g. switching Listening parts) is a fresh track — reset transient playback state.
   useEffect(() => {
     setPlaying(false);
     setCurrent(0);
     setDuration(0);
+    setIsLoading(true);
   }, [src]);
 
   useEffect(() => {
@@ -35,16 +38,25 @@ export function AudioPlayer({ src, label }: { src: string; label: string }) {
     if (!audio) return;
 
     const onTime = () => setCurrent(audio.currentTime);
-    const onLoaded = () => setDuration(audio.duration || 0);
+    const onLoaded = () => {
+      setDuration(audio.duration || 0);
+      setIsLoading(false);
+    };
     const onEnd = () => setPlaying(false);
+    const onWaiting = () => setIsLoading(true);
+    const onCanPlay = () => setIsLoading(false);
 
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("loadedmetadata", onLoaded);
     audio.addEventListener("ended", onEnd);
+    audio.addEventListener("waiting", onWaiting);
+    audio.addEventListener("canplay", onCanPlay);
     return () => {
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("loadedmetadata", onLoaded);
       audio.removeEventListener("ended", onEnd);
+      audio.removeEventListener("waiting", onWaiting);
+      audio.removeEventListener("canplay", onCanPlay);
     };
   }, [src]);
 
@@ -96,10 +108,17 @@ export function AudioPlayer({ src, label }: { src: string; label: string }) {
         <button
           type="button"
           onClick={togglePlay}
-          aria-label={playing ? "Pause audio" : "Play audio"}
-          className="bg-primary text-primary-foreground focus-visible:ring-ring/50 flex size-11 shrink-0 items-center justify-center rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          disabled={isLoading}
+          aria-label={isLoading ? "Loading audio" : playing ? "Pause audio" : "Play audio"}
+          className="bg-primary text-primary-foreground focus-visible:ring-ring/50 flex size-11 shrink-0 items-center justify-center rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-70"
         >
-          {playing ? <Pause className="size-5" /> : <Play className="size-5 translate-x-0.5" />}
+          {isLoading ? (
+            <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+          ) : playing ? (
+            <Pause className="size-5" />
+          ) : (
+            <Play className="size-5 translate-x-0.5" />
+          )}
         </button>
 
         <div className="min-w-40 flex-1 space-y-1.5">

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Award, Coins, Flame, Target, Users } from "lucide-react";
+import { Award, Flame, Target, Users } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getStudentRoster, listAllTeachers, STUDENT_ROSTER_PAGE_SIZE } from "@/lib/teacher-students";
@@ -102,7 +102,7 @@ export default async function TeacherStudentsPage({
 
       <section className="space-y-4">
         <h2 className="font-display text-xl font-medium tracking-tight">Student Engagement Insights</h2>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -127,16 +127,6 @@ export default async function TeacherStudentsPage({
               />
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Coins className="text-accent size-4.5" aria-hidden="true" /> Most Coins Earned
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RankedList items={insights.mostCoinsEarned} formatValue={(v) => `${v} coins`} emptyLabel="No coins earned yet." />
-            </CardContent>
-          </Card>
         </div>
       </section>
 
@@ -152,7 +142,6 @@ export default async function TeacherStudentsPage({
                 <TableHead>Email</TableHead>
                 <TableHead>Current Streak</TableHead>
                 <TableHead>Longest Streak</TableHead>
-                <TableHead>Coin Balance</TableHead>
                 <TableHead>Premium</TableHead>
               </TableRow>
             </TableHeader>
@@ -171,7 +160,6 @@ export default async function TeacherStudentsPage({
                   <TableCell className="text-muted-foreground">
                     {row.longestStreak} day{row.longestStreak === 1 ? "" : "s"}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{row.coinBalance.toLocaleString()}</TableCell>
                   <TableCell>
                     {row.isPremium ? <Badge variant="accent">👑 Premium</Badge> : <span className="text-muted-foreground">Free</span>}
                   </TableCell>

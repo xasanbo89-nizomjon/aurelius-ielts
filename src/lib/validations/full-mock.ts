@@ -2,12 +2,20 @@ import { z } from "zod";
 
 import { writingTaskCategorySchema, writingTaskNumberSchema } from "@/lib/validations/writing";
 
+const mockTestDifficultySchema = z.enum(["BEGINNER", "INTERMEDIATE", "ADVANCED"]);
+const mockTestCategorySchema = z.enum(["CAMBRIDGE", "GENERAL"]);
+
 export const fullMockBasicsSchema = z.object({
   title: z.string().trim().min(3, "Title must be at least 3 characters.").max(160),
   description: z.string().trim().max(2000).optional(),
   coverImagePath: z.string().trim().max(500).optional(),
   estimatedBandMin: z.number().min(0).max(9).optional(),
   estimatedBandMax: z.number().min(0).max(9).optional(),
+  /** Phase 47 — a real teacher-set label (e.g. "Cambridge Mock 1"), never parsed/guessed. */
+  examNumber: z.number().int().min(1).max(9999).optional(),
+  difficulty: mockTestDifficultySchema.optional(),
+  /** Phase 47 — CAMBRIDGE bypasses the subscription gate entirely, same convention as MockTest. */
+  category: mockTestCategorySchema,
 });
 export type FullMockBasicsFormInput = z.infer<typeof fullMockBasicsSchema>;
 

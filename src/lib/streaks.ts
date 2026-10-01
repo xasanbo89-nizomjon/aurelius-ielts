@@ -2,9 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { startOfDay, sumSecondsForDay } from "@/lib/study-activity";
-import { awardCoins } from "@/lib/coins";
 import { getSubscriptionSummary } from "@/lib/subscription";
-import { STREAK_MILESTONE_REWARDS } from "@/lib/coin-economy-constants";
 
 /** A calendar day only counts toward the streak once real study activity (any combination of types) reaches this — 5 minutes of genuine engagement, not just opening a tab. Anti-abuse threshold, not an arbitrary UX number. */
 export const MIN_DAILY_SECONDS_FOR_STREAK = 5 * 60;
@@ -32,6 +30,9 @@ function isSameDay(a: Date, b: Date): boolean {
  * instead of the streak resetting — bridging that single gap, never more
  * than one, and never twice (streakFreezeUsedAt is set the moment it's
  * used and checked here on every future evaluation).
+ *
+ * Phase 48 removed the coin milestone bonus — this now only tracks the real
+ * streak count itself.
  */
 export async function settleStreakForToday(studentId: string): Promise<void> {
   const today = startOfDay(new Date());
@@ -70,17 +71,6 @@ export async function settleStreakForToday(studentId: string): Promise<void> {
       ...(useFreeze && { streakFreezeUsedAt: today }),
     },
   });
-
-  const milestone = STREAK_MILESTONE_REWARDS.find((m) => m.days === newCurrent);
-  if (milestone) {
-    await awardCoins(
-      studentId,
-      "STREAK_BONUS",
-      milestone.coins,
-      `STREAK:${studentId}:${milestone.days}:${today.toISOString().slice(0, 10)}`,
-      `${milestone.days}-day study streak bonus.`
-    );
-  }
 }
 
 export type StreakSummary = {

@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Circle, XCircle } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getAttemptSummary } from "@/lib/exam/attempts";
-import { formatAnswerForDisplay } from "@/lib/exam/format-answer";
+import { getResultInsights } from "@/lib/exam/result-insights";
 import { Button } from "@/components/ui/button";
-import { ExplainMore } from "@/components/exam/explain-more";
+import { ReviewHeader } from "@/components/exam/review/review-header";
+import { ExamReviewSplit, type ReviewQuestionData } from "@/components/exam/review/exam-review-split";
+import type { ReviewHighlight } from "@/components/exam/review/review-passage-panel";
 
 export const metadata: Metadata = { title: "Review Answers" };
 
@@ -19,15 +21,45 @@ export default async function ExamReviewPage({
   const { resultId } = await params;
   const { profile } = await requireStudentProfile();
 
-  const attempt = await getAttemptSummary(resultId, profile.id);
+  const [attempt, insights] = await Promise.all([
+    getAttemptSummary(resultId, profile.id),
+    getResultInsights(resultId, profile.id),
+  ]);
   if (!attempt) notFound();
   if (!attempt.completedAt) redirect(`/student/exam/attempt/${resultId}`);
 
   const answerByQuestion = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
-  const minutesSpent = attempt.durationSeconds != null ? Math.round(attempt.durationSeconds / 60) : null;
+
+  const questions: ReviewQuestionData[] = attempt.mockTest.questions.map((question) => {
+    const answer = answerByQuestion.get(question.id);
+    return {
+      id: question.id,
+      passageId: question.passageId,
+      prompt: question.prompt,
+      type: question.type,
+      options: question.options,
+      correctAnswer: question.correctAnswer,
+      studentAnswer: answer?.response ?? null,
+      status: !answer ? "skipped" : answer.isCorrect ? "correct" : "incorrect",
+    };
+  });
+
+  const correctCount = questions.filter((q) => q.status === "correct").length;
+  const incorrectCount = questions.filter((q) => q.status === "incorrect").length;
+  const skippedCount = questions.filter((q) => q.status === "skipped").length;
+
+  const savedHighlights: ReviewHighlight[] = attempt.highlights.map((highlight) => ({
+    id: highlight.id,
+    passageId: highlight.passageId,
+    startOffset: highlight.startOffset,
+    endOffset: highlight.endOffset,
+    color: highlight.color,
+  }));
+
+  const skillLabel = attempt.skill === "LISTENING" ? "Listening" : "Reading";
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-6 py-12 sm:py-16">
+    <div className="mx-auto w-full max-w-6xl px-6 py-10 sm:py-12">
       <div className="space-y-6">
         <Button asChild variant="ghost" size="sm" className="-ml-2">
           <Link href={`/student/exam/attempt/${resultId}/results`}>
@@ -35,70 +67,27 @@ export default async function ExamReviewPage({
           </Link>
         </Button>
 
-        <div className="space-y-1.5">
-          <h1 className="font-display text-2xl font-medium tracking-tight">{attempt.mockTest.title}</h1>
-          <p className="text-muted-foreground text-sm">
-            {attempt.mockTest.questions.length} questions
-            {minutesSpent != null && ` · ${minutesSpent} min spent overall`}
-          </p>
-        </div>
+        <ReviewHeader
+          testTitle={attempt.mockTest.title}
+          skillLabel={skillLabel}
+          bandScore={attempt.bandScore}
+          correctCount={correctCount}
+          incorrectCount={incorrectCount}
+          skippedCount={skippedCount}
+          timeUsedSeconds={attempt.durationSeconds}
+          accuracyPercent={insights?.accuracy.accuracyPercent ?? null}
+        />
 
-        <ul className="divide-border/70 border-border/70 divide-y rounded-2xl border">
-          {attempt.mockTest.questions.map((question, index) => {
-            const answer = answerByQuestion.get(question.id);
-            const status = !answer ? "unanswered" : answer.isCorrect ? "correct" : "incorrect";
-
-            return (
-              <li key={question.id} className="space-y-3 px-4 py-5 sm:px-6">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm font-medium">
-                    <span className="text-muted-foreground mr-1.5">{index + 1}.</span>
-                    {question.prompt}
-                  </p>
-                  {status === "correct" && (
-                    <span className="flex shrink-0 items-center gap-1">
-                      <CheckCircle2 className="text-success size-5" aria-hidden="true" />
-                      <span className="sr-only">Correct</span>
-                    </span>
-                  )}
-                  {status === "incorrect" && (
-                    <span className="flex shrink-0 items-center gap-1">
-                      <XCircle className="text-destructive size-5" aria-hidden="true" />
-                      <span className="sr-only">Incorrect</span>
-                    </span>
-                  )}
-                  {status === "unanswered" && (
-                    <span className="flex shrink-0 items-center gap-1">
-                      <Circle className="text-muted-foreground size-5" aria-hidden="true" />
-                      <span className="sr-only">Not answered</span>
-                    </span>
-                  )}
-                </div>
-
-                <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-                  <div>
-                    <dt className="text-muted-foreground font-medium">Your answer</dt>
-                    <dd className={status === "incorrect" ? "text-destructive" : undefined}>
-                      {answer
-                        ? formatAnswerForDisplay(question.type, question.options, answer.response)
-                        : "Not answered"}
-                    </dd>
-                  </div>
-                  {status !== "correct" && (
-                    <div>
-                      <dt className="text-muted-foreground font-medium">Correct answer</dt>
-                      <dd className="text-success">
-                        {formatAnswerForDisplay(question.type, question.options, question.correctAnswer)}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-
-                {status === "incorrect" && <ExplainMore resultId={resultId} questionId={question.id} />}
-              </li>
-            );
-          })}
-        </ul>
+        <ExamReviewSplit
+          testType={attempt.skill === "LISTENING" ? "LISTENING" : "READING"}
+          passages={attempt.mockTest.passages}
+          questions={questions}
+          savedHighlights={savedHighlights}
+          resultId={resultId}
+          allowExplainMore
+          partBreakdown={insights?.partBreakdown ?? []}
+          questionTypeBreakdown={insights?.questionTypeBreakdown ?? []}
+        />
 
         <div className="flex justify-center">
           <Button asChild>

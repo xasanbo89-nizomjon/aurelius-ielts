@@ -5,7 +5,6 @@ import { AlertCircle, Gauge, Lightbulb, TrendingDown, TrendingUp } from "lucide-
 
 import { requireStudentProfile } from "@/lib/session";
 import { getSpeakingAttemptForStudent } from "@/lib/speaking-practice";
-import { awardPracticeSessionCoins } from "@/lib/coins";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,13 +33,6 @@ export default async function SpeakingPracticeResultsPage({
   if (attempt.status !== "SUBMITTED" || !attempt.feedback) {
     redirect(`/student/speaking-practice/attempt/${attemptId}`);
   }
-
-  // Phase 39 — Part 4's Practice Session reward. Speaking Practice Center
-  // attempts (SpeakingAttempt) are never linked to a Full Mock Test — the
-  // Full Mock's Speaking leg uses the separate, older SpeakingSubmission
-  // pipeline — so no Full Mock exclusion check is needed here. Idempotent
-  // on attemptId, so revisiting this page can never pay twice.
-  await awardPracticeSessionCoins(profile.id, attemptId, `Speaking practice (${PART_LABEL[attempt.part]}) completed.`);
 
   const { feedback } = attempt;
   const skillCards = [

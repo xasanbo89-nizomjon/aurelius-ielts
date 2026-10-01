@@ -1,5 +1,6 @@
-import Image from "next/image";
 import type { PassageAttachmentType } from "@prisma/client";
+
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 export type ExamAttachment = { id: string; type: PassageAttachmentType; imagePath: string; caption: string | null };
 
@@ -12,7 +13,7 @@ export function PassageAttachments({ attachments }: { attachments: ExamAttachmen
       {attachments.map((attachment) => (
         <figure key={attachment.id} className="border-border/70 bg-card overflow-hidden rounded-2xl border shadow-soft">
           <div className="bg-secondary/40 relative w-full">
-            <Image
+            <FallbackImage
               src={attachment.imagePath}
               alt={attachment.caption ?? "Exam visual material"}
               width={900}

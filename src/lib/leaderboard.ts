@@ -10,17 +10,6 @@ export type LeaderboardRow = { studentId: string; name: string | null; email: st
  * insights already use) — never cross-teacher, never platform-wide, since a
  * student has no legitimate reason to see another teacher's class.
  */
-export async function getCoinLeaderboard(teacherId: string | null, limit = 10): Promise<LeaderboardRow[]> {
-  if (!teacherId) return [];
-  const students = await prisma.studentProfile.findMany({
-    where: { teacherId, coinWallet: { lifetimeEarned: { gt: 0 } } },
-    select: { id: true, user: { select: { name: true, email: true } }, coinWallet: { select: { lifetimeEarned: true } } },
-    orderBy: { coinWallet: { lifetimeEarned: "desc" } },
-    take: limit,
-  });
-  return students.map((s) => ({ studentId: s.id, name: s.user.name, email: s.user.email, value: s.coinWallet?.lifetimeEarned ?? 0 }));
-}
-
 export async function getActivityLeaderboard(teacherId: string | null, limit = 10): Promise<LeaderboardRow[]> {
   if (!teacherId) return [];
   const students = await prisma.studentProfile.findMany({ where: { teacherId }, select: { id: true, user: { select: { name: true, email: true } } } });

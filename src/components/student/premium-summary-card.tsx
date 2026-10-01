@@ -1,14 +1,14 @@
 import Link from "next/link";
-import { Coins, Crown } from "lucide-react";
+import { Crown } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { AnimatedStreakBadge } from "@/components/student/animated-streak-badge";
 
 /**
- * Phase 39 — Part 7. Combined dashboard summary card: Premium Active/Plan,
- * real study Streak, Coins, Days Remaining. Every value is a prop passed
- * straight through from real lib calls made on the dashboard page
- * (getPremiumIdentity, getStreakSummary, getWalletSummary) — nothing is
+ * Phase 39 — Part 7 (Phase 48 removed the Coins stat). Combined dashboard
+ * summary card: Premium Active/Plan, real study Streak, Days Remaining.
+ * Every value is a prop passed straight through from real lib calls made on
+ * the dashboard page (getPremiumIdentity, getStreakSummary) — nothing is
  * computed here.
  */
 export function PremiumSummaryCard({
@@ -16,13 +16,11 @@ export function PremiumSummaryCard({
   planName,
   daysRemaining,
   currentStreak,
-  coinBalance,
 }: {
   isPremium: boolean;
   planName: string | null;
   daysRemaining: number | null;
   currentStreak: number;
-  coinBalance: number;
 }) {
   return (
     <Card className="border-accent/15 bg-accent/[0.03] gap-0 py-5">
@@ -55,13 +53,6 @@ export function PremiumSummaryCard({
           <div className="space-y-0.5">
             <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">Streak</p>
             <AnimatedStreakBadge days={currentStreak} size="sm" />
-          </div>
-          <div className="space-y-0.5">
-            <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">Coins</p>
-            <span className="inline-flex items-center gap-1.5">
-              <Coins className="text-accent size-4" aria-hidden="true" />
-              <span className="font-display text-xl font-medium tracking-tight">{coinBalance.toLocaleString()}</span>
-            </span>
           </div>
         </div>
       </CardContent>

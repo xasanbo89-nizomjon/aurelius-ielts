@@ -58,6 +58,9 @@ export function FullMockWizard({
             coverImagePath: test.coverImagePath,
             estimatedBandMin: test.estimatedBandMin,
             estimatedBandMax: test.estimatedBandMax,
+            examNumber: test.examNumber,
+            difficulty: test.difficulty,
+            category: test.category,
           }}
           onSaved={() => refreshAndAdvance("2")}
         />

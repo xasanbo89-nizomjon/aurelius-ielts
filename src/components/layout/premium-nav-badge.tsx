@@ -4,8 +4,14 @@ import { Crown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-/** Phase 26 — Premium Badge now shows real remaining days, not just an on/off state. */
-export function PremiumBadge({ isPremium, daysRemaining }: { isPremium: boolean; daysRemaining?: number | null }) {
+/**
+ * Phase 26 — Premium Badge now shows real remaining days, not just an on/off
+ * state. Renamed PremiumNavBadge (Phase 49) to stop colliding with the
+ * unrelated, differently-shaped `src/components/student/premium-badge.tsx`
+ * (a plain presentational badge with no link/tooltip) — this one is
+ * specifically the clickable nav-header badge.
+ */
+export function PremiumNavBadge({ isPremium, daysRemaining }: { isPremium: boolean; daysRemaining?: number | null }) {
   const label = isPremium
     ? daysRemaining != null
       ? `Premium — ${daysRemaining} day${daysRemaining === 1 ? "" : "s"} left`

@@ -24,7 +24,7 @@ export type AiExplanationContent = {
 
 export type ExplainMoreResult =
   | { success: true; explanation: AiExplanationContent; cached: boolean }
-  | { success: false; code: "NOT_FOUND" | "NOT_INCORRECT" | "RATE_LIMITED" | "UNAVAILABLE"; error: string };
+  | { success: false; code: "NOT_FOUND" | "NOT_INCORRECT" | "RATE_LIMITED" | "UNAVAILABLE" | "NOT_PREMIUM"; error: string };
 
 function toContent(row: {
   whyCorrectExplanation: string;

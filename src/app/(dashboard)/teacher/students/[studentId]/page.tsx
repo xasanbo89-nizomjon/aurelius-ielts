@@ -8,7 +8,7 @@ import { getStudentForTeacher } from "@/lib/teacher-students";
 import { getStudentVocabularyStats } from "@/lib/vocabulary";
 import { getStudentVocabularyActivity, getStudentVocabularyTrends } from "@/lib/analytics/teacher-vocabulary-insights";
 import { getProgressHistory } from "@/lib/analytics/student-insights";
-import { getWritingBandTrend, getSpeakingBandTrend, getStudentCoinTrend } from "@/lib/analytics/student-growth-profile";
+import { getWritingBandTrend, getSpeakingBandTrend } from "@/lib/analytics/student-growth-profile";
 import { getWeeklyActivityBreakdown } from "@/lib/study-activity";
 import { getSubscriptionHistory } from "@/lib/subscription-history";
 import { VOCABULARY_STATUS_LABELS, VOCABULARY_STATUS_EMOJI } from "@/lib/labels";
@@ -42,7 +42,7 @@ export default async function TeacherStudentDetailPage({
   const student = await getStudentForTeacher(profile.id, studentId, profile.isRootTeacher);
   if (!student) notFound();
 
-  const [stats, activity, trends, progressHistory, writingTrend, speakingTrend, weeklyActivity, coinTrend, subscriptionHistory] = await Promise.all([
+  const [stats, activity, trends, progressHistory, writingTrend, speakingTrend, weeklyActivity, subscriptionHistory] = await Promise.all([
     getStudentVocabularyStats(studentId),
     getStudentVocabularyActivity(studentId),
     getStudentVocabularyTrends(studentId),
@@ -50,7 +50,6 @@ export default async function TeacherStudentDetailPage({
     getWritingBandTrend(studentId),
     getSpeakingBandTrend(studentId),
     getWeeklyActivityBreakdown(studentId),
-    getStudentCoinTrend(studentId),
     getSubscriptionHistory(studentId),
   ]);
 
@@ -75,7 +74,6 @@ export default async function TeacherStudentDetailPage({
         writingTrend={writingTrend}
         speakingTrend={speakingTrend}
         weeklyActivity={weeklyActivity}
-        coinTrend={coinTrend}
         subscriptionHistory={subscriptionHistory}
       />
 

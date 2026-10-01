@@ -3,7 +3,6 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getPlatformOverview } from "@/lib/analytics/platform-overview";
 import { getIeltsPerformanceOverview } from "@/lib/analytics/ielts-performance";
-import { getCoinEconomyAnalytics } from "@/lib/analytics/coin-economy";
 import { getPremiumAnalytics } from "@/lib/analytics/premium-analytics";
 import { getTeacherEffectivenessReport } from "@/lib/analytics/teacher-effectiveness";
 
@@ -20,7 +19,6 @@ export async function buildStudentPerformanceReport(): Promise<ReportTable> {
       teacher: { select: { user: { select: { name: true, email: true } } } },
       results: { where: { completedAt: { not: null }, bandScore: { not: null } }, select: { bandScore: true } },
       subscriptions: { where: { status: "ACTIVE" }, select: { id: true }, take: 1 },
-      coinWallet: { select: { balance: true } },
       studyStreak: { select: { currentStreak: true, longestStreak: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -35,7 +33,6 @@ export async function buildStudentPerformanceReport(): Promise<ReportTable> {
     "Tests Completed",
     "Average Band",
     "Premium",
-    "Coin Balance",
     "Current Streak",
     "Longest Streak",
   ];
@@ -52,7 +49,6 @@ export async function buildStudentPerformanceReport(): Promise<ReportTable> {
       s.results.length,
       avgBand,
       s.subscriptions.length > 0 ? "Yes" : "No",
-      s.coinWallet?.balance ?? 0,
       s.studyStreak?.currentStreak ?? 0,
       s.studyStreak?.longestStreak ?? 0,
     ];
@@ -94,10 +90,9 @@ export async function buildTeacherPerformanceReport(): Promise<ReportTable> {
 
 /** Phase 29 — Part 12. Root-only export: one KPI-per-row platform summary, combining Parts 1/2/7/8's real numbers. */
 export async function buildPlatformReport(): Promise<ReportTable> {
-  const [overview, performance, coinEconomy, premium] = await Promise.all([
+  const [overview, performance, premium] = await Promise.all([
     getPlatformOverview(),
     getIeltsPerformanceOverview(null),
-    getCoinEconomyAnalytics(),
     getPremiumAnalytics(),
   ]);
 
@@ -113,13 +108,9 @@ export async function buildPlatformReport(): Promise<ReportTable> {
     ["Monthly Active Users", overview.monthlyActiveUsers],
     ...performance.skillAverages.map((s): (string | number | null)[] => [`Average ${s.skill} Band`, s.avgBand]),
     ["Overall Average Band", performance.overallAverage],
-    ["Total Coins Earned", coinEconomy.totalCoinsEarned],
-    ["Total Coins Spent", coinEconomy.totalCoinsSpent],
-    ["Premium Redemptions", coinEconomy.premiumRedemptions],
-    ["Coins In Circulation", coinEconomy.coinsInCirculation],
     ["Active Premium Users", premium.activePremiumUsers],
     ["Expired Premium Users", premium.expiredPremiumUsers],
-    ["Coin-Based Activations", premium.coinBasedActivations],
+    ["Legacy Redemption Activations (historical)", premium.coinBasedActivations],
     ["Direct Activations", premium.directActivations],
     ["Telegram Activations", premium.telegramActivations],
   ];

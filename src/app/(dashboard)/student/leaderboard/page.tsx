@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { Coins, Flame, Trophy } from "lucide-react";
+import { Flame, Trophy } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
-import { getCoinLeaderboard, getActivityLeaderboard, getStreakLeaderboard, type LeaderboardRow } from "@/lib/leaderboard";
+import { getActivityLeaderboard, getStreakLeaderboard, type LeaderboardRow } from "@/lib/leaderboard";
 import { getPremiumStatusMap } from "@/lib/premium-identity";
 import { formatDuration } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -48,13 +48,12 @@ function LeaderboardList({
 export default async function StudentLeaderboardPage() {
   const { profile } = await requireStudentProfile();
 
-  const [coinRows, activityRows, streakRows] = await Promise.all([
-    getCoinLeaderboard(profile.teacherId),
+  const [activityRows, streakRows] = await Promise.all([
     getActivityLeaderboard(profile.teacherId),
     getStreakLeaderboard(profile.teacherId),
   ]);
 
-  const allStudentIds = [...new Set([...coinRows, ...activityRows, ...streakRows].map((r) => r.studentId))];
+  const allStudentIds = [...new Set([...activityRows, ...streakRows].map((r) => r.studentId))];
   const premiumMap = await getPremiumStatusMap(allStudentIds);
 
   if (!profile.teacherId) {
@@ -68,20 +67,9 @@ export default async function StudentLeaderboardPage() {
 
   return (
     <>
-      <PageHeader title="Leaderboard" description="See how you rank among your classmates — real coins, activity, and streaks." />
+      <PageHeader title="Leaderboard" description="See how you rank among your classmates — real activity and streaks." />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Coins className="text-accent size-4.5" aria-hidden="true" /> Top Coin Earners
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <LeaderboardList rows={coinRows} currentStudentId={profile.id} formatValue={(v) => `${v} coins`} premiumMap={premiumMap} />
-          </CardContent>
-        </Card>
-
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">

@@ -3,13 +3,13 @@
 import { redirect } from "next/navigation";
 
 import { requireStudentProfile } from "@/lib/session";
-import { hasActiveAccess } from "@/lib/subscription";
+import { hasActiveAccessForFullMockTest } from "@/lib/subscription";
 import { getOrCreateFullMockAttempt } from "@/lib/full-mock-attempts";
 
 export async function startFullMockAttemptAction(fullMockTestId: string) {
   const { profile } = await requireStudentProfile();
 
-  if (!(await hasActiveAccess(profile.id))) {
+  if (!(await hasActiveAccessForFullMockTest(profile.id, fullMockTestId))) {
     redirect("/student/subscription?upgrade=1");
   }
 

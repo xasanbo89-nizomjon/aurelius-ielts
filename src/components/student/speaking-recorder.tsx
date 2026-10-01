@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { submitSpeakingRecordingAction } from "@/actions/speaking.actions";
 import { MAX_RECORDED_AUDIO_SIZE_BYTES, MAX_RECORDED_AUDIO_SIZE_LABEL } from "@/lib/uploads/audio-constraints";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type Phase = "idle" | "recording" | "recorded" | "evaluating" | "submitted";
@@ -34,6 +35,11 @@ export function SpeakingRecorder({ taskId, onSubmitted }: { taskId: string; onSu
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [levels, setLevels] = useState<number[]>(() => Array(WAVEFORM_BARS).fill(0.08));
+  // Phase 49 — real "are you sure" confirmation before an irreversible
+  // submit, matching Reading/Listening/Writing's own confirm dialogs. The
+  // listen-back preview + Re-record option already in this component stay
+  // exactly as they were; this is an additive safeguard, not a replacement.
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -131,6 +137,7 @@ export function SpeakingRecorder({ taskId, onSubmitted }: { taskId: string; onSu
   }
 
   async function handleSubmit() {
+    setConfirmOpen(false);
     const blob = blobRef.current;
     if (!blob) return;
 
@@ -212,7 +219,7 @@ export function SpeakingRecorder({ taskId, onSubmitted }: { taskId: string; onSu
         <div className="space-y-3">
           <audio controls src={previewUrl} className="w-full" />
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button size="lg" onClick={handleSubmit} disabled={phase === "evaluating"} className={cn("flex-1")}>
+            <Button size="lg" onClick={() => setConfirmOpen(true)} disabled={phase === "evaluating"} className={cn("flex-1")}>
               {phase === "evaluating" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
               Submit for AI Evaluation
             </Button>
@@ -227,6 +234,26 @@ export function SpeakingRecorder({ taskId, onSubmitted }: { taskId: string; onSu
           )}
         </div>
       )}
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submit this response?</DialogTitle>
+            <DialogDescription>
+              Once submitted, this recording is sent for AI evaluation and can&apos;t be changed or re-recorded. Listen back above if you want to
+              double-check it first.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Keep listening</Button>
+            </DialogClose>
+            <Button onClick={handleSubmit}>
+              <Send className="size-4" /> Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

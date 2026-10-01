@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarClock, Check, CheckCircle2, History, Send, X } from "lucide-react";
+import { CalendarClock, Check, CheckCircle2, Crown, History, Send, X } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getSubscriptionSummary } from "@/lib/subscription";
-import { PREMIUM_PLANS } from "@/lib/premium-plans";
+import { ACTIVE_PREMIUM_PLANS } from "@/lib/premium-plans";
 import { getTelegramOwnerUsername } from "@/lib/telegram";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,16 +14,16 @@ import { PremiumPlanCard } from "@/components/student/premium-plan-card";
 
 export const metadata: Metadata = { title: "Premium" };
 
-/** Phase 43 — Part "Feature comparison". Every row names a real feature that already exists in the product — nothing hypothetical. */
+/** Phase 48 — Part 3's exact "Premium unlocks" list, plus the real free-tier content every student already gets regardless. */
 const FEATURE_COMPARISON: { feature: string; free: boolean; premium: boolean }[] = [
   { feature: "Cambridge Reading & Listening Tests", free: true, premium: true },
   { feature: "Full Mock Tests (Listening + Reading + Writing + Speaking)", free: false, premium: true },
-  { feature: "Speaking Practice AI feedback", free: false, premium: true },
-  { feature: "Writing AI Analysis (grammar, vocabulary, band estimate)", free: false, premium: true },
-  { feature: "Vocabulary Learning Center", free: false, premium: true },
-  { feature: "Advanced Analytics (Band Score Center)", free: false, premium: true },
-  { feature: "Leveled Articles", free: false, premium: true },
+  { feature: "AI Writing Center", free: false, premium: true },
+  { feature: "AI Explain More", free: false, premium: true },
   { feature: "AI Study Coach", free: false, premium: true },
+  { feature: "AI Speaking Evaluation", free: false, premium: true },
+  { feature: "Premium Analytics", free: false, premium: true },
+  { feature: "Premium Articles", free: false, premium: true },
 ];
 
 export default async function StudentPremiumPage() {
@@ -44,6 +44,16 @@ export default async function StudentPremiumPage() {
           </Button>
         }
       />
+
+      <div className="border-accent/20 bg-accent/[0.04] flex items-center gap-3 rounded-2xl border px-5 py-4">
+        <span className="bg-accent/15 text-accent flex size-11 shrink-0 items-center justify-center rounded-xl">
+          <Crown className="size-5.5" strokeWidth={1.75} aria-hidden="true" />
+        </span>
+        <div>
+          <p className="text-sm font-medium">Aurelius IELTS Premium</p>
+          <p className="text-muted-foreground text-xs">Full AI-powered IELTS preparation — one plan, every feature, no hidden tiers.</p>
+        </div>
+      </div>
 
       {summary.hasAccess && summary.status === "ACTIVE" && summary.daysRemaining != null && (
         <Card className="border-success/30 bg-success/5">
@@ -69,8 +79,8 @@ export default async function StudentPremiumPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-6 pt-2 sm:grid-cols-2 lg:grid-cols-4">
-        {PREMIUM_PLANS.map((plan) => (
+      <div className="grid grid-cols-1 gap-6 pt-2 sm:grid-cols-3">
+        {ACTIVE_PREMIUM_PLANS.map((plan) => (
           <PremiumPlanCard key={plan.code} plan={plan} studentEmail={user.email ?? ""} studentId={profile.id} />
         ))}
       </div>

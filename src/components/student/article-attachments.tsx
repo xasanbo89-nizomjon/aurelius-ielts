@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 export type ArticleAttachmentDisplay = { id: string; imagePath: string; caption: string | null };
 
@@ -11,7 +11,7 @@ export function ArticleAttachments({ attachments }: { attachments: ArticleAttach
       {attachments.map((attachment) => (
         <figure key={attachment.id} className="border-border/70 bg-card overflow-hidden rounded-2xl border shadow-soft">
           <div className="bg-secondary/40 relative w-full">
-            <Image
+            <FallbackImage
               src={attachment.imagePath}
               alt={attachment.caption ?? "Article image"}
               width={900}

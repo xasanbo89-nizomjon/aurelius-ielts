@@ -6,6 +6,7 @@ import type { Prisma, PassageAttachmentType, QuestionType } from "@prisma/client
 import { requireTeacherProfile } from "@/lib/session";
 import * as tm from "@/lib/exam/test-management";
 import { uploadListeningAudio } from "@/lib/uploads/audio-storage";
+import { uploadContentCoverImage } from "@/lib/uploads/image-storage";
 import { friendlyErrorMessage } from "@/lib/validation-error";
 import {
   createTestSchema,
@@ -24,6 +25,25 @@ export type ActionResult = { success: true } | { success: false; error: string }
 // see src/lib/validation-error.ts for why this never leaks a raw ZodError.
 function errorMessage(error: unknown, fallback: string): string {
   return friendlyErrorMessage(error, fallback);
+}
+
+/** Phase 47 — Skill Media Library's "Content thumbnail" for a Reading/Listening test, set separately from the test's other fields. `formData: null` removes the cover. */
+export async function setTestCoverImageAction(testId: string, formData: FormData | null): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    let coverImagePath: string | null = null;
+    if (formData) {
+      const file = formData.get("file");
+      if (!(file instanceof File)) throw new Error("No file provided.");
+      coverImagePath = (await uploadContentCoverImage(profile.id, file)).path;
+    }
+    await tm.updateTest(testId, profile.id, { coverImagePath });
+    revalidatePath(`/teacher/tests/${testId}`);
+    revalidatePath("/teacher/tests");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not update the cover image.") };
+  }
 }
 
 export async function createTestAction(

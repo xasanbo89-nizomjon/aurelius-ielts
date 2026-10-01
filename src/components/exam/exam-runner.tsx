@@ -30,6 +30,7 @@ import { SubmitConfirmationDialog } from "@/components/exam/submit-confirmation-
 import { ReviewCenter } from "@/components/exam/review-center";
 import { LeaveTestDialog } from "@/components/exam/leave-test-dialog";
 import { PassagePanel } from "@/components/exam/passage-panel";
+import { ResizableSplit } from "@/components/exam/resizable-split";
 import { NotesDrawer, type ExamNote } from "@/components/exam/notes-drawer";
 import { AudioPlayer } from "@/components/exam/audio-player";
 import { PassageAttachments, type ExamAttachment } from "@/components/exam/passage-attachments";
@@ -56,6 +57,37 @@ export type ExamPassage = {
 
 export type ExamHighlight = { id: string; passageId: string; text: string; startOffset: number; endOffset: number; color: HighlightColor };
 export type ExamNoteRecord = { id: string; passageId: string | null; content: string };
+
+/**
+ * Phase 46 (CBT Listening) — the exam-taking LEFT panel: a real "Sticky
+ * audio area" (section label + audio player never scroll away, only the
+ * attachments beneath them do) plus an honest empty state when a section
+ * genuinely has no audio, instead of silently rendering nothing. Shared by
+ * both the desktop resizable split and the mobile tab, so the two can never
+ * drift out of sync.
+ */
+function ListeningLeftPanel({ passage, sectionLabel }: { passage: ExamPassage; sectionLabel: string | undefined }) {
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="border-border/70 bg-background/95 shrink-0 border-b px-5 py-4 backdrop-blur-sm">
+        {sectionLabel && <p className="text-muted-foreground mb-0.5 text-[11px] font-medium tracking-wide uppercase">{sectionLabel}</p>}
+        <h2 className="font-display truncate text-base font-medium sm:text-lg">{passage.title}</h2>
+      </div>
+      <div className="shrink-0 px-5 pt-4">
+        {passage.audioUrl ? (
+          <AudioPlayer src={passage.audioUrl} label={passage.title} />
+        ) : (
+          <div className="border-border/70 bg-secondary/30 text-muted-foreground rounded-2xl border border-dashed px-4 py-6 text-center text-sm">
+            Audio isn&apos;t available for this section yet.
+          </div>
+        )}
+      </div>
+      <div className="flex-1 overflow-y-auto px-5 py-4">
+        <PassageAttachments attachments={passage.attachments} />
+      </div>
+    </div>
+  );
+}
 
 export function ExamRunner({
   resultId,
@@ -203,6 +235,10 @@ export function ExamRunner({
     activeQuestionId && sortedQuestions.some((q) => q.id === activeQuestionId) ? activeQuestionId : (currentQuestions[0]?.id ?? "");
   const activeQuestionNumber = sortedQuestions.findIndex((q) => q.id === effectiveActiveQuestionId) + 1;
   const activeSectionLabel = testType === "LISTENING" ? currentPassage?.title || `Part ${sectionIndex + 1}` : `Passage ${sectionIndex + 1}`;
+  // Phase 48 — the CBT passage panel's sticky-header "section information", omitted for single-passage Reading tests (nothing to disambiguate).
+  const readingSectionLabel = sortedPassages.length > 1 ? `Passage ${sectionIndex + 1} of ${sortedPassages.length}` : undefined;
+  // Phase 46 (CBT Listening) — same real "section information" concept for the sticky audio-area header.
+  const listeningSectionLabel = sortedPassages.length > 1 ? `Part ${sectionIndex + 1} of ${sortedPassages.length}` : undefined;
 
   const listeningParts: ListeningPart[] = useMemo(
     () =>
@@ -525,32 +561,38 @@ export function ExamRunner({
       <div className="flex flex-1 overflow-hidden">
         {testType === "READING" ? (
           <>
-            {/* Desktop split screen (Part 1) — independent scrolling, both panels always visible. */}
-            <div className="border-border/70 hidden w-1/2 overflow-hidden border-r lg:block">
-              {currentPassage && (
-                <PassagePanel
-                  title={currentPassage.title}
-                  content={currentPassage.content}
-                  highlights={currentPassageHighlights}
-                  attachments={currentPassage.attachments}
-                  onHighlight={handleHighlight}
-                  onRemoveHighlight={handleRemoveHighlight}
-                  onAddNote={handleAddNoteFromSelection}
-                />
-              )}
-            </div>
-            <div className="hidden flex-1 overflow-y-auto lg:block">
-              <div className="px-6 py-6 sm:px-8 sm:py-8">{questionsList}</div>
+            {/* Phase 48 — Desktop + Tablet: a real split-screen, resizable from md: up (Part 1's independent scrolling still holds — dragging the divider only changes the ratio, not the scroll independence). */}
+            <div className="hidden h-full flex-1 overflow-hidden md:block">
+              <ResizableSplit
+                leftClassName="overflow-hidden border-r border-border/70"
+                rightClassName="overflow-y-auto"
+                left={
+                  currentPassage && (
+                    <PassagePanel
+                      title={currentPassage.title}
+                      sectionLabel={readingSectionLabel}
+                      content={currentPassage.content}
+                      highlights={currentPassageHighlights}
+                      attachments={currentPassage.attachments}
+                      onHighlight={handleHighlight}
+                      onRemoveHighlight={handleRemoveHighlight}
+                      onAddNote={handleAddNoteFromSelection}
+                    />
+                  )
+                }
+                right={<div className="px-6 py-6 sm:px-8 sm:py-8">{questionsList}</div>}
+              />
             </div>
 
             {/* Mobile: tabs instead of split screen (Part 9) — no stacked double-scroll. */}
-            <div className="flex flex-1 flex-col overflow-hidden lg:hidden">
+            <div className="flex flex-1 flex-col overflow-hidden md:hidden">
               <MobileSplitTabs
                 leftLabel="Passage"
                 left={
                   currentPassage && (
                     <PassagePanel
                       title={currentPassage.title}
+                      sectionLabel={readingSectionLabel}
                       content={currentPassage.content}
                       highlights={currentPassageHighlights}
                       attachments={currentPassage.attachments}
@@ -566,31 +608,22 @@ export function ExamRunner({
           </>
         ) : (
           <>
-            {/* Desktop split screen (Part 5) — audio + visual materials on the left, questions on the right. */}
-            <div className="border-border/70 hidden w-1/2 overflow-y-auto border-r p-5 lg:block">
-              {currentPassage && (
-                <div className="space-y-5">
-                  {currentPassage.audioUrl && <AudioPlayer src={currentPassage.audioUrl} label={currentPassage.title} />}
-                  <PassageAttachments attachments={currentPassage.attachments} />
-                </div>
-              )}
-            </div>
-            <div className="hidden flex-1 overflow-y-auto lg:block">
-              <div className="mx-auto w-full max-w-3xl px-6 py-6 sm:px-8 sm:py-8">{questionsList}</div>
+            {/* Phase 46 (CBT Listening) — Desktop + Tablet: resizable split, sticky audio area on the left, independent scrolling on both sides. */}
+            <div className="hidden h-full flex-1 overflow-hidden md:block">
+              <ResizableSplit
+                leftClassName="overflow-hidden border-r border-border/70"
+                rightClassName="overflow-y-auto"
+                leftLabel="Audio"
+                left={currentPassage && <ListeningLeftPanel passage={currentPassage} sectionLabel={listeningSectionLabel} />}
+                right={<div className="mx-auto w-full max-w-3xl px-6 py-6 sm:px-8 sm:py-8">{questionsList}</div>}
+              />
             </div>
 
-            {/* Mobile: tabs (Part 9) — audio stays reachable behind its own tab instead of a sticky bar eating vertical space. */}
-            <div className="flex flex-1 flex-col overflow-hidden lg:hidden">
+            {/* Mobile: tabs (Part 9) — the audio area inside the tab is now itself sticky (real "audio always visible" requirement), so it never scrolls away even within the tab's own scroll region. */}
+            <div className="flex flex-1 flex-col overflow-hidden md:hidden">
               <MobileSplitTabs
                 leftLabel="Audio & Materials"
-                left={
-                  currentPassage && (
-                    <div className="space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
-                      {currentPassage.audioUrl && <AudioPlayer src={currentPassage.audioUrl} label={currentPassage.title} />}
-                      <PassageAttachments attachments={currentPassage.attachments} />
-                    </div>
-                  )
-                }
+                left={currentPassage && <ListeningLeftPanel passage={currentPassage} sectionLabel={listeningSectionLabel} />}
                 right={<div className="h-full overflow-y-auto px-4 py-5 sm:px-6">{questionsList}</div>}
               />
             </div>

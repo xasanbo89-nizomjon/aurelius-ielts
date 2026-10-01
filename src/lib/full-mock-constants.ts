@@ -4,8 +4,8 @@
 
 /** Official IELTS Writing timing (Task 1: 20 min + Task 2: 40 min) — a fixed exam-format constant, not a guess. */
 export const FULL_MOCK_WRITING_MINUTES = 60;
-/** Official IELTS Speaking timing upper bound (11–14 minutes total across all 3 parts). */
-export const FULL_MOCK_SPEAKING_MINUTES = 14;
+/** Phase 47 — real IELTS Speaking runs 11-14 minutes across all 3 parts; the mock allots a clean 15-minute session budget (never below the real upper bound), used by the Full Mock speaking leg's visible countdown. */
+export const FULL_MOCK_SPEAKING_MINUTES = 15;
 /** Official IELTS minimum word counts. */
 export const TASK_1_MIN_WORDS = 150;
 export const TASK_2_MIN_WORDS = 250;

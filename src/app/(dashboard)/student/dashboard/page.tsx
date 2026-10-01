@@ -5,7 +5,6 @@ import { requireStudentProfile } from "@/lib/session";
 import { getWhatsNewFeed } from "@/lib/whats-new";
 import { recordLoginAndGetStreak } from "@/lib/login-streak";
 import { getStudentSuccessSummary } from "@/lib/analytics/student-success";
-import { getWalletSummary, awardDailyLoginCoins } from "@/lib/coins";
 import { getSubscriptionSummary } from "@/lib/subscription";
 import { getWeeklyActivityBreakdown } from "@/lib/study-activity";
 import { getStudentReadingStats } from "@/lib/reading-analytics";
@@ -26,16 +25,11 @@ export const metadata: Metadata = { title: "Home" };
 export default async function StudentDashboardPage() {
   const { user, profile } = await requireStudentProfile();
 
-  // Phase 39 — Part 4's daily login reward. Idempotent per calendar day
-  // (awardCoins), so it's safe to run on every dashboard visit.
-  await awardDailyLoginCoins(profile.id);
-
-  const [whatsNew, streakCount, success, wallet, subscription, weeklyActivity, readingStats, speakingStats, premium, studyStreak] =
+  const [whatsNew, streakCount, success, subscription, weeklyActivity, readingStats, speakingStats, premium, studyStreak] =
     await Promise.all([
       getWhatsNewFeed(profile.id, profile.teacherId),
       recordLoginAndGetStreak(user.id),
       getStudentSuccessSummary(profile.id),
-      getWalletSummary(profile.id),
       getSubscriptionSummary(profile.id),
       getWeeklyActivityBreakdown(profile.id),
       getStudentReadingStats(profile.id),
@@ -57,7 +51,6 @@ export default async function StudentDashboardPage() {
       <MobileDashboardWidgets
         targetBand={success.targetBand}
         goalProgressPercent={success.goalProgressPercent}
-        coinBalance={wallet.balance}
         isPremium={subscription.isPremium}
         premiumDaysRemaining={subscription.isPremium ? subscription.daysRemaining : null}
         streakCount={streakCount}
@@ -69,7 +62,6 @@ export default async function StudentDashboardPage() {
         planName={premium.planName}
         daysRemaining={premium.daysRemaining}
         currentStreak={studyStreak.currentStreak}
-        coinBalance={wallet.balance}
       />
 
       <div className="grid grid-cols-1 gap-3 sm:gap-5 sm:grid-cols-2">

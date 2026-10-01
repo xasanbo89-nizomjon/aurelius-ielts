@@ -17,6 +17,7 @@ import {
   SpeakingTranscriptTooShortError,
   type SpeakingTaskForStudent,
 } from "@/lib/speaking";
+import { uploadContentCoverImage } from "@/lib/uploads/image-storage";
 import { friendlyErrorMessage } from "@/lib/validation-error";
 import {
   createSpeakingTaskSchema,
@@ -62,6 +63,25 @@ export async function updateSpeakingTaskAction(taskId: string, input: UpdateSpea
     return { success: true };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not update the speaking task.") };
+  }
+}
+
+/** Phase 47 — Skill Media Library's "Content thumbnail" for this Speaking topic, uploaded separately from the title/part/prompt edit form above. */
+export async function setSpeakingTaskCoverImageAction(taskId: string, formData: FormData | null): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    let coverImagePath: string | null = null;
+    if (formData) {
+      const file = formData.get("file");
+      if (!(file instanceof File)) throw new Error("No file provided.");
+      coverImagePath = (await uploadContentCoverImage(profile.id, file)).path;
+    }
+    await updateSpeakingTask(taskId, profile.id, { coverImagePath });
+    revalidatePath(`/teacher/speaking/${taskId}`);
+    revalidatePath("/teacher/speaking");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not update the cover image.") };
   }
 }
 

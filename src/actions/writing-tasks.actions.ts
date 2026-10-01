@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireTeacherProfile } from "@/lib/session";
 import * as writingTasks from "@/lib/writing-tasks";
+import { uploadContentCoverImage } from "@/lib/uploads/image-storage";
 import { friendlyErrorMessage } from "@/lib/validation-error";
 import { createWritingTaskSchema, writingTaskStatusSchema, type CreateWritingTaskInput } from "@/lib/validations/writing";
 
@@ -11,6 +12,18 @@ export type ActionResult = { success: true } | { success: false; error: string }
 
 function errorMessage(error: unknown, fallback: string): string {
   return friendlyErrorMessage(error, fallback);
+}
+
+export async function uploadWritingTaskCoverImageAction(formData: FormData): Promise<ActionResult & { path?: string }> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    const file = formData.get("file");
+    if (!(file instanceof File)) throw new Error("No file provided.");
+    const uploaded = await uploadContentCoverImage(profile.id, file);
+    return { success: true, path: uploaded.path };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not upload the cover image.") };
+  }
 }
 
 export async function createWritingTaskAction(input: CreateWritingTaskInput): Promise<ActionResult> {

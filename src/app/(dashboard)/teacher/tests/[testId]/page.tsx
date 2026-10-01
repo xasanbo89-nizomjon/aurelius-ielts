@@ -5,6 +5,7 @@ import { BarChart3 } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { setTestCoverImageAction } from "@/actions/test-management.actions";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { TestRowActions } from "@/components/teacher/test-row-actions";
 import { EditTestDetailsDialog } from "@/components/teacher/edit-test-details-dialog";
 import { PassagesManager } from "@/components/teacher/passages-manager";
 import { QuestionsManager } from "@/components/teacher/questions-manager";
+import { ContentCoverImageUploader } from "@/components/teacher/content-cover-image-uploader";
 
 export const metadata: Metadata = { title: "Edit Test" };
 
@@ -71,6 +73,12 @@ export default async function TestEditorPage({
       />
 
       {test.description && <p className="text-muted-foreground -mt-4 text-sm">{test.description}</p>}
+
+      <ContentCoverImageUploader
+        initialPath={test.coverImagePath}
+        action={setTestCoverImageAction.bind(null, test.id)}
+        alt={`${test.title} cover`}
+      />
 
       <PassagesManager testId={test.id} testType={testType} passages={test.passages} />
 

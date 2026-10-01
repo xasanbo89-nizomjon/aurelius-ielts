@@ -2,11 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { FolderOpen, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
-import { createWritingTaskAction, updateWritingTaskAction } from "@/actions/writing-tasks.actions";
+import { createWritingTaskAction, updateWritingTaskAction, uploadWritingTaskCoverImageAction } from "@/actions/writing-tasks.actions";
 import { uploadMediaFileAction } from "@/actions/media-library.actions";
 import { IMAGE_INPUT_ACCEPT, validateImageFile } from "@/lib/uploads/image-constraints";
 import { TASK_1_CATEGORIES, TASK_2_CATEGORIES, type WritingTaskCategoryValue, type WritingTrainingTypeValue } from "@/lib/validations/writing";
@@ -27,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MediaFilePickerDialog } from "@/components/teacher/media-file-picker-dialog";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 type TaskNumberValue = "TASK_1" | "TASK_2";
 
@@ -40,6 +40,7 @@ export type ExistingWritingTask = {
   visualDescription: string | null;
   imageMediaFileId: string | null;
   imagePath: string | null;
+  coverImagePath: string | null;
   targetBand: number | null;
   dueDate: Date | null;
   assignedStudentIds: string[];
@@ -75,6 +76,9 @@ export function WritingTaskEditorDialog({
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [coverImagePath, setCoverImagePath] = useState<string | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
   const [targetBand, setTargetBand] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
@@ -93,6 +97,7 @@ export function WritingTaskEditorDialog({
     setVisualDescription(existingTask?.visualDescription ?? "");
     setImageMediaFileId(existingTask?.imageMediaFileId ?? null);
     setImagePath(existingTask?.imagePath ?? null);
+    setCoverImagePath(existingTask?.coverImagePath ?? null);
     setTargetBand(existingTask?.targetBand != null ? String(existingTask.targetBand) : "");
     setDueDate(toDateInputValue(existingTask?.dueDate ?? null));
     setAssignedStudentIds(existingTask?.assignedStudentIds ?? []);
@@ -121,6 +126,29 @@ export function WritingTaskEditorDialog({
     }
     setImageMediaFileId(result.file.id);
     setImagePath(result.file.path);
+  }
+
+  async function handleCoverFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      toast.error(validation.error);
+      return;
+    }
+
+    setUploadingCover(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    const result = await uploadWritingTaskCoverImageAction(formData);
+    setUploadingCover(false);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    setCoverImagePath(result.path ?? null);
   }
 
   function handlePickFromLibrary(file: { id: string; path: string }) {
@@ -154,6 +182,7 @@ export function WritingTaskEditorDialog({
       prompt,
       visualDescription: visualDescription.trim() || undefined,
       imageMediaFileId: taskNumber === "TASK_1" ? (imageMediaFileId ?? undefined) : undefined,
+      coverImagePath: coverImagePath ?? undefined,
       targetBand: targetBand.trim() ? Number(targetBand) : undefined,
       dueDate: dueDate.trim() ? new Date(`${dueDate}T00:00:00`) : undefined,
       assignedStudentIds,
@@ -254,6 +283,32 @@ export function WritingTaskEditorDialog({
             />
           </div>
 
+          <div className="space-y-1.5">
+            <Label>Cover image (optional)</Label>
+            <input ref={coverFileInputRef} type="file" accept={IMAGE_INPUT_ACCEPT} className="hidden" onChange={handleCoverFileChange} />
+            {coverImagePath ? (
+              <div className="border-border/70 bg-secondary/20 relative w-full max-w-xs overflow-hidden rounded-xl border">
+                <div className="bg-secondary relative aspect-video">
+                  <FallbackImage src={coverImagePath} alt="Assignment cover" fill sizes="320px" className="object-cover" unoptimized />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCoverImagePath(null)}
+                  aria-label="Remove cover image"
+                  className="bg-background/90 text-muted-foreground hover:text-destructive absolute top-1.5 right-1.5 rounded-full p-1.5"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            ) : (
+              <Button type="button" variant="outline" size="sm" disabled={uploadingCover} onClick={() => coverFileInputRef.current?.click()}>
+                {uploadingCover ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
+                Upload cover image
+              </Button>
+            )}
+            <p className="text-muted-foreground text-xs">Shown as a thumbnail in your assignment list — distinct from the Task 1 visual below.</p>
+          </div>
+
           {taskNumber === "TASK_1" && (
             <div className="space-y-1.5">
               <Label>Visual (chart, graph, table, map, or process)</Label>
@@ -261,7 +316,7 @@ export function WritingTaskEditorDialog({
               {imagePath ? (
                 <div className="border-border/70 bg-secondary/20 relative w-full max-w-xs overflow-hidden rounded-xl border">
                   <div className="bg-secondary relative aspect-video">
-                    <Image src={imagePath} alt="Task 1 visual" fill sizes="320px" className="object-cover" unoptimized />
+                    <FallbackImage src={imagePath} alt="Task 1 visual" fill sizes="320px" className="object-cover" unoptimized />
                   </div>
                   <button
                     type="button"

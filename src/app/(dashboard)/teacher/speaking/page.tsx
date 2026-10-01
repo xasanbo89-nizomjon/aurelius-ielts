@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BarChart3, Mic, Plus } from "lucide-react";
+import { BarChart3, ImageIcon, Mic, Plus } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { listSpeakingTasksForTeacher } from "@/lib/speaking";
@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/dashboard/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 export const metadata: Metadata = { title: "Speaking Tasks" };
 
@@ -67,7 +68,14 @@ export default async function TeacherSpeakingPage() {
             {tasks.map((task) => (
               <TableRow key={task.id}>
                 <TableCell className="font-medium">
-                  <Link href={`/teacher/speaking/${task.id}`} className="hover:underline">
+                  <Link href={`/teacher/speaking/${task.id}`} className="flex items-center gap-2.5 hover:underline">
+                    <span className="bg-secondary relative size-8 shrink-0 overflow-hidden rounded-md">
+                      {task.coverImagePath ? (
+                        <FallbackImage src={task.coverImagePath} alt="" fill sizes="32px" className="object-cover" unoptimized />
+                      ) : (
+                        <ImageIcon className="text-muted-foreground absolute inset-0 m-auto size-4" strokeWidth={1.5} />
+                      )}
+                    </span>
                     {task.title}
                   </Link>
                 </TableCell>

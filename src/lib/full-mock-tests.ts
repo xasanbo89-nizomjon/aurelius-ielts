@@ -1,5 +1,5 @@
 import "server-only";
-import type { WritingTaskCategory, WritingTaskNumber } from "@prisma/client";
+import type { MockTestCategory, MockTestDifficulty, WritingTaskCategory, WritingTaskNumber } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { createWritingTask, setWritingTaskStatus } from "@/lib/writing-tasks";
@@ -30,6 +30,9 @@ export type FullMockBasicsInput = {
   coverImagePath?: string;
   estimatedBandMin?: number;
   estimatedBandMax?: number;
+  examNumber?: number;
+  difficulty?: MockTestDifficulty;
+  category?: MockTestCategory;
 };
 
 export async function createFullMockTest(teacherId: string, input: FullMockBasicsInput) {
@@ -40,6 +43,9 @@ export async function createFullMockTest(teacherId: string, input: FullMockBasic
       coverImagePath: input.coverImagePath || null,
       estimatedBandMin: input.estimatedBandMin ?? null,
       estimatedBandMax: input.estimatedBandMax ?? null,
+      examNumber: input.examNumber ?? null,
+      difficulty: input.difficulty ?? null,
+      category: input.category ?? "GENERAL",
       createdById: teacherId,
     },
   });
@@ -55,6 +61,9 @@ export async function updateFullMockTestBasics(id: string, teacherId: string, in
       coverImagePath: input.coverImagePath || null,
       estimatedBandMin: input.estimatedBandMin ?? null,
       estimatedBandMax: input.estimatedBandMax ?? null,
+      examNumber: input.examNumber ?? null,
+      difficulty: input.difficulty ?? null,
+      category: input.category ?? "GENERAL",
     },
   });
 }
@@ -66,6 +75,84 @@ export async function deleteFullMockTest(id: string, teacherId: string): Promise
     throw new Error("This full mock test has real student attempts and can't be deleted — archive it instead.");
   }
   await prisma.fullMockTest.delete({ where: { id } });
+}
+
+/** Phase 47 — completes the DRAFT/PUBLISHED/ARCHIVED lifecycle the enum already declared; archiving a published test keeps its real attempts/results intact but pulls it out of the student-facing listing (getPublishedFullMockTests only ever selects status: "PUBLISHED"). */
+export async function archiveFullMockTest(id: string, teacherId: string): Promise<void> {
+  await assertOwnsFullMockTest(id, teacherId);
+  await prisma.fullMockTest.update({ where: { id }, data: { status: "ARCHIVED" } });
+}
+
+export async function unarchiveFullMockTest(id: string, teacherId: string): Promise<void> {
+  await assertOwnsFullMockTest(id, teacherId);
+  await prisma.fullMockTest.update({ where: { id }, data: { status: "DRAFT" } });
+}
+
+/**
+ * Phase 47 — real duplication, not a shortcut: Reading/Listening sections
+ * are safe to re-link as-is (FullMockReadingSection/FullMockListeningSection
+ * are only unique per (fullMockTestId, mockTestId), so many Full Mock Tests
+ * can already point at the same underlying test). Writing/Speaking sections
+ * CANNOT be re-linked — writingTaskId/speakingTaskId are globally unique
+ * (one WritingTask/SpeakingTask belongs to exactly one Full Mock Test ever)
+ * — so those are real content clones via the same createWritingTask/
+ * createSpeakingTask helpers the builder itself uses, never a shared
+ * reference. The clone always starts DRAFT regardless of the source's
+ * status, so an incomplete/mis-copied duplicate can never be accidentally
+ * live for students.
+ */
+export async function duplicateFullMockTest(id: string, teacherId: string) {
+  const source = await getFullMockTestForEdit(id, teacherId);
+  if (!source) throw new Error("Full mock test not found.");
+
+  const clone = await prisma.fullMockTest.create({
+    data: {
+      title: `${source.title} (Copy)`,
+      description: source.description,
+      coverImagePath: source.coverImagePath,
+      estimatedBandMin: source.estimatedBandMin,
+      estimatedBandMax: source.estimatedBandMax,
+      difficulty: source.difficulty,
+      category: source.category,
+      createdById: teacherId,
+      status: "DRAFT",
+    },
+  });
+
+  for (const [index, section] of source.readingSections.entries()) {
+    await prisma.fullMockReadingSection.create({
+      data: { fullMockTestId: clone.id, mockTestId: section.mockTest.id, orderIndex: index },
+    });
+  }
+  for (const [index, section] of source.listeningSections.entries()) {
+    await prisma.fullMockListeningSection.create({
+      data: { fullMockTestId: clone.id, mockTestId: section.mockTest.id, orderIndex: index },
+    });
+  }
+  for (const [index, section] of source.writingSections.entries()) {
+    const task = await createWritingTask(teacherId, {
+      title: section.writingTask.title,
+      trainingType: section.writingTask.trainingType,
+      taskNumber: section.writingTask.taskNumber,
+      category: section.writingTask.category,
+      prompt: section.writingTask.prompt,
+      visualDescription: section.writingTask.visualDescription ?? undefined,
+      imageMediaFileId: section.writingTask.imageMediaFileId ?? undefined,
+      targetBand: section.writingTask.targetBand ?? undefined,
+      assignedStudentIds: [],
+    });
+    await prisma.fullMockWritingSection.create({ data: { fullMockTestId: clone.id, writingTaskId: task.id, orderIndex: index } });
+  }
+  for (const [index, section] of source.speakingSections.entries()) {
+    const task = await createSpeakingTask(teacherId, {
+      title: section.speakingTask.title,
+      part: section.speakingTask.part,
+      prompt: section.speakingTask.prompt,
+    });
+    await prisma.fullMockSpeakingSection.create({ data: { fullMockTestId: clone.id, speakingTaskId: task.id, orderIndex: index } });
+  }
+
+  return clone;
 }
 
 // ---------------------------------------------------------------------------
@@ -363,58 +450,15 @@ export async function listFullMockTestsForTeacher(teacherId: string) {
     status: test.status,
     createdAt: test.createdAt,
     attemptCount: test._count.attempts,
+    examNumber: test.examNumber,
+    difficulty: test.difficulty,
+    category: test.category,
     sectionsFilled:
       (test.readingSections.length > 0 ? 1 : 0) +
       (test.listeningSections.length > 0 ? 1 : 0) +
       (test.writingSections.length > 0 ? 1 : 0) +
       (test.speakingSections.length > 0 ? 1 : 0),
   }));
-}
-
-export type FullMockListingRow = {
-  id: string;
-  title: string;
-  description: string | null;
-  totalDurationMinutes: number;
-  sections: { listening: boolean; reading: boolean; writing: boolean; speaking: boolean };
-  estimatedBandMin: number | null;
-  estimatedBandMax: number | null;
-};
-
-/** Phase 34 — Part 4's student-facing Full Mock Tests listing. */
-export async function getPublishedFullMockTests(): Promise<FullMockListingRow[]> {
-  const tests = await prisma.fullMockTest.findMany({
-    where: { status: "PUBLISHED" },
-    orderBy: { createdAt: "desc" },
-    include: {
-      readingSections: { include: { mockTest: { select: { durationMinutes: true } } } },
-      listeningSections: { include: { mockTest: { select: { durationMinutes: true } } } },
-      writingSections: { select: { id: true } },
-      speakingSections: { select: { id: true } },
-    },
-  });
-
-  return tests.map((test) => {
-    const readingMinutes = test.readingSections.reduce((sum, s) => sum + (s.mockTest.durationMinutes ?? 0), 0);
-    const listeningMinutes = test.listeningSections.reduce((sum, s) => sum + (s.mockTest.durationMinutes ?? 0), 0);
-    const hasWriting = test.writingSections.length > 0;
-    const hasSpeaking = test.speakingSections.length > 0;
-
-    return {
-      id: test.id,
-      title: test.title,
-      description: test.description,
-      totalDurationMinutes: readingMinutes + listeningMinutes + (hasWriting ? FULL_MOCK_WRITING_MINUTES : 0) + (hasSpeaking ? FULL_MOCK_SPEAKING_MINUTES : 0),
-      sections: {
-        listening: test.listeningSections.length > 0,
-        reading: test.readingSections.length > 0,
-        writing: hasWriting,
-        speaking: hasSpeaking,
-      },
-      estimatedBandMin: test.estimatedBandMin,
-      estimatedBandMax: test.estimatedBandMax,
-    };
-  });
 }
 
 /** A single published Full Mock Test's detail, for the student's pre-start confirmation page. */
@@ -439,6 +483,9 @@ export async function getPublishedFullMockTestDetail(id: string) {
     id: test.id,
     title: test.title,
     description: test.description,
+    examNumber: test.examNumber,
+    difficulty: test.difficulty,
+    category: test.category,
     estimatedBandMin: test.estimatedBandMin,
     estimatedBandMax: test.estimatedBandMax,
     totalDurationMinutes: readingMinutes + listeningMinutes + FULL_MOCK_WRITING_MINUTES + FULL_MOCK_SPEAKING_MINUTES,

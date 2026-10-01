@@ -192,3 +192,55 @@ export async function listBookmarkedArticles(studentId: string): Promise<Bookmar
     percentComplete: row.article.readingProgress[0]?.percentComplete ?? 0,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Phase 45 — Reading Library
+// ---------------------------------------------------------------------------
+
+export async function isReadingLibraryItemBookmarked(studentId: string, itemId: string): Promise<boolean> {
+  const row = await prisma.readingLibraryBookmark.findUnique({
+    where: { studentId_itemId: { studentId, itemId } },
+    select: { id: true },
+  });
+  return row != null;
+}
+
+export async function toggleReadingLibraryBookmark(studentId: string, itemId: string): Promise<{ bookmarked: boolean }> {
+  const existing = await prisma.readingLibraryBookmark.findUnique({
+    where: { studentId_itemId: { studentId, itemId } },
+  });
+
+  if (existing) {
+    await prisma.readingLibraryBookmark.delete({ where: { id: existing.id } });
+    return { bookmarked: false };
+  }
+
+  await prisma.readingLibraryBookmark.create({ data: { studentId, itemId } });
+  return { bookmarked: true };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 45 — Listening Library
+// ---------------------------------------------------------------------------
+
+export async function isListeningLibraryItemBookmarked(studentId: string, itemId: string): Promise<boolean> {
+  const row = await prisma.listeningLibraryBookmark.findUnique({
+    where: { studentId_itemId: { studentId, itemId } },
+    select: { id: true },
+  });
+  return row != null;
+}
+
+export async function toggleListeningLibraryBookmark(studentId: string, itemId: string): Promise<{ bookmarked: boolean }> {
+  const existing = await prisma.listeningLibraryBookmark.findUnique({
+    where: { studentId_itemId: { studentId, itemId } },
+  });
+
+  if (existing) {
+    await prisma.listeningLibraryBookmark.delete({ where: { id: existing.id } });
+    return { bookmarked: false };
+  }
+
+  await prisma.listeningLibraryBookmark.create({ data: { studentId, itemId } });
+  return { bookmarked: true };
+}

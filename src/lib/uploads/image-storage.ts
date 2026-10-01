@@ -9,6 +9,8 @@ export type UploadedImage = UploadedFile;
 const ARTICLE_COVERS_BUCKET = "article-covers";
 const PROFILE_PHOTOS_BUCKET = "profile-photos";
 const FULL_MOCK_COVERS_BUCKET = "full-mock-covers";
+const SKILL_COVERS_BUCKET = "skill-covers";
+const CONTENT_COVERS_BUCKET = "content-covers";
 
 /**
  * Uploads an article cover image to the public `article-covers` Supabase
@@ -59,6 +61,34 @@ export async function uploadFullMockCoverImage(teacherId: string, file: File): P
   const buffer = Buffer.from(await file.arrayBuffer());
   const objectPath = `${teacherId}/${randomUUID()}${validation.extension}`;
   const servedPath = await uploadBuffer(FULL_MOCK_COVERS_BUCKET, objectPath, buffer, validation.contentType);
+
+  return { path: servedPath, fileName: file.name, mimeType: validation.contentType, size: file.size };
+}
+
+/** Phase 47 — Skill Media Library's per-skill banner (Reading/Listening/Writing/Speaking landing pages). */
+export async function uploadSkillCoverImage(teacherId: string, file: File): Promise<UploadedImage> {
+  const validation = validateImageFile({ name: file.name, size: file.size, type: file.type });
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const objectPath = `${teacherId}/${randomUUID()}${validation.extension}`;
+  const servedPath = await uploadBuffer(SKILL_COVERS_BUCKET, objectPath, buffer, validation.contentType);
+
+  return { path: servedPath, fileName: file.name, mimeType: validation.contentType, size: file.size };
+}
+
+/** Phase 47 — Skill Media Library's "Content thumbnails" for Reading/Listening tests, Writing assignments, and Speaking topics — one shared bucket/function, since all three are the same shape of thing (a single teacher-uploaded cover image attached to an existing content row). */
+export async function uploadContentCoverImage(teacherId: string, file: File): Promise<UploadedImage> {
+  const validation = validateImageFile({ name: file.name, size: file.size, type: file.type });
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const objectPath = `${teacherId}/${randomUUID()}${validation.extension}`;
+  const servedPath = await uploadBuffer(CONTENT_COVERS_BUCKET, objectPath, buffer, validation.contentType);
 
   return { path: servedPath, fileName: file.name, mimeType: validation.contentType, size: file.size };
 }

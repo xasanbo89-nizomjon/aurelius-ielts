@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5] as const;
 const SKIP_SECONDS = 10;
 const SAVE_DEBOUNCE_MS = 2000;
-/** Matches ARTICLE_AUDIO_COMPLETE_THRESHOLD_PERCENT in src/lib/coin-economy-constants.ts — only used here to decide when local "audioProgress" tracking should stop climbing past what's already been saved as complete. */
+/** Used here to decide when local "audioProgress" tracking should stop climbing past what's already been saved as complete. */
 const COMPLETE_PERCENT = 100;
 
 function formatTime(seconds: number): string {

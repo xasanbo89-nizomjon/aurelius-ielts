@@ -5,6 +5,7 @@ import { requireStudentProfile } from "@/lib/session";
 import { getFullMockProgressSummary, getFullMockSpeakingTask } from "@/lib/full-mock-attempts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { FullMockSpeakingTimer } from "@/components/student/full-mock-speaking-timer";
 import { FullMockSpeakingRecorder } from "./full-mock-speaking-recorder";
 
 export const metadata: Metadata = { title: "Full Mock — Speaking" };
@@ -27,6 +28,9 @@ export default async function FullMockSpeakingLegPage({
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-12 sm:py-16">
+      <div className="mb-4 flex justify-center">
+        <FullMockSpeakingTimer attemptId={attemptId} />
+      </div>
       {progress && (
         <p className="text-muted-foreground mb-4 text-center text-xs">
           {progress.completedCount}/{progress.totalCount} sections complete · ~{progress.estimatedMinutesRemaining} min remaining

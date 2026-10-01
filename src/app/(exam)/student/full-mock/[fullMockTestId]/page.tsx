@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { BookOpen, CheckCircle2, CircleDashed, ClipboardCheck, Clock, Headphones, Mic, PenLine } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
-import { hasActiveAccess } from "@/lib/subscription";
+import { hasActiveAccessForFullMockTest } from "@/lib/subscription";
 import { getPublishedFullMockTestDetail } from "@/lib/full-mock-tests";
+import { MOCK_TEST_DIFFICULTY_BADGE_VARIANT, MOCK_TEST_DIFFICULTY_LABELS } from "@/lib/labels";
 import { findInProgressFullMockAttempt, getFullMockProgressSummary } from "@/lib/full-mock-attempts";
 import { startFullMockAttemptAction } from "@/actions/full-mock-attempts.actions";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,7 +26,7 @@ export default async function FullMockStartPage({
   const test = await getPublishedFullMockTestDetail(fullMockTestId);
   if (!test) notFound();
 
-  if (!(await hasActiveAccess(profile.id))) {
+  if (!(await hasActiveAccessForFullMockTest(profile.id, fullMockTestId))) {
     return (
       <div className="flex min-h-svh items-center justify-center px-6 py-12">
         <PremiumLockScreen feature="Full Mock Tests" />
@@ -47,7 +48,13 @@ export default async function FullMockStartPage({
           </span>
 
           <div className="space-y-2">
-            <Badge variant="outline">Full Mock Test</Badge>
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              <Badge variant="outline">Full Mock Test</Badge>
+              {test.examNumber != null && <Badge variant="outline">Mock #{test.examNumber}</Badge>}
+              {test.difficulty && (
+                <Badge variant={MOCK_TEST_DIFFICULTY_BADGE_VARIANT[test.difficulty]}>{MOCK_TEST_DIFFICULTY_LABELS[test.difficulty]}</Badge>
+              )}
+            </div>
             <h1 className="font-display text-2xl font-medium tracking-tight">{test.title}</h1>
             {test.description && <p className="text-muted-foreground text-sm">{test.description}</p>}
           </div>

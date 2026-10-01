@@ -1,3 +1,5 @@
+import { Loader2 } from "lucide-react";
+
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -86,5 +88,20 @@ export function TableLoading({ columns = 4 }: { columns?: number }) {
       <PageHeaderSkeleton />
       <TableSkeleton columns={columns} />
     </>
+  );
+}
+
+/**
+ * Phase 49 — the bare `(exam)` route group has no dashboard chrome (see its
+ * layout.tsx), so the card/table skeletons above don't fit there — this is
+ * a centered spinner matching that shell's own `bg-background min-h-svh`
+ * wrapper, used by every exam/full-mock route's own `loading.tsx`.
+ */
+export function ExamLoading() {
+  return (
+    <div className="bg-background flex min-h-svh items-center justify-center">
+      <Loader2 className="text-muted-foreground size-8 animate-spin" aria-hidden="true" />
+      <span className="sr-only">Loading…</span>
+    </div>
   );
 }

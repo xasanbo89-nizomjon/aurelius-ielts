@@ -49,6 +49,7 @@ function findMatches(content: string, query: string): SearchMatch[] {
 
 export function PassagePanel({
   title,
+  sectionLabel,
   content,
   highlights,
   attachments = [],
@@ -57,6 +58,8 @@ export function PassagePanel({
   onAddNote,
 }: {
   title: string;
+  /** Phase 48 — real "Section information" (e.g. "Passage 1 of 3"), shown in the sticky header above the title. Omitted when there's only one passage. */
+  sectionLabel?: string;
   content: string;
   highlights: PassageHighlight[];
   attachments?: ExamAttachment[];
@@ -170,9 +173,22 @@ export function PassagePanel({
     return pieces;
   }, [content, highlights, matches, paragraphStarts]);
 
+  // Phase 48 — "Copy disabled during exam": blocks Ctrl+C / right-click-copy
+  // on the passage TEXT specifically (not the search input above it, which
+  // must stay copy/paste-able) — selection itself stays fully working, since
+  // making a highlight requires selecting text; only sending it to the OS
+  // clipboard is blocked.
+  function blockCopy(event: React.ClipboardEvent | React.MouseEvent) {
+    event.preventDefault();
+  }
+
   return (
-    <div ref={scrollContainerRef} className="relative h-full overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <div ref={scrollContainerRef} className="relative h-full overflow-y-auto scroll-smooth px-6 py-6 sm:px-8 sm:py-8">
+      <div className="bg-background/95 sticky top-0 z-10 -mx-6 mb-4 flex flex-wrap items-center justify-between gap-2 px-6 py-2 backdrop-blur-sm sm:-mx-8 sm:px-8">
+        <div className="min-w-0 flex-1">
+          {sectionLabel && <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">{sectionLabel}</p>}
+          <h2 className="font-display truncate text-base font-medium sm:text-lg">{title}</h2>
+        </div>
         <ReadingSpeedControl containerRef={scrollContainerRef} />
         <div className="flex items-center gap-1.5">
           {searchOpen && (
@@ -197,7 +213,7 @@ export function PassagePanel({
                 onClick={() => goToMatch(-1)}
                 disabled={matches.length === 0}
                 aria-label="Previous match"
-                className="text-muted-foreground hover:text-foreground disabled:opacity-30 rounded-full p-1"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 disabled:opacity-30 rounded-full p-1 outline-none focus-visible:ring-2"
               >
                 <ChevronUp className="size-3.5" />
               </button>
@@ -206,7 +222,7 @@ export function PassagePanel({
                 onClick={() => goToMatch(1)}
                 disabled={matches.length === 0}
                 aria-label="Next match"
-                className="text-muted-foreground hover:text-foreground disabled:opacity-30 rounded-full p-1"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 disabled:opacity-30 rounded-full p-1 outline-none focus-visible:ring-2"
               >
                 <ChevronDown className="size-3.5" />
               </button>
@@ -217,7 +233,7 @@ export function PassagePanel({
                   setSearchQuery("");
                 }}
                 aria-label="Close search"
-                className="text-muted-foreground hover:text-foreground rounded-full p-1"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 rounded-full p-1 outline-none focus-visible:ring-2"
               >
                 <X className="size-3.5" />
               </button>
@@ -228,7 +244,7 @@ export function PassagePanel({
               type="button"
               onClick={() => setSearchOpen(true)}
               aria-label="Search within passage"
-              className="text-muted-foreground hover:text-foreground hover:bg-secondary flex size-8 items-center justify-center rounded-full"
+              className="text-muted-foreground hover:text-foreground hover:bg-secondary focus-visible:ring-ring/50 flex size-8 items-center justify-center rounded-full outline-none focus-visible:ring-2"
             >
               <Search className="size-4" />
             </button>
@@ -252,7 +268,7 @@ export function PassagePanel({
                 }}
                 aria-label={`Highlight in ${c.label.toLowerCase()}`}
                 title={c.label}
-                className="hover:ring-2 hover:ring-white/60 flex size-6 shrink-0 items-center justify-center rounded-full p-0.5 outline-none"
+                className="hover:ring-2 hover:ring-white/60 focus-visible:ring-2 focus-visible:ring-white flex size-6 shrink-0 items-center justify-center rounded-full p-0.5 outline-none"
               >
                 <span className={cn("block size-4 rounded-full", c.swatchClass)} />
               </button>
@@ -264,7 +280,7 @@ export function PassagePanel({
                 onAddNote(toolbar.text);
                 clearSelection();
               }}
-              className="rounded-full px-3 py-1.5 text-xs font-medium hover:bg-white/10 focus-visible:bg-white/10 outline-none"
+              className="hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white rounded-full px-3 py-1.5 text-xs font-medium outline-none"
             >
               Add note
             </button>
@@ -278,10 +294,11 @@ export function PassagePanel({
         </div>
       )}
 
-      <h2 className="font-display mb-4 text-lg font-medium">{title}</h2>
       <div
         ref={containerRef}
         onMouseUp={handleMouseUp}
+        onCopy={blockCopy}
+        onContextMenu={blockCopy}
         className="font-display selection:bg-accent/30 text-[15.5px] leading-[1.8] whitespace-pre-wrap"
       >
         {segments.map((segment, index) => {

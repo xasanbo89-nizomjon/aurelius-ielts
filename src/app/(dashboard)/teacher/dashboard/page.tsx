@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Users, FileText, PenLine, Gem, BookMarked, Search, Trophy, Award, AlertTriangle, TrendingUp, Sparkles, Coins, Wallet } from "lucide-react";
+import { Users, FileText, PenLine, Gem, BookMarked, Search, Trophy, Award, AlertTriangle, TrendingUp, Sparkles } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getTeacherOverview } from "@/lib/dashboard-data";
 import { getTeacherVocabularyIntelligence, getVocabularyLeaderboard, getMostSearchedWords } from "@/lib/analytics/teacher-vocabulary-insights";
 import { getAtRiskStudents } from "@/lib/analytics/at-risk-students";
 import { getTopImprovingStudents, getWeakestSkillsAcrossPlatform } from "@/lib/analytics/teacher-performance-insights";
-import { getCoinEconomyAnalytics } from "@/lib/analytics/coin-economy";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +21,7 @@ const RISK_LEVEL_VARIANT = { HIGH: "destructive", MEDIUM: "accent", LOW: "outlin
 export default async function TeacherDashboardPage() {
   const { user, profile } = await requireTeacherProfile();
 
-  const [overview, vocabularyIntelligence, vocabularyLeaderboard, atRiskStudents, mostSearchedWords, topImproving, weakestSkills, coinEconomy] =
+  const [overview, vocabularyIntelligence, vocabularyLeaderboard, atRiskStudents, mostSearchedWords, topImproving, weakestSkills] =
     await Promise.all([
       getTeacherOverview(profile.id),
       getTeacherVocabularyIntelligence(profile.id),
@@ -31,7 +30,6 @@ export default async function TeacherDashboardPage() {
       getMostSearchedWords(profile.id),
       getTopImprovingStudents(profile.id),
       getWeakestSkillsAcrossPlatform(profile.id),
-      profile.isRootTeacher ? getCoinEconomyAnalytics() : Promise.resolve(null),
     ]);
 
   const firstName = user.name?.trim().split(/\s+/)[0];
@@ -174,21 +172,6 @@ export default async function TeacherDashboardPage() {
           )}
         </section>
       </div>
-
-      {coinEconomy && (
-        <section className="space-y-4">
-          <h2 className="font-display flex items-center gap-2 text-xl font-medium tracking-tight">
-            <Wallet className="text-accent size-5" aria-hidden="true" /> Coin Economy
-          </h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <StatCard label="Premium Users" value={String(coinEconomy.totalPremiumUsers)} icon={Gem} />
-            <StatCard label="Coins Earned" value={String(coinEconomy.totalCoinsEarned)} icon={Coins} caption="All-time, platform-wide" />
-            <StatCard label="Coins Spent" value={String(coinEconomy.totalCoinsSpent)} icon={Coins} />
-            <StatCard label="In Circulation" value={String(coinEconomy.coinsInCirculation)} icon={Wallet} caption="Real current wallet balances" />
-            <StatCard label="Premium Redemptions" value={String(coinEconomy.premiumRedemptions)} icon={Gem} />
-          </div>
-        </section>
-      )}
 
       <section className="space-y-4">
         <h2 className="font-display text-xl font-medium tracking-tight">Vocabulary Intelligence</h2>

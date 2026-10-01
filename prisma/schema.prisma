@@ -167,22 +167,6 @@ enum StudyActivityType {
   SPEAKING
 }
 
-enum CoinTransactionType {
-  STUDY_TIME
-  STREAK_BONUS
-  ACHIEVEMENT
-  REDEMPTION
-  /// Phase 26 — a real weekly/monthly consistency bonus, distinct from the
-  /// daily STUDY_TIME conversion and the login-streak STREAK_BONUS.
-  WEEKLY_BONUS
-  MONTHLY_BONUS
-  /// Phase 26 — Admin Premium Control: a root teacher manually adjusting a
-  /// student's balance. Always positive/negative respectively, same as
-  /// every other type — the CoinTransaction row IS the audit log entry.
-  ADMIN_GRANT
-  ADMIN_DEDUCT
-}
-
 enum AchievementCode {
   FIRST_READING_TEST
   FIRST_ARTICLE_COMPLETED
@@ -293,8 +277,6 @@ model StudentProfile {
   writingFeedback        WritingFeedback?
   writingPractice        WritingPractice?
   studyActivities        StudyActivity[]
-  coinWallet             CoinWallet?
-  coinTransactions       CoinTransaction[]
   studyStreak            StudyStreak?
   achievementUnlocks     AchievementUnlock[]
   writingTaskAssignments WritingTaskAssignment[]
@@ -308,6 +290,9 @@ model StudentProfile {
   articleNotes           ArticleNote[]
   articleBookmarks       ArticleBookmark[]
   speakingAttempts       SpeakingAttempt[]
+  /// Phase 45 — Media Library 2.0.
+  readingLibraryBookmarks   ReadingLibraryBookmark[]
+  listeningLibraryBookmarks ListeningLibraryBookmark[]
 
   @@map("student_profiles")
 }
@@ -352,6 +337,11 @@ model TeacherProfile {
   speakingTopics          SpeakingTopic[]
   mediaFiles              MediaFile[]
   mediaFolders            MediaFolder[]
+  /// Phase 45 — Media Library 2.0.
+  readingLibraryItems     ReadingLibraryItem[]
+  listeningLibraryItems   ListeningLibraryItem[]
+  /// Phase 47 — Skill Media Library's platform-wide cover banners (Root Teacher only — see SkillCoverImage).
+  updatedSkillCoverImages SkillCoverImage[]
 
   @@map("teacher_profiles")
 }
@@ -381,6 +371,8 @@ model MockTest {
   /// Phase 34 — real, teacher-set difficulty badge (Part 2/3's "Difficulty
   /// badge"). Null for every test created before this phase existed.
   difficulty      MockTestDifficulty?
+  /// Phase 47 — Skill Media Library's "Content thumbnails" for Reading/Listening tests. Null until a teacher uploads one.
+  coverImagePath  String?
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -816,6 +808,8 @@ model WritingTask {
   targetBand        Float?
   /// The assignment deadline. Purely informational (drives "overdue" styling on the student task list) — never blocks a late submission.
   dueDate           DateTime?
+  /// Phase 47 — Skill Media Library's "Content thumbnails" for Writing assignments, shown in task LISTS (distinct from imageMediaFile above, which is the Task 1 question's own chart/graph content).
+  coverImagePath    String?
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -948,6 +942,8 @@ model SpeakingTask {
   prompt String @db.Text
 
   status SpeakingTaskStatus @default(DRAFT)
+  /// Phase 47 — Skill Media Library's "Content thumbnails" for Speaking topics.
+  coverImagePath String?
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -1194,6 +1190,18 @@ model FullMockTest {
   /// never computed/invented; null until the teacher sets it in Step 1/6.
   estimatedBandMin Float?
   estimatedBandMax Float?
+  /// Phase 47 — Mock Exam Center card's "Exam Number" (e.g. "Cambridge Mock 1").
+  /// A real teacher-set label, never parsed/guessed from the title.
+  examNumber       Int?
+  /// Phase 47 — reuses the same enum Reading/Listening MockTests already use,
+  /// purely a teacher-set guidance badge (never alters routing/scoring).
+  difficulty       MockTestDifficulty?
+  /// Phase 47 — reuses the exact CAMBRIDGE-is-free-without-subscription
+  /// convention MockTest already has (see hasActiveAccessForTest); a
+  /// CAMBRIDGE-category Full Mock Test is the "Free users: limited" tier's
+  /// real free inventory, GENERAL is premium-gated. Defaults to GENERAL so
+  /// every pre-Phase-47 test stays premium-gated exactly as it already was.
+  category         MockTestCategory   @default(GENERAL)
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -2000,6 +2008,114 @@ model ArticleBookmark {
   @@map("article_bookmarks")
 }
 
+// ---------------------------------------------------------------------------
+// Phase 45 — Media Library 2.0 + IELTS Content Management System
+// Feature 1: Reading Library (real uploaded PDFs — distinct from Article,
+// which is interactive plain-text content; this is browsable, downloadable
+// reference/practice material). Feature 2: Listening Library (real uploaded
+// standalone audio, distinct from Listening MockTest passages, which are
+// timed/graded exam content). Both reuse ArticleDifficulty/ArticleStatus
+// rather than duplicating near-identical enums.
+// ---------------------------------------------------------------------------
+
+model ReadingLibraryItem {
+  id             String            @id @default(cuid())
+  title          String
+  description    String?           @db.Text
+  category       String
+  level          ArticleDifficulty
+  /// Teacher-set guidance band, e.g. 6.5 — shown to students, never used to alter any real scoring.
+  estimatedBand  Float?
+  /// Real teacher-provided word count (a PDF's content can't be reliably auto-extracted the way Article.content's plain text can) — readingMinutes is then a real deterministic computation from it (word count / 200wpm), same formula Article uses. Both null until the teacher provides a word count.
+  wordCount      Int?
+  readingMinutes Int?
+
+  pdfPath        String
+  pdfFileName    String
+  pdfSize        Int
+  coverImagePath String?
+
+  status      ArticleStatus @default(DRAFT)
+  publishedAt DateTime?
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookmarks ReadingLibraryBookmark[]
+
+  @@index([createdById, status])
+  @@map("reading_library_items")
+}
+
+model ReadingLibraryBookmark {
+  id        String             @id @default(cuid())
+  studentId String
+  student   StudentProfile     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      ReadingLibraryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, itemId])
+  @@index([studentId])
+  @@map("reading_library_bookmarks")
+}
+
+enum ListeningAccent {
+  BRITISH
+  AMERICAN
+  AUSTRALIAN
+  CANADIAN
+}
+
+model ListeningLibraryItem {
+  id          String            @id @default(cuid())
+  title       String
+  description String?           @db.Text
+  level       ArticleDifficulty
+  accent      ListeningAccent
+
+  audioPath            String
+  audioFileName        String
+  audioSize            Int
+  /// Seconds, read from the real uploaded file's own metadata client-side at upload time — never estimated, same convention as Article.audioDuration.
+  audioDurationSeconds Int?
+  /// Presence of real transcript text is what "view transcript availability" checks — never a boolean flag that could drift from the real data.
+  transcript           String? @db.Text
+  coverImagePath       String?
+
+  status      ArticleStatus @default(DRAFT)
+  publishedAt DateTime?
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookmarks ListeningLibraryBookmark[]
+
+  @@index([createdById, status])
+  @@map("listening_library_items")
+}
+
+model ListeningLibraryBookmark {
+  id        String               @id @default(cuid())
+  studentId String
+  student   StudentProfile       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      ListeningLibraryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, itemId])
+  @@index([studentId])
+  @@map("listening_library_bookmarks")
+}
+
 /// One row per article open by a student — a real view event, not a
 /// counter. "Total views" sums these rows; "Total readers" counts distinct
 /// students among them.
@@ -2247,49 +2363,6 @@ model StudyActivity {
   @@map("study_activities")
 }
 
-/// One wallet per student — the running balance and lifetime-earned total.
-/// Never written to directly outside src/lib/coins.ts; every change flows
-/// through a CoinTransaction so a balance is always backed by a real,
-/// auditable record.
-model CoinWallet {
-  id String @id @default(cuid())
-
-  studentId String         @unique
-  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  balance        Int @default(0)
-  lifetimeEarned Int @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("coin_wallets")
-}
-
-/// The permanent record of every coin change (earn or spend).
-/// `idempotencyKey` is the real enforcement of "no duplicate rewards" — a
-/// database unique constraint, not just application-level care — so the same
-/// study-day / streak-milestone / achievement / redemption can never be
-/// double-counted even under a race or a retried request.
-model CoinTransaction {
-  id String @id @default(cuid())
-
-  studentId String
-  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  type        CoinTransactionType
-  /// Positive for every earn type; negative for REDEMPTION.
-  amount      Int
-  description String
-
-  idempotencyKey String @unique
-
-  createdAt DateTime @default(now())
-
-  @@index([studentId, createdAt])
-  @@map("coin_transactions")
-}
-
 /// Consecutive-day study streak. A day only counts once real StudyActivity
 /// crosses a minimum genuine-engagement threshold (see
 /// MIN_DAILY_SECONDS_FOR_STREAK in src/lib/streaks.ts) — never just "any page view".
@@ -2326,7 +2399,6 @@ model Achievement {
   code        AchievementCode @unique
   title       String
   description String
-  coinReward  Int
 
   createdAt DateTime @default(now())
 
@@ -2395,11 +2467,17 @@ model MediaFile {
   id String @id @default(cuid())
 
   fileName String
+  /// Phase 47 — a real teacher-set display title, distinct from the raw uploaded fileName. Null until a teacher sets one (falls back to fileName for display).
+  title       String?
+  /// Phase 47 — a real teacher-set description. Null until a teacher sets one.
+  description String? @db.Text
   type     MediaFileType
   mimeType String
   path     String
   /// Bytes — read from the real uploaded file, never estimated. The basis for the 5GB teacher storage quota.
   size     Int
+  /// Phase 47 — SHA-256 of the ORIGINAL uploaded bytes (before any image compression), used to detect and skip re-uploading a file this teacher already has in their library ("avoid duplicate uploads"). Null for every file uploaded before this existed.
+  contentHash String?
 
   /// Real pixel dimensions, only ever set for type=IMAGE (read from the file itself via sharp, never guessed) — used to give next/image real width/height and avoid layout shift.
   width         Int?
@@ -2423,6 +2501,7 @@ model MediaFile {
   @@index([ownerId, type])
   @@index([ownerId, folderId])
   @@index([ownerId, createdAt])
+  @@index([ownerId, contentHash])
   @@map("media_files")
 }
 
@@ -2440,6 +2519,11 @@ enum MediaUsageContext {
   ARTICLE_COVER
   ARTICLE_ATTACHMENT
   WRITING_TASK_VISUAL
+  /// Phase 47 — Skill Media Library's content thumbnails/cover banners.
+  MOCK_TEST_COVER
+  WRITING_TASK_COVER
+  SPEAKING_TASK_COVER
+  SKILL_COVER
 }
 
 model MediaUsage {
@@ -2456,6 +2540,31 @@ model MediaUsage {
   @@index([mediaFileId])
   @@index([context, referenceId])
   @@map("media_usages")
+}
+
+/// Phase 47 — Skill Media Library's platform-wide cover banner (e.g.
+/// "Cambridge Reading Collection" on the Reading landing page). Exactly one
+/// row per skill (skill IS the primary key — SkillType only ever has 4
+/// values) — PLATFORM-WIDE, not per-teacher, because the Reading/Listening
+/// catalog pages these banners appear on (getGeneralTestsByType) already
+/// pool every teacher's published tests together with no single "owning"
+/// teacher; a Root Teacher manages these 4 banners for every student,
+/// mirroring every other platform-wide setting already gated on
+/// isRootTeacher (analytics, teacher management, subscription plans, ...).
+model SkillCoverImage {
+  skill SkillType @id
+
+  title       String
+  description String? @db.Text
+  imagePath   String
+
+  updatedById String
+  updatedBy   TeacherProfile @relation(fields: [updatedById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("skill_cover_images")
 }
 
 /// Phase 38 — Part 5's "Optional: Inline Images, Infographics, Attachments"

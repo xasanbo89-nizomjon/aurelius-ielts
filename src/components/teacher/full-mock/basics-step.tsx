@@ -1,14 +1,16 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ImageIcon, Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
+import type { MockTestDifficulty } from "@prisma/client";
+
 import { fullMockBasicsSchema, type FullMockBasicsFormInput } from "@/lib/validations/full-mock";
 import { IMAGE_INPUT_ACCEPT, validateImageFile } from "@/lib/uploads/image-constraints";
+import { MOCK_TEST_DIFFICULTY_LABELS } from "@/lib/labels";
 import {
   createFullMockTestAction,
   updateFullMockBasicsAction,
@@ -18,6 +20,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FallbackImage } from "@/components/ui/fallback-image";
+
+const DIFFICULTY_OPTIONS: MockTestDifficulty[] = ["BEGINNER", "INTERMEDIATE", "ADVANCED"];
 
 export function BasicsStep({
   fullMockTestId,
@@ -32,6 +39,9 @@ export function BasicsStep({
     coverImagePath: string | null;
     estimatedBandMin: number | null;
     estimatedBandMax: number | null;
+    examNumber?: number | null;
+    difficulty?: MockTestDifficulty | null;
+    category?: "CAMBRIDGE" | "GENERAL";
   };
   onCreated?: (id: string) => void;
   onSaved?: () => void;
@@ -44,6 +54,8 @@ export function BasicsStep({
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<FullMockBasicsFormInput>({
     resolver: zodResolver(fullMockBasicsSchema),
@@ -52,8 +64,14 @@ export function BasicsStep({
       description: initial?.description ?? undefined,
       estimatedBandMin: initial?.estimatedBandMin ?? undefined,
       estimatedBandMax: initial?.estimatedBandMax ?? undefined,
+      examNumber: initial?.examNumber ?? undefined,
+      difficulty: initial?.difficulty ?? undefined,
+      category: initial?.category ?? "GENERAL",
     },
   });
+
+  const category = watch("category");
+  const difficulty = watch("difficulty");
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -124,7 +142,7 @@ export function BasicsStep({
         <div className="flex items-center gap-3">
           <div className="bg-secondary relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-xl">
             {coverPath ? (
-              <Image src={coverPath} alt="" fill sizes="64px" className="object-cover" unoptimized />
+              <FallbackImage src={coverPath} alt="" fill sizes="64px" className="object-cover" unoptimized />
             ) : (
               <ImageIcon className="text-muted-foreground size-6" strokeWidth={1.5} />
             )}
@@ -170,8 +188,50 @@ export function BasicsStep({
         </div>
       </div>
       <p className="text-muted-foreground -mt-3 text-xs">
-        Shown to students on the Full Mock Tests list. Leave blank to hide the band range.
+        Shown to students on the Mock Exams list. Leave blank to hide the band range.
       </p>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="examNumber">Exam number (optional)</Label>
+          <Input
+            id="examNumber"
+            type="number"
+            min={1}
+            placeholder="1"
+            {...register("examNumber", { setValueAs: (v) => (v === "" ? undefined : Number(v)) })}
+          />
+          <p className="text-muted-foreground text-xs">Shown as &quot;Mock #1&quot; on the card.</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="difficulty">Difficulty (optional)</Label>
+          <Select value={difficulty ?? "NONE"} onValueChange={(v) => setValue("difficulty", v === "NONE" ? undefined : (v as MockTestDifficulty))}>
+            <SelectTrigger id="difficulty">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NONE">No badge</SelectItem>
+              {DIFFICULTY_OPTIONS.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {MOCK_TEST_DIFFICULTY_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="border-border/70 flex items-center justify-between rounded-xl border px-4 py-3.5">
+        <div className="space-y-0.5">
+          <Label htmlFor="category">Cambridge Mock (free)</Label>
+          <p className="text-muted-foreground text-xs">Free for every student, no subscription required.</p>
+        </div>
+        <Switch
+          id="category"
+          checked={category === "CAMBRIDGE"}
+          onCheckedChange={(checked) => setValue("category", checked ? "CAMBRIDGE" : "GENERAL")}
+        />
+      </div>
 
       <Button type="submit" disabled={submitting || uploading}>
         {submitting && <Loader2 className="size-4 animate-spin" />}

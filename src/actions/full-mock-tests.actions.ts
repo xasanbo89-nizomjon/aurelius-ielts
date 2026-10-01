@@ -159,3 +159,36 @@ export async function deleteFullMockTestAction(id: string): Promise<ActionResult
     return { success: false, error: errorMessage(error, "Could not delete the full mock test.") };
   }
 }
+
+export async function archiveFullMockTestAction(id: string): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    await fullMockTests.archiveFullMockTest(id, profile.id);
+    revalidatePath("/teacher/tests");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not archive the full mock test.") };
+  }
+}
+
+export async function unarchiveFullMockTestAction(id: string): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    await fullMockTests.unarchiveFullMockTest(id, profile.id);
+    revalidatePath("/teacher/tests");
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not unarchive the full mock test.") };
+  }
+}
+
+export async function duplicateFullMockTestAction(id: string): Promise<ActionResult & { fullMockTestId?: string }> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    const clone = await fullMockTests.duplicateFullMockTest(id, profile.id);
+    revalidatePath("/teacher/tests");
+    return { success: true, fullMockTestId: clone.id };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not duplicate the full mock test.") };
+  }
+}

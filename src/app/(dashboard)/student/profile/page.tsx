@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Award, Clock, Coins, Flame, Gauge, Gem, Target, Trophy } from "lucide-react";
+import { Award, BarChart3, Clock, Flame, Gem, Target } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getStudentProfileDetails } from "@/lib/student-profile";
-import { getWalletSummary } from "@/lib/coins";
 import { getStreakBreakdown } from "@/lib/streaks";
 import { getAchievementsForStudent, syncAchievements } from "@/lib/achievements";
 import { getStudyTimeSummary } from "@/lib/study-activity";
 import { getSubscriptionSummary } from "@/lib/subscription";
 import { getStudentVocabularyStats } from "@/lib/vocabulary";
 import { getPremiumIdentity } from "@/lib/premium-identity";
+import { getResultCards, getProgressHistory } from "@/lib/analytics/student-insights";
 import { SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_VARIANTS } from "@/lib/labels";
 import { formatDuration } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -20,10 +20,11 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ProfilePhotoUploader } from "@/components/student/profile-photo-uploader";
 import { ProfileGoalsForm } from "@/components/student/profile-goals-form";
-import { RedeemPremiumButton } from "@/components/student/redeem-premium-button";
 import { VocabularyStatsCards } from "@/components/analytics/vocabulary-stats-cards";
 import { PremiumBadge } from "@/components/student/premium-badge";
 import { AnimatedStreakBadge } from "@/components/student/animated-streak-badge";
+import { LineChart, type LineChartSeries } from "@/components/analytics/charts/line-chart";
+import { EmptyState } from "@/components/dashboard/empty-state";
 
 export const metadata: Metadata = { title: "My Profile" };
 
@@ -33,18 +34,46 @@ export default async function StudentProfilePage() {
   // Lazy safety-net: real achievement conditions get re-checked here too, not just from the heartbeat/exam-completion path.
   await syncAchievements(profile.id);
 
-  const [details, wallet, streak, achievements, studyTime, subscription, vocabularyStats, premium] = await Promise.all([
+  const [details, streak, achievements, studyTime, subscription, vocabularyStats, premium, resultCards, progressHistory] = await Promise.all([
     getStudentProfileDetails(user.id, profile.id),
-    getWalletSummary(profile.id),
     getStreakBreakdown(profile.id),
     getAchievementsForStudent(profile.id),
     getStudyTimeSummary(profile.id),
     getSubscriptionSummary(profile.id),
     getStudentVocabularyStats(profile.id),
     getPremiumIdentity(profile.id),
+    getResultCards(profile.id),
+    getProgressHistory(profile.id),
   ]);
 
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
+  const recentResults = resultCards.slice(0, 5);
+
+  // Phase 44 — Part 8's real band trend, split by skill (its own sequential
+  // attempt number on the x-axis, since real test dates are too irregular
+  // to space evenly) — only ever real bandScore points, never interpolated.
+  const readingTrend = progressHistory.filter((p) => p.skill === "READING" && p.bandScore != null);
+  const listeningTrend = progressHistory.filter((p) => p.skill === "LISTENING" && p.bandScore != null);
+  const trendSeries: LineChartSeries[] = [
+    ...(readingTrend.length > 0
+      ? [
+          {
+            label: "Reading",
+            color: "var(--chart-1)",
+            points: readingTrend.map((p, i) => ({ x: i + 1, y: p.bandScore!, tooltip: `Attempt ${i + 1}: Band ${p.bandScore!.toFixed(1)}` })),
+          },
+        ]
+      : []),
+    ...(listeningTrend.length > 0
+      ? [
+          {
+            label: "Listening",
+            color: "var(--chart-2)",
+            points: listeningTrend.map((p, i) => ({ x: i + 1, y: p.bandScore!, tooltip: `Attempt ${i + 1}: Band ${p.bandScore!.toFixed(1)}` })),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <>
@@ -111,6 +140,54 @@ export default async function StudentProfilePage() {
       </Card>
 
       <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-xl font-medium tracking-tight">Recent Results &amp; Band Trend</h2>
+          <Link href="/student/analytics" className="text-accent text-xs font-medium hover:underline">
+            Full Band Score Center →
+          </Link>
+        </div>
+        {recentResults.length === 0 ? (
+          <EmptyState
+            icon={BarChart3}
+            title="No completed tests yet"
+            description="Finish a Reading or Listening test to see your recent results and band trend here."
+          />
+        ) : (
+          <>
+            <Card>
+              <CardContent className="divide-border/70 divide-y px-0">
+                {recentResults.map((result) => (
+                  <div key={result.id} className="flex items-center justify-between gap-3 px-6 py-3">
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="truncate text-sm font-medium">{result.testTitle}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {result.skill === "LISTENING" ? "Listening" : "Reading"} · {result.completedAt.toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-display text-lg font-medium">{result.bandScore != null ? result.bandScore.toFixed(1) : "—"}</p>
+                      {result.scorePercent != null && <p className="text-muted-foreground text-xs">{Math.round(result.scorePercent)}%</p>}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {trendSeries.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Band Trend</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <LineChart series={trendSeries} yDomain={[0, 9]} ariaLabel="Real band score trend over time, by skill" />
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="space-y-4">
         <h2 className="font-display text-xl font-medium tracking-tight">Study Time</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <StatCard label="Today" value={formatDuration(studyTime.todaySeconds)} icon={Clock} />
@@ -122,24 +199,6 @@ export default async function StudentProfilePage() {
       <section className="space-y-4">
         <h2 className="font-display text-xl font-medium tracking-tight">Vocabulary</h2>
         <VocabularyStatsCards stats={vocabularyStats} />
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="font-display text-xl font-medium tracking-tight">Coin Wallet</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <StatCard label="Coins" value={String(wallet.balance)} icon={Coins} />
-          <StatCard label="Today's Coins" value={`+${wallet.todayCoins}`} icon={Gauge} />
-          <StatCard label="Lifetime Coins" value={String(wallet.lifetimeEarned)} icon={Trophy} />
-        </div>
-        <Card>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium">Redeem Premium</p>
-              <p className="text-muted-foreground text-xs">1000 coins = 30 days of Premium access.</p>
-            </div>
-            <RedeemPremiumButton balance={wallet.balance} />
-          </CardContent>
-        </Card>
       </section>
 
       <section className="space-y-4">
@@ -225,7 +284,7 @@ export default async function StudentProfilePage() {
                   <p className="text-sm font-medium">{achievement.title}</p>
                   <p className="text-muted-foreground text-xs">{achievement.description}</p>
                   <div className="flex items-center gap-2 pt-1">
-                    <Badge variant={achievement.unlocked ? "success" : "outline"}>+{achievement.coinReward} coins</Badge>
+                    <Badge variant={achievement.unlocked ? "success" : "outline"}>{achievement.unlocked ? "Unlocked" : "Locked"}</Badge>
                     {achievement.unlocked && achievement.unlockedAt && (
                       <span className="text-muted-foreground text-[11px]">{achievement.unlockedAt.toLocaleDateString()}</span>
                     )}

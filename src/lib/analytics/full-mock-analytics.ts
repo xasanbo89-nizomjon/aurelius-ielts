@@ -1,10 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-
-function roundToIeltsBand(avg: number): number {
-  return Math.ceil(avg * 2) / 2;
-}
+import { bandForSection, overallBandFromSections } from "@/lib/full-mock-band-composition";
 
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -60,14 +57,6 @@ export async function getFullMockTestAnalytics(fullMockTestId: string, teacherId
   const completedAttempts = completed.length;
   const completionRate = totalAttempts > 0 ? Math.round((completedAttempts / totalAttempts) * 100) : 0;
 
-  function sectionBandForAttempt(attempt: (typeof attempts)[number], key: (typeof SECTION_KEYS)[number]): number | null {
-    const rows = attempt.sectionResults.filter((r) => r.section === key);
-    const bands = rows
-      .map((r) => r.result?.bandScore ?? r.writingSubmission?.bandScore ?? r.speakingSubmission?.bandScore ?? null)
-      .filter((b): b is number => b != null);
-    return average(bands);
-  }
-
   const sectionAverages: FullMockSectionAverage[] = SECTION_KEYS.map((key) => {
     const bands: number[] = [];
     let attemptCount = 0;
@@ -75,19 +64,15 @@ export async function getFullMockTestAnalytics(fullMockTestId: string, teacherId
       const hasRows = attempt.sectionResults.some((r) => r.section === key);
       if (!hasRows) continue;
       attemptCount += 1;
-      const band = sectionBandForAttempt(attempt, key);
+      const band = bandForSection(attempt.sectionResults, key);
       if (band != null) bands.push(band);
     }
     return { label: SECTION_LABELS[key], averageBand: average(bands), attemptCount };
   });
 
-  const perAttemptOverall: number[] = [];
-  for (const attempt of completed) {
-    const bands = SECTION_KEYS.map((key) => sectionBandForAttempt(attempt, key));
-    if (bands.every((b): b is number => b != null)) {
-      perAttemptOverall.push(roundToIeltsBand(average(bands as number[])!));
-    }
-  }
+  const perAttemptOverall = completed
+    .map((attempt) => overallBandFromSections(attempt.sectionResults))
+    .filter((b): b is number => b != null);
 
   const withData = sectionAverages.filter((s) => s.averageBand != null);
   const mostDifficultSection =
@@ -100,5 +85,80 @@ export async function getFullMockTestAnalytics(fullMockTestId: string, teacherId
     averageOverallBand: average(perAttemptOverall),
     sectionAverages,
     mostDifficultSection,
+  };
+}
+
+export type FullMockTeacherOverview = {
+  totalTests: number;
+  totalAttempts: number;
+  completionRate: number;
+  averageBandAcrossAllExams: number | null;
+  mostAttemptedExam: { id: string; title: string; attemptCount: number } | null;
+  highestScoringExam: { id: string; title: string; averageBand: number } | null;
+};
+
+/**
+ * Phase 47 — cross-test teacher analytics ("Most attempted exams / Highest
+ * scoring exams / Average band / Completion rate"), aggregating over ALL of
+ * this teacher's own Full Mock Tests at once. getFullMockTestAnalytics above
+ * stays as-is (single-test drill-down); this is the new overview a teacher
+ * sees across their whole Full Mock catalog. Every number is a real
+ * aggregate — a teacher with zero attempts anywhere gets null/0, never a
+ * fabricated example.
+ */
+export async function getFullMockTeacherOverviewAnalytics(teacherId: string): Promise<FullMockTeacherOverview> {
+  const tests = await prisma.fullMockTest.findMany({
+    where: { createdById: teacherId },
+    select: {
+      id: true,
+      title: true,
+      attempts: {
+        select: {
+          status: true,
+          sectionResults: {
+            select: {
+              section: true,
+              result: { select: { bandScore: true } },
+              writingSubmission: { select: { bandScore: true } },
+              speakingSubmission: { select: { bandScore: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  let totalAttempts = 0;
+  let totalCompleted = 0;
+  const allOverallBands: number[] = [];
+  let mostAttempted: { id: string; title: string; attemptCount: number } | null = null;
+  let highestScoring: { id: string; title: string; averageBand: number } | null = null;
+
+  for (const test of tests) {
+    const attemptCount = test.attempts.length;
+    totalAttempts += attemptCount;
+
+    const completed = test.attempts.filter((a) => a.status === "COMPLETED");
+    totalCompleted += completed.length;
+
+    const testOverallBands = completed.map((a) => overallBandFromSections(a.sectionResults)).filter((b): b is number => b != null);
+    allOverallBands.push(...testOverallBands);
+    const testAverageBand = average(testOverallBands);
+
+    if (attemptCount > 0 && (mostAttempted === null || attemptCount > mostAttempted.attemptCount)) {
+      mostAttempted = { id: test.id, title: test.title, attemptCount };
+    }
+    if (testAverageBand != null && (highestScoring === null || testAverageBand > highestScoring.averageBand)) {
+      highestScoring = { id: test.id, title: test.title, averageBand: testAverageBand };
+    }
+  }
+
+  return {
+    totalTests: tests.length,
+    totalAttempts,
+    completionRate: totalAttempts > 0 ? Math.round((totalCompleted / totalAttempts) * 100) : 0,
+    averageBandAcrossAllExams: average(allOverallBands),
+    mostAttemptedExam: mostAttempted,
+    highestScoringExam: highestScoring,
   };
 }

@@ -1,6 +1,7 @@
-import type { QuestionType, TestType } from "@prisma/client";
+import type { QuestionType, SkillType, TestType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
 
 function average(values: number[]): number | null {
   return values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null;
@@ -215,4 +216,129 @@ export async function getMockTestAnalytics(testId: string, teacherId: string): P
     avgBand: avgBand != null ? Math.round(avgBand * 10) / 10 : null,
     avgDurationSeconds: avgDuration != null ? Math.round(avgDuration) : null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 44 — Part 9's Teacher Analytics additions
+// ---------------------------------------------------------------------------
+
+export type SkillBandAverage = { skill: "READING" | "LISTENING" | "WRITING" | "SPEAKING"; label: string; avgBand: number | null; sampleSize: number };
+
+const SKILL_LABELS_LOCAL: Record<SkillBandAverage["skill"], string> = {
+  READING: "Reading",
+  LISTENING: "Listening",
+  WRITING: "Writing",
+  SPEAKING: "Speaking",
+};
+
+/**
+ * Real average band per skill across every one of this teacher's students —
+ * Reading/Listening from Result.bandScore, Writing from the real AI
+ * WritingAnalysis.estimatedBand (the one signal every real submission gets,
+ * unlike the sparser teacher-reviewed bandScore), Speaking from BOTH real
+ * speaking pipelines (the audio-based SpeakingSubmission and the Phase 37
+ * Practice Center's SpeakingFeedback) combined into one real average.
+ */
+export async function getWeakestSkill(teacherId: string): Promise<{ skills: SkillBandAverage[]; weakest: SkillBandAverage | null }> {
+  const [examBands, writingBands, speakingSubmissionBands, speakingAttemptBands] = await Promise.all([
+    prisma.result.findMany({
+      where: { student: { teacherId }, completedAt: { not: null }, bandScore: { not: null } },
+      select: { skill: true, bandScore: true },
+    }),
+    prisma.writingAnalysis.findMany({
+      where: { submission: { student: { teacherId } } },
+      select: { estimatedBand: true },
+    }),
+    prisma.speakingSubmission.findMany({
+      where: { student: { teacherId }, bandScore: { not: null } },
+      select: { bandScore: true },
+    }),
+    prisma.speakingFeedback.findMany({
+      where: { attempt: { student: { teacherId } } },
+      select: { overallBand: true },
+    }),
+  ]);
+
+  const readingBands = examBands.filter((r) => r.skill === "READING").map((r) => r.bandScore!);
+  const listeningBands = examBands.filter((r) => r.skill === "LISTENING").map((r) => r.bandScore!);
+  const writingBandValues = writingBands.map((w) => w.estimatedBand);
+  const speakingBandValues = [...speakingSubmissionBands.map((s) => s.bandScore!), ...speakingAttemptBands.map((s) => s.overallBand)];
+
+  const skills: SkillBandAverage[] = (["READING", "LISTENING", "WRITING", "SPEAKING"] as const).map((skill) => {
+    const values = skill === "READING" ? readingBands : skill === "LISTENING" ? listeningBands : skill === "WRITING" ? writingBandValues : speakingBandValues;
+    const avg = average(values);
+    return { skill, label: SKILL_LABELS_LOCAL[skill], avgBand: avg != null ? Math.round(avg * 10) / 10 : null, sampleSize: values.length };
+  });
+
+  const withData = skills.filter((s) => s.avgBand != null && s.sampleSize >= 2);
+  const weakest = withData.length > 0 ? withData.reduce((min, s) => (s.avgBand! < min.avgBand! ? s : min)) : null;
+
+  return { skills, weakest };
+}
+
+export type MissedQuestionTypeRow = { type: QuestionType; label: string; wrong: number; total: number; missedPercent: number };
+
+/**
+ * Real wrong-answer rate per real QuestionType, aggregated across every
+ * question in every test this teacher owns — never per-individual-question
+ * (see getMostConfusingQuestions for that), this is the type-level pattern:
+ * "this teacher's students consistently struggle with Matching Headings."
+ */
+export async function getMostMissedQuestionTypes(teacherId: string, limit = 5): Promise<MissedQuestionTypeRow[]> {
+  const answers = await prisma.answer.findMany({
+    where: { question: { mockTest: { createdById: teacherId } }, isCorrect: { not: null } },
+    select: { isCorrect: true, question: { select: { type: true } } },
+  });
+
+  const byType = new Map<QuestionType, { wrong: number; total: number }>();
+  for (const answer of answers) {
+    const entry = byType.get(answer.question.type) ?? { wrong: 0, total: 0 };
+    entry.total += 1;
+    if (!answer.isCorrect) entry.wrong += 1;
+    byType.set(answer.question.type, entry);
+  }
+
+  const MIN_SAMPLE = 3;
+  return [...byType.entries()]
+    .map(([type, { wrong, total }]) => ({ type, label: QUESTION_TYPE_META[type].label, wrong, total, missedPercent: total > 0 ? Math.round((wrong / total) * 100) : 0 }))
+    .filter((row) => row.total >= MIN_SAMPLE && row.wrong > 0)
+    .sort((a, b) => b.missedPercent - a.missedPercent)
+    .slice(0, limit);
+}
+
+export type RecentAttemptRow = {
+  resultId: string;
+  studentName: string | null;
+  studentEmail: string;
+  testTitle: string;
+  skill: SkillType;
+  bandScore: number | null;
+  completedAt: Date;
+};
+
+/** The most recent real completed attempts across every student this teacher has — newest first. */
+export async function getRecentAttempts(teacherId: string, limit = 8): Promise<RecentAttemptRow[]> {
+  const results = await prisma.result.findMany({
+    where: { student: { teacherId }, completedAt: { not: null } },
+    orderBy: { completedAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      skill: true,
+      bandScore: true,
+      completedAt: true,
+      mockTest: { select: { title: true } },
+      student: { select: { user: { select: { name: true, email: true } } } },
+    },
+  });
+
+  return results.map((r) => ({
+    resultId: r.id,
+    studentName: r.student.user.name,
+    studentEmail: r.student.user.email,
+    testTitle: r.mockTest.title,
+    skill: r.skill,
+    bandScore: r.bandScore,
+    completedAt: r.completedAt as Date,
+  }));
 }

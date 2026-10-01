@@ -3,7 +3,9 @@ import { Headphones } from "lucide-react";
 import type { MockTestDifficulty } from "@prisma/client";
 
 import { getGeneralTestsByType } from "@/lib/mock-tests";
+import { getSkillCoverImage } from "@/lib/skill-cover-images";
 import { GeneralTestListView } from "@/components/dashboard/general-test-list-view";
+import { SkillCoverBanner } from "@/components/student/skill-cover-banner";
 
 export const metadata: Metadata = { title: "Listening Tests" };
 
@@ -19,18 +21,24 @@ export default async function ListeningTestsPage({
     ? (difficultyParam as MockTestDifficulty)
     : undefined;
 
-  const tests = await getGeneralTestsByType("LISTENING", { search: q, difficulty });
+  const [tests, cover] = await Promise.all([
+    getGeneralTestsByType("LISTENING", { search: q, difficulty }),
+    getSkillCoverImage("LISTENING"),
+  ]);
 
   return (
-    <GeneralTestListView
-      title="Listening Tests"
-      description="Practice tests from your teacher, timed the same way as the real exam."
-      icon={Headphones}
-      basePath="/student/tests/listening"
-      examBasePath="/student/exam"
-      tests={tests}
-      search={q}
-      difficulty={difficulty}
-    />
+    <div className="space-y-5">
+      <SkillCoverBanner cover={cover} />
+      <GeneralTestListView
+        title="Listening Tests"
+        description="Practice tests from your teacher, timed the same way as the real exam."
+        icon={Headphones}
+        basePath="/student/tests/listening"
+        examBasePath="/student/exam"
+        tests={tests}
+        search={q}
+        difficulty={difficulty}
+      />
+    </div>
   );
 }

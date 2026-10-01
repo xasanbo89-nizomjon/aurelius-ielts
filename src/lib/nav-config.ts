@@ -32,12 +32,19 @@ export const STUDENT_NAV_ITEMS: NavItem[] = [
  * just no longer linked from primary navigation.
  */
 export const STUDENT_SECONDARY_NAV_ITEMS: NavItem[] = [
+  // Phase 47 — Mock Exam Center, directly reachable without fighting the
+  // Phase 20 sidebar minimalism above (Tests/Full Mock stays reachable
+  // through the /student/tests hub card too — this is a second path, not a
+  // replacement).
+  { label: "Mock Exams", href: "/student/tests/mock", icon: "ClipboardCheck" },
+  // Phase 45 — Media Library 2.0.
+  { label: "Reading Library", href: "/student/reading-library", icon: "BookOpen" },
+  { label: "Listening Library", href: "/student/listening-library", icon: "Headphones" },
   { label: "Success Center", href: "/student/success", icon: "Sparkles" },
   { label: "Study Coach", href: "/student/study-coach", icon: "Target" },
   { label: "Band Score Center", href: "/student/analytics", icon: "LineChart" },
   { label: "Test History", href: "/student/test-history", icon: "History" },
   { label: "Bookmarks", href: "/student/bookmarks", icon: "Bookmark" },
-  { label: "Coin Wallet", href: "/student/coins", icon: "Coins" },
   { label: "Leaderboard", href: "/student/leaderboard", icon: "Trophy" },
   { label: "Premium", href: "/student/premium", icon: "Crown" },
   { label: "Subscription", href: "/student/subscription", icon: "Gem" },
@@ -56,6 +63,11 @@ export const TEACHER_NAV_ITEMS: NavItem[] = [
   { label: "Media Library", href: "/teacher/media", icon: "Image" },
   { label: "Tests", href: "/teacher/tests", icon: "FileText" },
   { label: "Articles", href: "/teacher/articles", icon: "Newspaper" },
+  // Phase 45 — Media Library 2.0: real standalone browsable content,
+  // distinct from Tests (timed/graded MockTests) and Articles (interactive
+  // plain-text reading).
+  { label: "Reading Library", href: "/teacher/reading-library", icon: "BookOpen" },
+  { label: "Listening Library", href: "/teacher/listening-library", icon: "Headphones" },
   { label: "Speaking", href: "/teacher/speaking", icon: "Mic" },
   // Phase 37 — Speaking Practice Center's teacher-side topic bank. Separate
   // from "Speaking" above (the existing audio-recording task bank).
@@ -74,7 +86,6 @@ export const TEACHER_NAV_ITEMS: NavItem[] = [
   { label: "Updates", href: "/teacher/updates", icon: "Megaphone" },
   { label: "Promo Codes", href: "/teacher/promo-codes", icon: "Ticket" },
   { label: "Payments", href: "/teacher/payments", icon: "CreditCard" },
-  { label: "Coin Logs", href: "/teacher/coin-logs", icon: "Coins" },
   { label: "Premium Requests", href: "/teacher/premium", icon: "Crown" },
   { label: "System Health", href: "/teacher/system-health", icon: "Activity" },
   { label: "Subscription Plans", href: "/teacher/subscriptions", icon: "Gem" },

@@ -249,7 +249,7 @@ export type SubscriberRow = {
 };
 
 const ADMIN_GRANT_LABEL = "Admin Grant";
-const COIN_REDEMPTION_LABEL = "Coin Redemption";
+const COIN_REDEMPTION_LABEL = "Legacy Redemption";
 
 /**
  * Every real Subscription row, platform-wide, joined with the real plan it

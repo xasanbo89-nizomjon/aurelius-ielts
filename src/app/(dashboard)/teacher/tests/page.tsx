@@ -1,18 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileText, Layers, Plus } from "lucide-react";
+import { FileText, ImageIcon, Layers, Plus, Target, TrendingUp } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { listFullMockTestsForTeacher } from "@/lib/full-mock-tests";
+import { getFullMockTeacherOverviewAnalytics } from "@/lib/analytics/full-mock-analytics";
+import { MOCK_TEST_DIFFICULTY_BADGE_VARIANT, MOCK_TEST_DIFFICULTY_LABELS } from "@/lib/labels";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/search-input";
 import { Pagination } from "@/components/ui/pagination";
 import { TestRowActions } from "@/components/teacher/test-row-actions";
+import { FullMockTestRowActions } from "@/components/teacher/full-mock-test-row-actions";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 export const metadata: Metadata = { title: "Tests" };
 
@@ -32,7 +37,7 @@ export default async function TeacherTestsPage({
     ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}),
   };
 
-  const [tests, total, fullMockTests] = await Promise.all([
+  const [tests, total, fullMockTests, fullMockOverview] = await Promise.all([
     prisma.mockTest.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -45,11 +50,13 @@ export default async function TeacherTestsPage({
         category: true,
         isPublished: true,
         isArchived: true,
+        coverImagePath: true,
         _count: { select: { questions: true, results: true } },
       },
     }),
     prisma.mockTest.count({ where }),
     listFullMockTestsForTeacher(profile.id),
+    getFullMockTeacherOverviewAnalytics(profile.id),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -120,8 +127,15 @@ export default async function TeacherTestsPage({
                   <TableCell className="font-medium">
                     <Link
                       href={`/teacher/tests/${test.id}`}
-                      className="hover:text-accent focus-visible:text-accent underline-offset-4 outline-none focus-visible:underline"
+                      className="hover:text-accent focus-visible:text-accent flex items-center gap-2.5 underline-offset-4 outline-none focus-visible:underline"
                     >
+                      <span className="bg-secondary relative size-8 shrink-0 overflow-hidden rounded-md">
+                        {test.coverImagePath ? (
+                          <FallbackImage src={test.coverImagePath} alt="" fill sizes="32px" className="object-cover" unoptimized />
+                        ) : (
+                          <ImageIcon className="text-muted-foreground absolute inset-0 m-auto size-4" strokeWidth={1.5} />
+                        )}
+                      </span>
                       {test.title}
                     </Link>
                   </TableCell>
@@ -156,6 +170,48 @@ export default async function TeacherTestsPage({
 
       <div className="space-y-3">
         <h2 className="font-display text-lg font-medium">Full Mock Tests</h2>
+
+        {fullMockOverview.totalAttempts > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Card className="py-3.5">
+              <CardContent className="space-y-0.5 px-4 text-center">
+                <p className="text-muted-foreground text-[11px] font-medium">Most attempted</p>
+                <p className="truncate text-sm font-medium">{fullMockOverview.mostAttemptedExam?.title ?? "—"}</p>
+                {fullMockOverview.mostAttemptedExam && (
+                  <p className="text-muted-foreground text-xs">{fullMockOverview.mostAttemptedExam.attemptCount} attempts</p>
+                )}
+              </CardContent>
+            </Card>
+            <Card className="py-3.5">
+              <CardContent className="space-y-0.5 px-4 text-center">
+                <p className="text-muted-foreground flex items-center justify-center gap-1 text-[11px] font-medium">
+                  <TrendingUp className="size-3.5" /> Highest scoring
+                </p>
+                <p className="truncate text-sm font-medium">{fullMockOverview.highestScoringExam?.title ?? "—"}</p>
+                {fullMockOverview.highestScoringExam && (
+                  <p className="text-muted-foreground text-xs">Band {fullMockOverview.highestScoringExam.averageBand.toFixed(1)} avg</p>
+                )}
+              </CardContent>
+            </Card>
+            <Card className="py-3.5">
+              <CardContent className="space-y-0.5 px-4 text-center">
+                <p className="text-muted-foreground flex items-center justify-center gap-1 text-[11px] font-medium">
+                  <Target className="size-3.5" /> Average band
+                </p>
+                <p className="font-display text-lg font-medium">
+                  {fullMockOverview.averageBandAcrossAllExams != null ? fullMockOverview.averageBandAcrossAllExams.toFixed(1) : "—"}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="py-3.5">
+              <CardContent className="space-y-0.5 px-4 text-center">
+                <p className="text-muted-foreground text-[11px] font-medium">Completion rate</p>
+                <p className="font-display text-lg font-medium">{fullMockOverview.completionRate}%</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {fullMockTests.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             No full mock tests yet — combine a Reading, Listening, Writing and Speaking section into one timed exam.
@@ -163,23 +219,42 @@ export default async function TeacherTestsPage({
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {fullMockTests.map((test) => (
-              <Link
-                key={test.id}
-                href={`/teacher/tests/full-mock/${test.id}`}
-                className="focus-visible:ring-ring/50 block rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              >
-                <div className="border-border/70 hover:shadow-soft-lg rounded-2xl border p-4 transition-all hover:-translate-y-0.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-medium">{test.title}</p>
+              <div key={test.id} className="border-border/70 hover:shadow-soft-lg rounded-2xl border p-4 transition-all">
+                <div className="flex items-start justify-between gap-2">
+                  <Link
+                    href={`/teacher/tests/full-mock/${test.id}`}
+                    className="hover:text-accent focus-visible:text-accent min-w-0 flex-1 truncate text-sm font-medium underline-offset-4 outline-none focus-visible:underline"
+                  >
+                    {test.title}
+                  </Link>
+                  <div className="flex shrink-0 items-center gap-1">
                     <Badge variant={test.status === "PUBLISHED" ? "success" : "outline"}>
                       {test.status === "PUBLISHED" ? "Published" : test.status === "ARCHIVED" ? "Archived" : "Draft"}
                     </Badge>
+                    <FullMockTestRowActions fullMockTestId={test.id} status={test.status} hasAttempts={test.attemptCount > 0} />
                   </div>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {test.sectionsFilled}/4 sections filled · {test.attemptCount} attempt{test.attemptCount === 1 ? "" : "s"}
-                  </p>
                 </div>
-              </Link>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {test.examNumber != null && (
+                    <Badge variant="outline" className="text-[11px]">
+                      Mock #{test.examNumber}
+                    </Badge>
+                  )}
+                  {test.difficulty && (
+                    <Badge variant={MOCK_TEST_DIFFICULTY_BADGE_VARIANT[test.difficulty]} className="text-[11px]">
+                      {MOCK_TEST_DIFFICULTY_LABELS[test.difficulty]}
+                    </Badge>
+                  )}
+                  {test.category === "CAMBRIDGE" && (
+                    <Badge variant="success" className="text-[11px]">
+                      Free
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-muted-foreground mt-1.5 text-xs">
+                  {test.sectionsFilled}/4 sections filled · {test.attemptCount} attempt{test.attemptCount === 1 ? "" : "s"}
+                </p>
+              </div>
             ))}
           </div>
         )}

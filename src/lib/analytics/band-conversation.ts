@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
+import type { ExamAttachment } from "@/components/exam/passage-attachments";
 import type { QuestionType, SkillType, VocabularyStatus } from "@prisma/client";
 
 export const BAND_CONVERSATION_PAGE_SIZE = 20;
@@ -309,6 +310,7 @@ export async function getTestHistoryForStudent(studentId: string): Promise<TestH
 export type AttemptReviewQuestion = {
   questionId: string;
   orderIndex: number;
+  passageId: string | null;
   prompt: string;
   type: QuestionType;
   options: unknown;
@@ -317,11 +319,24 @@ export type AttemptReviewQuestion = {
   result: "correct" | "incorrect" | "unanswered";
 };
 
+export type AttemptReviewPassage = {
+  id: string;
+  title: string;
+  content: string;
+  audioPath: string | null;
+  audioUrl: string | null;
+  orderIndex: number;
+  attachments: ExamAttachment[];
+};
+
 export type AttemptReview = {
   resultId: string;
   testName: string;
   testType: Extract<SkillType, "READING" | "LISTENING">;
   completedAt: Date;
+  durationSeconds: number | null;
+  bandScore: number | null;
+  passages: AttemptReviewPassage[];
   questions: AttemptReviewQuestion[];
 };
 
@@ -340,12 +355,29 @@ export async function getAttemptReviewForTeacher(teacherId: string, resultId: st
       id: true,
       skill: true,
       completedAt: true,
+      durationSeconds: true,
+      bandScore: true,
       mockTest: {
         select: {
           title: true,
+          // Phase 46 — real passage text / real Listening transcript (same
+          // `content` field), so the teacher's read-only review can show the
+          // same split-screen review a student sees.
+          passages: {
+            orderBy: { orderIndex: "asc" },
+            select: {
+              id: true,
+              title: true,
+              content: true,
+              audioPath: true,
+              audioUrl: true,
+              orderIndex: true,
+              attachments: { orderBy: { orderIndex: "asc" } },
+            },
+          },
           questions: {
             orderBy: { orderIndex: "asc" },
-            select: { id: true, orderIndex: true, prompt: true, type: true, options: true, correctAnswer: true },
+            select: { id: true, orderIndex: true, passageId: true, prompt: true, type: true, options: true, correctAnswer: true },
           },
         },
       },
@@ -361,11 +393,15 @@ export async function getAttemptReviewForTeacher(teacherId: string, resultId: st
     testName: result.mockTest.title,
     testType: result.skill as Extract<SkillType, "READING" | "LISTENING">,
     completedAt: result.completedAt as Date,
+    durationSeconds: result.durationSeconds,
+    bandScore: result.bandScore,
+    passages: result.mockTest.passages,
     questions: result.mockTest.questions.map((question) => {
       const answer = answerByQuestion.get(question.id);
       return {
         questionId: question.id,
         orderIndex: question.orderIndex,
+        passageId: question.passageId,
         prompt: question.prompt,
         type: question.type,
         options: question.options,

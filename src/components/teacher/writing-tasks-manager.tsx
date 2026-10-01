@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Archive, Loader2, Pencil, PenLine, Plus, Send, Trash2 } from "lucide-react";
+import { Archive, ImageIcon, Loader2, Pencil, PenLine, Plus, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { WritingTaskStatus } from "@prisma/client";
 
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { WritingTaskEditorDialog, type ExistingWritingTask } from "@/components/teacher/writing-task-editor-dialog";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 export type WritingTaskRow = ExistingWritingTask & {
   status: WritingTaskStatus;
@@ -98,7 +99,18 @@ export function WritingTasksManager({ tasks, students }: { tasks: WritingTaskRow
           <TableBody>
             {tasks.map((task) => (
               <TableRow key={task.id}>
-                <TableCell className="font-medium">{task.title}</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2.5">
+                    <span className="bg-secondary relative size-8 shrink-0 overflow-hidden rounded-md">
+                      {task.coverImagePath ? (
+                        <FallbackImage src={task.coverImagePath} alt="" fill sizes="32px" className="object-cover" unoptimized />
+                      ) : (
+                        <ImageIcon className="text-muted-foreground absolute inset-0 m-auto size-4" strokeWidth={1.5} />
+                      )}
+                    </span>
+                    {task.title}
+                  </div>
+                </TableCell>
                 <TableCell className="text-muted-foreground">{WRITING_TASK_NUMBER_LABELS[task.taskNumber]}</TableCell>
                 <TableCell className="text-muted-foreground">{WRITING_TASK_CATEGORY_LABELS[task.category]}</TableCell>
                 <TableCell className="text-muted-foreground max-w-40 truncate" title={task.assignedStudentNames.join(", ")}>

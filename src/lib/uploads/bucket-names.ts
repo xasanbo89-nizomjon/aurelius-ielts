@@ -11,3 +11,6 @@ export const SPEAKING_AUDIO_BUCKET = "speaking-audio";
 export const MEDIA_LIBRARY_BUCKET = "media-library";
 /** Phase 38 — generated image thumbnails live in their own bucket so the originals bucket above stays a 1:1 mirror of what was actually uploaded. */
 export const MEDIA_LIBRARY_THUMBNAILS_BUCKET = "media-library-thumbnails";
+/** Phase 45 — Reading Library PDFs and Listening Library audio each get their own bucket, uploaded via the same direct-to-Supabase signed-URL pattern as article audio (large files, never routed through a Server Action body). */
+export const READING_LIBRARY_BUCKET = "reading-library";
+export const LISTENING_LIBRARY_AUDIO_BUCKET = "listening-library-audio";

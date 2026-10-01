@@ -5,7 +5,6 @@ import { Gauge, Lightbulb, TrendingDown, TrendingUp } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getFullMockAttemptResults } from "@/lib/full-mock-results";
-import { awardMockTestCoins } from "@/lib/coins";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -21,13 +20,6 @@ export default async function FullMockResultsPage({
 
   const results = await getFullMockAttemptResults(attemptId, profile.id);
   if (!results) notFound();
-
-  // Phase 39 — Part 4's Mock Test reward, real completed Full Mock attempts
-  // only. Idempotent on attemptId (awardCoins), so revisiting this page
-  // repeatedly can never pay twice.
-  if (results.completedAt) {
-    await awardMockTestCoins(profile.id, attemptId, `Full mock test "${results.fullMockTestTitle}" completed.`);
-  }
 
   const sectionList = Object.values(results.sections);
 

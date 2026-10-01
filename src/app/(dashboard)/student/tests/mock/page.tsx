@@ -1,77 +1,95 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { BookOpen, ClipboardCheck, Clock, Gauge, Headphones, Mic, PenLine } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { ClipboardCheck, TrendingUp } from "lucide-react";
 
-import { getPublishedFullMockTests } from "@/lib/full-mock-tests";
+import { requireStudentProfile } from "@/lib/session";
+import { getStudentFullMockDashboard } from "@/lib/full-mock-dashboard";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FullMockExamCard, type FullMockCardStatus } from "@/components/student/full-mock-exam-card";
+import type { FullMockCardData } from "@/lib/full-mock-dashboard";
 
-export const metadata: Metadata = { title: "Full Mock Tests" };
+export const metadata: Metadata = { title: "Mock Exams" };
 
-const SECTION_ICONS: { key: "listening" | "reading" | "writing" | "speaking"; label: string; icon: LucideIcon }[] = [
-  { key: "listening", label: "Listening", icon: Headphones },
-  { key: "reading", label: "Reading", icon: BookOpen },
-  { key: "writing", label: "Writing", icon: PenLine },
-  { key: "speaking", label: "Speaking", icon: Mic },
-];
+function ExamGrid({ tests, status, emptyMessage }: { tests: FullMockCardData[]; status: FullMockCardStatus; emptyMessage: string }) {
+  if (tests.length === 0) {
+    return <p className="text-muted-foreground py-10 text-center text-sm">{emptyMessage}</p>;
+  }
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+      {tests.map((test) => (
+        <FullMockExamCard key={test.id} test={test} status={status} />
+      ))}
+    </div>
+  );
+}
 
-export default async function FullMockTestsPage() {
-  const tests = await getPublishedFullMockTests();
+export default async function MockExamCenterPage() {
+  const { profile } = await requireStudentProfile();
+  const dashboard = await getStudentFullMockDashboard(profile.id);
+
+  const totalTests = dashboard.available.length + dashboard.inProgress.length + dashboard.completed.length + dashboard.premiumLocked.length;
+
+  if (totalTests === 0) {
+    return (
+      <>
+        <PageHeader title="Mock Exams" description="Sit a full Listening → Reading → Writing → Speaking exam under real timing." />
+        <EmptyState
+          icon={ClipboardCheck}
+          title="No mock exams available yet"
+          description="Your teacher hasn't published a full mock exam yet. Check back soon."
+        />
+      </>
+    );
+  }
 
   return (
     <>
-      <PageHeader title="Full Mock Tests" description="Sit all four sections back-to-back under real exam timing." />
+      <PageHeader title="Mock Exams" description="Sit a full Listening → Reading → Writing → Speaking exam under real timing." />
 
-      {tests.length === 0 ? (
-        <EmptyState
-          icon={ClipboardCheck}
-          title="No full mock tests available yet"
-          description="Your teacher hasn't published a full mock exam yet. Check back soon."
-        />
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {tests.map((test) => (
-            <Card key={test.id} className="h-full gap-3 py-4 sm:gap-6 sm:py-6">
-              <CardHeader className="gap-1 sm:gap-1.5">
-                <CardTitle className="line-clamp-1 text-base sm:line-clamp-none sm:text-lg">{test.title}</CardTitle>
-                {test.description && (
-                  <CardDescription className="line-clamp-2 text-xs sm:text-sm">{test.description}</CardDescription>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {SECTION_ICONS.map(({ key, label, icon: Icon }) => (
-                    <Badge key={key} variant={test.sections[key] ? "accent" : "outline"} className="flex items-center gap-1 text-[11px]">
-                      <Icon className="size-3" aria-hidden="true" /> {label}
-                    </Badge>
-                  ))}
-                </div>
-
-                <div className="text-muted-foreground flex items-center gap-3 text-[11px] sm:text-xs">
-                  <span className="flex items-center gap-1">
-                    <Clock className="size-3 sm:size-3.5" aria-hidden="true" />
-                    ~{test.totalDurationMinutes} min total
-                  </span>
-                  {test.estimatedBandMin != null && test.estimatedBandMax != null && (
-                    <span className="flex items-center gap-1">
-                      <Gauge className="size-3 sm:size-3.5" aria-hidden="true" />
-                      Band {test.estimatedBandMin.toFixed(1)}–{test.estimatedBandMax.toFixed(1)}
-                    </span>
-                  )}
-                </div>
-
-                <Button asChild className="w-full">
-                  <Link href={`/student/full-mock/${test.id}`}>Start Full Mock</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      {dashboard.bandTrend && (
+        <Card className="border-accent/20 bg-accent/[0.04] py-4">
+          <CardContent className="flex items-center gap-3">
+            <span className="bg-accent/15 text-accent flex size-9 shrink-0 items-center justify-center rounded-xl">
+              <TrendingUp className="size-4.5" strokeWidth={1.5} />
+            </span>
+            <p className="text-sm">
+              Your Overall Band has moved from <span className="font-medium">{dashboard.bandTrend.firstBand.toFixed(1)}</span> to{" "}
+              <span className="font-medium">{dashboard.bandTrend.latestBand.toFixed(1)}</span> across your completed mock exams
+              {dashboard.bandTrend.delta !== 0 && (
+                <Badge variant={dashboard.bandTrend.delta > 0 ? "success" : "destructive"} className="ml-2">
+                  {dashboard.bandTrend.delta > 0 ? "+" : ""}
+                  {dashboard.bandTrend.delta.toFixed(1)}
+                </Badge>
+              )}
+              .
+            </p>
+          </CardContent>
+        </Card>
       )}
+
+      <Tabs defaultValue="available">
+        <TabsList>
+          <TabsTrigger value="available">Available ({dashboard.available.length})</TabsTrigger>
+          <TabsTrigger value="inProgress">Upcoming ({dashboard.inProgress.length})</TabsTrigger>
+          <TabsTrigger value="completed">Completed ({dashboard.completed.length})</TabsTrigger>
+          <TabsTrigger value="premium">Premium ({dashboard.premiumLocked.length})</TabsTrigger>
+        </TabsList>
+        <TabsContent value="available" className="mt-4">
+          <ExamGrid tests={dashboard.available} status="available" emptyMessage="No new mock exams to start right now — check Completed or Premium." />
+        </TabsContent>
+        <TabsContent value="inProgress" className="mt-4">
+          <ExamGrid tests={dashboard.inProgress} status="inProgress" emptyMessage="Nothing in progress — start a mock exam from Available to see it here." />
+        </TabsContent>
+        <TabsContent value="completed" className="mt-4">
+          <ExamGrid tests={dashboard.completed} status="completed" emptyMessage="You haven't completed a full mock exam yet." />
+        </TabsContent>
+        <TabsContent value="premium" className="mt-4">
+          <ExamGrid tests={dashboard.premiumLocked} status="locked" emptyMessage="No premium-only mock exams right now." />
+        </TabsContent>
+      </Tabs>
     </>
   );
 }

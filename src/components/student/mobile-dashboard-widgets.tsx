@@ -1,13 +1,13 @@
-import { Activity, Coins, Flame, Gem, Target } from "lucide-react";
+import { Activity, Flame, Gem, Target } from "lucide-react";
 
 import type { DailyActivityPoint } from "@/lib/study-activity";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Card, CardContent } from "@/components/ui/card";
 
 /**
- * Phase 28 — Part 9, Student Mobile Dashboard. Every value here is a prop
- * passed straight through from the same real lib calls the desktop
- * pages already use (getStudentSuccessSummary, getWalletSummary,
+ * Phase 28 — Part 9, Student Mobile Dashboard (Phase 48 removed the Coins
+ * stat). Every value here is a prop passed straight through from the same
+ * real lib calls the desktop pages already use (getStudentSuccessSummary,
  * getSubscriptionSummary, getWeeklyActivityBreakdown, the login streak) —
  * nothing is recomputed or invented here, this is purely a compact,
  * mobile-only layout over real data. Hidden at `lg` where the full desktop
@@ -16,7 +16,6 @@ import { Card, CardContent } from "@/components/ui/card";
 export function MobileDashboardWidgets({
   targetBand,
   goalProgressPercent,
-  coinBalance,
   isPremium,
   premiumDaysRemaining,
   streakCount,
@@ -24,7 +23,6 @@ export function MobileDashboardWidgets({
 }: {
   targetBand: number | null;
   goalProgressPercent: number | null;
-  coinBalance: number;
   isPremium: boolean;
   premiumDaysRemaining: number | null;
   streakCount: number;
@@ -41,7 +39,6 @@ export function MobileDashboardWidgets({
         icon={Target}
         caption={goalProgressPercent != null ? `${goalProgressPercent}% to goal` : "Not set yet"}
       />
-      <StatCard label="Coins" value={coinBalance.toLocaleString()} icon={Coins} />
       <StatCard
         label="Premium"
         value={isPremium ? "Active" : "Free"}

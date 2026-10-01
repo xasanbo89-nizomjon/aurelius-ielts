@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { BookOpenCheck, Clock, Newspaper, Type, WifiOff } from "lucide-react";
 import type { ArticleDifficulty } from "@prisma/client";
@@ -17,6 +16,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { Button } from "@/components/ui/button";
 import { ArticleFilters } from "@/components/student/article-filters";
 import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 export const metadata: Metadata = { title: "Articles" };
 
@@ -98,7 +98,7 @@ export default async function StudentArticlesPage({
                   <Card className="h-full gap-3 overflow-hidden py-0 transition-shadow hover:shadow-soft-lg">
                     <div className="bg-secondary/50 relative aspect-[16/9] w-full">
                       {article.coverImagePath ? (
-                        <Image
+                        <FallbackImage
                           src={article.coverImagePath}
                           alt=""
                           fill

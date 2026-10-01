@@ -11,7 +11,6 @@ import {
   cancelSubscription,
   type TrialActionResult,
 } from "@/lib/trial-management";
-import { adminAdjustCoins, type AdminCoinAdjustmentResult } from "@/lib/coins";
 
 /**
  * requireTeacherProfile() keeps students out entirely (redirected before
@@ -63,12 +62,5 @@ export async function removePremiumAction(studentId: string): Promise<TrialActio
     revalidatePath("/teacher/students");
     revalidatePath("/teacher/subscriptions");
   }
-  return result;
-}
-
-export async function adminAdjustCoinsAction(studentId: string, amount: number, reason: string): Promise<AdminCoinAdjustmentResult> {
-  const { profile } = await requireTeacherProfile();
-  const result = await adminAdjustCoins(profile.isRootTeacher, studentId, amount, reason);
-  if (result.success) revalidatePath("/teacher/students");
   return result;
 }

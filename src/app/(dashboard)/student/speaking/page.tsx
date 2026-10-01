@@ -5,8 +5,10 @@ import { Mic } from "lucide-react";
 import { requireStudentProfile } from "@/lib/session";
 import { hasActiveAccess } from "@/lib/subscription";
 import { listSpeakingSubmissionsForStudent } from "@/lib/speaking";
+import { getSkillCoverImage } from "@/lib/skill-cover-images";
 import { formatRelativeTime } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { SkillCoverBanner } from "@/components/student/skill-cover-banner";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -25,10 +27,11 @@ export default async function StudentSpeakingPage() {
     return <PremiumLockScreen feature="Speaking" />;
   }
 
-  const submissions = await listSpeakingSubmissionsForStudent(profile.id);
+  const [submissions, cover] = await Promise.all([listSpeakingSubmissionsForStudent(profile.id), getSkillCoverImage("SPEAKING")]);
 
   return (
     <>
+      <SkillCoverBanner cover={cover} />
       <PageHeader
         title="Speaking"
         description="Enter the code your teacher gave you, record your response, and get an instant AI band score. Your recording is never stored."

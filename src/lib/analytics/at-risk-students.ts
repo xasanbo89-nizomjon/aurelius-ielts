@@ -121,7 +121,7 @@ export async function getAtRiskStudents(teacherId: string): Promise<AtRiskStuden
         reasons.push({
           code: "PREMIUM_EXPIRING",
           text: `Premium expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"}`,
-          suggestedAction: "Remind them what they'd lose access to, or point them at the coin-redemption path if they're close to affording it.",
+          suggestedAction: "Remind them what they'd lose access to, or point them at the Premium pricing page to renew.",
         });
       }
     }

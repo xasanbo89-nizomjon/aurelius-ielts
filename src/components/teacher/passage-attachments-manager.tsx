@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Image from "next/image";
 import { FolderOpen, ImageIcon, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { PassageAttachmentType } from "@prisma/client";
@@ -15,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MediaFilePickerDialog } from "@/components/teacher/media-file-picker-dialog";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 export type ExistingPassageAttachment = {
   id: string;
@@ -123,7 +123,7 @@ export function PassageAttachmentsManager({
           {attachments.map((attachment) => (
             <div key={attachment.id} className="border-border/70 bg-secondary/20 space-y-1.5 rounded-xl border p-2">
               <div className="bg-secondary relative aspect-video overflow-hidden rounded-lg">
-                <Image src={attachment.imagePath} alt={attachment.caption ?? TYPE_LABEL[attachment.type]} fill sizes="200px" className="object-cover" unoptimized />
+                <FallbackImage src={attachment.imagePath} alt={attachment.caption ?? TYPE_LABEL[attachment.type]} fill sizes="200px" className="object-cover" unoptimized />
               </div>
               <div className="flex items-center justify-between gap-1">
                 <Badge variant="outline" className="text-[10px]">

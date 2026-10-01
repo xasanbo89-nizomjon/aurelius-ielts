@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -9,6 +8,7 @@ import { listMediaFilesAction } from "@/actions/media-library.actions";
 import type { MediaFileRow } from "@/lib/media-library";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/dashboard/empty-state";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 /** Phase 38 — Part 6's Media Reuse System: pick an existing image from the Media Library instead of uploading a duplicate. */
 export function MediaFilePickerDialog({
@@ -62,7 +62,7 @@ export function MediaFilePickerDialog({
                 }}
                 className="focus-visible:ring-ring/50 group relative aspect-video overflow-hidden rounded-xl outline-none focus-visible:ring-2"
               >
-                <Image
+                <FallbackImage
                   src={file.thumbnailPath ?? file.path}
                   alt={file.fileName}
                   fill

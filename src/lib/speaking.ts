@@ -59,7 +59,7 @@ export async function createSpeakingTask(
 export async function updateSpeakingTask(
   taskId: string,
   teacherId: string,
-  input: { title?: string; part?: number; prompt?: string }
+  input: { title?: string; part?: number; prompt?: string; coverImagePath?: string | null }
 ) {
   await assertOwnsTask(taskId, teacherId);
   return prisma.speakingTask.update({ where: { id: taskId }, data: input });

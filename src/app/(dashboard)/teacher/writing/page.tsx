@@ -115,6 +115,7 @@ export default async function TeacherWritingPage() {
             visualDescription: task.visualDescription,
             imageMediaFileId: task.imageMediaFile?.id ?? null,
             imagePath: task.imageMediaFile?.path ?? null,
+            coverImagePath: task.coverImagePath,
             targetBand: task.targetBand,
             dueDate: task.dueDate,
             status: task.status,

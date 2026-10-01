@@ -77,13 +77,31 @@ export async function getAttemptSummary(resultId: string, studentId: string) {
           id: true,
           title: true,
           type: true,
+          // Phase 44 — Part 2's per-passage/part breakdown, extended Phase 46
+          // for the real split-screen review (passage text / real Listening
+          // transcript via the same `content` field, plus real audio path).
+          passages: {
+            orderBy: { orderIndex: "asc" },
+            select: {
+              id: true,
+              title: true,
+              content: true,
+              audioPath: true,
+              audioUrl: true,
+              orderIndex: true,
+              attachments: { orderBy: { orderIndex: "asc" } },
+            },
+          },
           questions: {
             orderBy: { orderIndex: "asc" },
-            select: { id: true, prompt: true, type: true, points: true, options: true, correctAnswer: true },
+            select: { id: true, passageId: true, prompt: true, type: true, points: true, options: true, correctAnswer: true },
           },
         },
       },
       answers: true,
+      // Phase 46 — the student's own real highlights from when they took the
+      // exam, shown (never editable) in the read-only review passage panel.
+      highlights: true,
     },
   });
 }
@@ -183,8 +201,8 @@ export async function submitAttempt(resultId: string, studentId: string) {
     }),
   ]);
 
-  // Real, already-computed elapsed time feeds the Phase 15 study-time/coin/
-  // streak/achievement system — never a fabricated duration. Best-effort:
+  // Real, already-computed elapsed time feeds the study-time/streak/
+  // achievement system — never a fabricated duration. Best-effort:
   // gamification side-effects must never fail a real exam submission.
   if (result.skill === "READING" || result.skill === "LISTENING") {
     try {

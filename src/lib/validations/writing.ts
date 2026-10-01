@@ -62,6 +62,8 @@ export const createWritingTaskSchema = z
     visualDescription: z.string().trim().max(2000).optional(),
     /** Phase 42 — Part 11's real uploaded Task 1 visual, a real MediaFile id from the Media Library (upload or reuse), same as PassageAttachment/ArticleAttachment. */
     imageMediaFileId: z.string().trim().min(1).optional(),
+    /** Phase 47 — Skill Media Library's "Content thumbnail" for this assignment, shown in task LISTS — distinct from imageMediaFileId above (the Task 1 question's own chart/graph content). */
+    coverImagePath: z.string().trim().min(1).optional(),
     targetBand: z.number().min(0, "Target band must be between 0 and 9.").max(9, "Target band must be between 0 and 9.").optional(),
     dueDate: z.coerce.date().optional(),
     // No `.min(1)` here on purpose: a teacher with zero students currently

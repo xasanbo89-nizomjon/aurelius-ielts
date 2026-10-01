@@ -5,6 +5,7 @@ import { ArrowLeft, Mic } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getSpeakingTaskForTeacher, listSpeakingSubmissionsForTask, asStringArray } from "@/lib/speaking";
+import { setSpeakingTaskCoverImageAction } from "@/actions/speaking.actions";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { SpeakingTaskStatusActions } from "@/components/teacher/speaking-task-status-actions";
 import { SpeakingSubmissionReviewCard } from "@/components/teacher/speaking-submission-review-card";
+import { ContentCoverImageUploader } from "@/components/teacher/content-cover-image-uploader";
 
 export const metadata: Metadata = { title: "Speaking Task" };
 
@@ -50,8 +52,13 @@ export default async function TeacherSpeakingTaskPage({
       </Card>
 
       <Card>
-        <CardContent>
+        <CardContent className="space-y-4">
           <p className="text-sm whitespace-pre-wrap">{task.prompt}</p>
+          <ContentCoverImageUploader
+            initialPath={task.coverImagePath}
+            action={setSpeakingTaskCoverImageAction.bind(null, task.id)}
+            alt="Speaking topic cover"
+          />
         </CardContent>
       </Card>
 

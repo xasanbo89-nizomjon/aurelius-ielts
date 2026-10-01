@@ -69,7 +69,13 @@ export async function createTest(
 export async function updateTest(
   testId: string,
   teacherId: string,
-  input: { title?: string; description?: string; durationMinutes?: number | null; category?: MockTestCategory }
+  input: {
+    title?: string;
+    description?: string;
+    durationMinutes?: number | null;
+    category?: MockTestCategory;
+    coverImagePath?: string | null;
+  }
 ) {
   await assertOwnsTest(testId, teacherId);
   return prisma.mockTest.update({ where: { id: testId }, data: input });

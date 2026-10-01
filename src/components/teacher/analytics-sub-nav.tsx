@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, Coins, Gem, Newspaper, ShieldCheck, TrendingUp } from "lucide-react";
+import { Activity, Gem, Newspaper, ShieldCheck, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -27,11 +27,6 @@ export function AnalyticsSubNav({ isRootTeacher }: { isRootTeacher: boolean }) {
           <Button asChild variant="outline" size="sm">
             <Link href="/teacher/analytics/teachers">
               <ShieldCheck className="size-4" /> Teacher Effectiveness
-            </Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/teacher/analytics/coins">
-              <Coins className="size-4" /> Coin Economy
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm">

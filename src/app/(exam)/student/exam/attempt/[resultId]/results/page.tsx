@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CheckCircle2, Gauge, Lightbulb, TrendingDown } from "lucide-react";
+import { CheckCircle2, Clock, Gauge, Lightbulb, ListChecks, SkipForward, Target, TrendingDown, TrendingUp } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getAttemptSummary } from "@/lib/exam/attempts";
 import { isResponseAnswered } from "@/lib/exam/grading";
 import { getResultInsights } from "@/lib/exam/result-insights";
-import { findInProgressFullMockLinkForResult, isResultPartOfAnyFullMockAttempt } from "@/lib/full-mock-attempts";
-import { awardPracticeSessionCoins } from "@/lib/coins";
+import { findInProgressFullMockLinkForResult } from "@/lib/full-mock-attempts";
+import { formatDuration } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,23 +28,14 @@ export default async function ExamResultsPage({
   if (!attempt) notFound();
   if (!attempt.completedAt) redirect(`/student/exam/attempt/${resultId}`);
 
-  const [fullMockAttemptId, partOfFullMock, insights] = await Promise.all([
+  const [fullMockAttemptId, insights] = await Promise.all([
     findInProgressFullMockLinkForResult(resultId),
-    isResultPartOfAnyFullMockAttempt(resultId),
     getResultInsights(resultId, profile.id),
   ]);
 
-  // Phase 39 — Part 4's Practice Session reward. Skipped when this attempt
-  // is (or ever was) a Full Mock Test section — those earn the larger Mock
-  // Test bonus instead, never both for the same real attempt, even after
-  // the Full Mock attempt has since completed. Idempotent on resultId, so
-  // revisiting this results page can never pay twice.
-  if (!partOfFullMock) {
-    await awardPracticeSessionCoins(profile.id, resultId, `${attempt.skill === "LISTENING" ? "Listening" : "Reading"} practice session completed.`);
-  }
-
   const answerByQuestion = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
   const skillHref = attempt.skill === "LISTENING" ? "/student/listening" : "/student/reading";
+  const skillLabel = attempt.skill === "LISTENING" ? "Listening" : "Reading";
 
   const wrongQuestions = attempt.mockTest.questions
     .map((question, index) => ({ question, index: index + 1, answer: answerByQuestion.get(question.id) }))
@@ -54,19 +45,18 @@ export default async function ExamResultsPage({
     .map((question, index) => ({ question, index: index + 1, answer: answerByQuestion.get(question.id) }))
     .filter(({ answer }) => answer?.isCorrect);
 
+  const totalQuestions = attempt.mockTest.questions.length;
+  const percent = totalQuestions > 0 ? Math.round((correctQuestions.length / totalQuestions) * 100) : null;
+
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-12 sm:py-16">
       <div className="space-y-8">
-        <div className="space-y-2 text-center">
-          <Badge variant="outline" className="capitalize">
-            {attempt.mockTest.type.toLowerCase()} module
-          </Badge>
-          <h1 className="font-display text-2xl font-medium tracking-tight">{attempt.mockTest.title}</h1>
-          <p className="text-muted-foreground text-sm">Test completed — here&apos;s how you did.</p>
-        </div>
-
+        {/* Phase 44 — Part 6's professional score card */}
         <Card className="border-primary/15 bg-primary/[0.03] py-10">
           <CardContent className="flex flex-col items-center gap-2 text-center">
+            <Badge variant="outline" className="mb-1">
+              {skillLabel} Module
+            </Badge>
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase">
               <Gauge className="size-3.5" aria-hidden="true" /> Official Band Score
             </span>
@@ -76,15 +66,152 @@ export default async function ExamResultsPage({
               <p className="font-display text-2xl font-medium">Not available yet</p>
             )}
             <p className="text-muted-foreground text-sm">
-              {correctQuestions.length} correct out of {attempt.mockTest.questions.length}
+              {correctQuestions.length}/{totalQuestions} Correct
+              {percent != null && ` · ${percent}%`}
             </p>
+            <Badge variant="success" className="mt-1 flex items-center gap-1">
+              <CheckCircle2 className="size-3" aria-hidden="true" /> Completed Successfully
+            </Badge>
             {attempt.bandScore == null && (
               <p className="text-muted-foreground max-w-sm text-xs">
-                Your teacher hasn&apos;t set up a band conversion table for this module yet.
+                Your teacher hasn&apos;t set up a band conversion table for this module yet — your real score ({correctQuestions.length}/
+                {totalQuestions}) is saved and will show a band the moment one is configured.
               </p>
             )}
           </CardContent>
         </Card>
+
+        {/* Phase 44 — Part 3's accuracy analytics */}
+        {insights && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Card className="py-4">
+              <CardContent className="space-y-0.5 text-center">
+                <p className="text-muted-foreground flex items-center justify-center gap-1 text-xs font-medium">
+                  <Target className="size-3.5" /> Accuracy
+                </p>
+                <p className="font-display text-xl font-medium">{insights.accuracy.accuracyPercent != null ? `${insights.accuracy.accuracyPercent}%` : "—"}</p>
+              </CardContent>
+            </Card>
+            <Card className="py-4">
+              <CardContent className="space-y-0.5 text-center">
+                <p className="text-muted-foreground flex items-center justify-center gap-1 text-xs font-medium">
+                  <Clock className="size-3.5" /> Time Used
+                </p>
+                <p className="font-display text-xl font-medium">
+                  {insights.accuracy.timeUsedSeconds != null ? formatDuration(insights.accuracy.timeUsedSeconds) : "—"}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="py-4">
+              <CardContent className="space-y-0.5 text-center">
+                <p className="text-muted-foreground flex items-center justify-center gap-1 text-xs font-medium">
+                  <ListChecks className="size-3.5" /> Answered
+                </p>
+                <p className="font-display text-xl font-medium">
+                  {insights.accuracy.answered}/{insights.accuracy.total}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="py-4">
+              <CardContent className="space-y-0.5 text-center">
+                <p className="text-muted-foreground flex items-center justify-center gap-1 text-xs font-medium">
+                  <SkipForward className="size-3.5" /> Skipped
+                </p>
+                <p className="font-display text-xl font-medium">{insights.accuracy.skipped}</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Phase 44 — Part 2's performance breakdown by part/passage */}
+        {insights && insights.partBreakdown.length > 1 && (
+          <div className="space-y-3">
+            <h2 className="text-sm font-medium tracking-wide uppercase">Performance Breakdown</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {insights.partBreakdown.map((part) => {
+                const partPercent = part.total > 0 ? Math.round((part.correct / part.total) * 100) : null;
+                return (
+                  <Card key={part.passageId ?? part.label} className="py-4">
+                    <CardContent className="space-y-1 text-center">
+                      <p className="text-muted-foreground text-xs font-medium">{part.label}</p>
+                      <p className="font-display text-xl font-medium">
+                        {part.correct}/{part.total}
+                      </p>
+                      {partPercent != null && <p className="text-muted-foreground text-xs">{partPercent}%</p>}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Phase 44 — Part 4's question type analytics */}
+        {insights && insights.questionTypeBreakdown.length > 0 && (
+          <div className="space-y-3">
+            <h2 className="text-sm font-medium tracking-wide uppercase">Question Type Analytics</h2>
+            <Card className="gap-0 py-2">
+              <CardContent className="divide-border/70 divide-y px-0">
+                {insights.questionTypeBreakdown.map((stat) => (
+                  <div key={stat.type} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                    <span className="min-w-0 flex-1 truncate font-medium">{stat.label}</span>
+                    <span className="text-success shrink-0 tabular-nums">{stat.correct} correct</span>
+                    <span className="text-destructive shrink-0 tabular-nums">{stat.wrong} wrong</span>
+                    <span className="text-muted-foreground w-12 shrink-0 text-right tabular-nums">{Math.round(stat.accuracy * 100)}%</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Phase 44 — Part 5's symmetric strengths & weaknesses */}
+        {insights && (insights.strongAreas.length > 0 || insights.weakAreas.length > 0) && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {insights.strongAreas.length > 0 && (
+              <Card>
+                <CardContent className="space-y-2 py-4">
+                  <h2 className="text-success flex items-center gap-1.5 text-sm font-medium">
+                    <TrendingUp className="size-4" /> Strong Areas
+                  </h2>
+                  {insights.strongAreas.map((area) => (
+                    <p key={area.type} className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                      <span className="text-success">✓</span> {area.label} — {area.correct}/{area.total} correct
+                    </p>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+            {insights.weakAreas.length > 0 && (
+              <Card>
+                <CardContent className="space-y-2 py-4">
+                  <h2 className="text-destructive flex items-center gap-1.5 text-sm font-medium">
+                    <TrendingDown className="size-4" /> Needs Improvement
+                  </h2>
+                  {insights.weakAreas.map((area) => (
+                    <p key={area.type} className="text-muted-foreground flex items-center gap-1.5 text-sm">
+                      <span className="text-destructive">⚠</span> {area.label} — {area.correct}/{area.total} correct
+                    </p>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {insights?.recommendationText && insights.recommendedPracticeHref && (
+          <Card>
+            <CardContent className="space-y-2 py-4">
+              <h2 className="text-accent flex items-center gap-1.5 text-sm font-medium">
+                <Lightbulb className="size-4" /> Recommended Practice
+              </h2>
+              <p className="text-muted-foreground text-sm">{insights.recommendationText}</p>
+              <Button asChild size="sm" variant="outline">
+                <Link href={insights.recommendedPracticeHref}>Find more practice tests</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="space-y-3">
@@ -139,36 +266,6 @@ export default async function ExamResultsPage({
           </div>
         </div>
 
-        {insights && insights.weakAreas.length > 0 && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Card>
-              <CardContent className="space-y-2 py-4">
-                <h2 className="text-destructive flex items-center gap-1.5 text-sm font-medium">
-                  <TrendingDown className="size-4" /> Weak Areas
-                </h2>
-                {insights.weakAreas.map((area) => (
-                  <p key={area.type} className="text-muted-foreground text-sm">
-                    {area.label} — {area.correct}/{area.total} correct
-                  </p>
-                ))}
-              </CardContent>
-            </Card>
-            {insights.recommendationText && insights.recommendedPracticeHref && (
-              <Card>
-                <CardContent className="space-y-2 py-4">
-                  <h2 className="text-accent flex items-center gap-1.5 text-sm font-medium">
-                    <Lightbulb className="size-4" /> Recommended Practice
-                  </h2>
-                  <p className="text-muted-foreground text-sm">{insights.recommendationText}</p>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={insights.recommendedPracticeHref}>Find more practice tests</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
-
         <div className="flex flex-wrap justify-center gap-3">
           {fullMockAttemptId ? (
             <Button asChild>
@@ -180,7 +277,7 @@ export default async function ExamResultsPage({
                 <Link href={`/student/exam/attempt/${resultId}/review`}>Review answers</Link>
               </Button>
               <Button asChild variant="outline">
-                <Link href={skillHref}>Back to {attempt.skill === "LISTENING" ? "Listening" : "Reading"}</Link>
+                <Link href={skillHref}>Back to {skillLabel}</Link>
               </Button>
               <Button asChild>
                 <Link href="/student/dashboard">Go to home</Link>

@@ -3,7 +3,6 @@ import type { StudyActivityType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { settleStreakForToday } from "@/lib/streaks";
-import { settleStudyCoinsForToday, settleWeeklyBonus, settleMonthlyBonus } from "@/lib/coins";
 import { syncAchievements } from "@/lib/achievements";
 
 /** Client pings roughly this often while genuinely focused on a practice page. */
@@ -27,7 +26,7 @@ function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-/** Every read of "today's total real study seconds", used by both the coin and streak settlers. */
+/** Every read of "today's total real study seconds", used by the streak settler. */
 export async function sumSecondsForDay(studentId: string, day: Date): Promise<number> {
   const rows = await prisma.studyActivity.findMany({
     where: { studentId, activityDate: startOfDay(day) },
@@ -38,7 +37,7 @@ export async function sumSecondsForDay(studentId: string, day: Date): Promise<nu
 
 /**
  * Adds real, server-computed seconds to today's (student, type) row, then
- * settles the streak/coins/achievements side-effects that depend on real
+ * settles the streak/achievements side-effects that depend on real
  * activity — the single integration point every real-activity source
  * (heartbeat pings AND the exam-attempt completion hook) goes through.
  */
@@ -52,13 +51,7 @@ export async function recordStudentActivity(studentId: string, type: StudyActivi
     update: { durationSeconds: { increment: seconds }, lastHeartbeatAt: new Date() },
   });
 
-  await Promise.all([
-    settleStreakForToday(studentId),
-    settleStudyCoinsForToday(studentId),
-    settleWeeklyBonus(studentId),
-    settleMonthlyBonus(studentId),
-    syncAchievements(studentId),
-  ]);
+  await Promise.all([settleStreakForToday(studentId), syncAchievements(studentId)]);
 }
 
 export type HeartbeatResult = { creditedSeconds: number };

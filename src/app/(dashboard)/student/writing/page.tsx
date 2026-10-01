@@ -6,8 +6,10 @@ import { requireStudentProfile } from "@/lib/session";
 import { hasActiveAccess } from "@/lib/subscription";
 import { getStudentSubmissions, getWritingAnalytics, getOrGenerateRecommendation } from "@/lib/ai/writing";
 import { getOrGeneratePractice } from "@/lib/ai/writing-practice";
+import { getSkillCoverImage } from "@/lib/skill-cover-images";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { SkillCoverBanner } from "@/components/student/skill-cover-banner";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { Button } from "@/components/ui/button";
@@ -40,6 +42,7 @@ export default async function WritingCenterPage() {
     getOrGenerateRecommendation(profile.id, profile.teacherId),
     getOrGeneratePractice(profile.id, profile.teacherId),
   ]);
+  const cover = await getSkillCoverImage("WRITING");
 
   const recent = submissions.slice(0, RECENT_ESSAYS_LIMIT);
   const trend = TREND_META[analytics.trend];
@@ -47,6 +50,7 @@ export default async function WritingCenterPage() {
 
   return (
     <>
+      <SkillCoverBanner cover={cover} />
       <PageHeader
         title="Writing Center"
         description="Practice IELTS Task 1 and Task 2, get instant AI feedback, and track your progress."

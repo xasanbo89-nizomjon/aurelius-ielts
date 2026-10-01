@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Circle, XCircle } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getAttemptReviewForTeacher } from "@/lib/analytics/band-conversation";
-import { formatAnswerForDisplay } from "@/lib/exam/format-answer";
+import { QUESTION_TYPE_META, QUESTION_TYPE_ORDER } from "@/lib/exam/question-types";
+import type { PartBreakdown, QuestionTypeStat } from "@/lib/exam/result-insights";
 import { Button } from "@/components/ui/button";
+import { ReviewHeader } from "@/components/exam/review/review-header";
+import { ExamReviewSplit, type ReviewQuestionData } from "@/components/exam/review/exam-review-split";
 
 export const metadata: Metadata = { title: "Attempt Review" };
 
@@ -21,8 +24,58 @@ export default async function TeacherAttemptReviewPage({
   const attempt = await getAttemptReviewForTeacher(profile.id, resultId);
   if (!attempt) notFound();
 
+  const questions: ReviewQuestionData[] = attempt.questions.map((question) => ({
+    id: question.questionId,
+    passageId: question.passageId,
+    prompt: question.prompt,
+    type: question.type,
+    options: question.options,
+    correctAnswer: question.correctAnswer,
+    studentAnswer: question.studentAnswer,
+    status: question.result === "unanswered" ? "skipped" : question.result,
+  }));
+
+  const correctCount = questions.filter((q) => q.status === "correct").length;
+  const incorrectCount = questions.filter((q) => q.status === "incorrect").length;
+  const skippedCount = questions.filter((q) => q.status === "skipped").length;
+  const accuracyPercent = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : null;
+
+  // Real per-passage/per-type aggregation over this same attempt's already-
+  // fetched questions — mirrors getResultInsights (src/lib/exam/result-insights.ts)
+  // but that function is student-scoped, so the teacher view derives its own
+  // breakdown from the real data getAttemptReviewForTeacher already returned.
+  const byPassage = new Map<string | null, { correct: number; total: number }>();
+  const byType = new Map<(typeof attempt.questions)[number]["type"], { correct: number; total: number }>();
+  for (const question of attempt.questions) {
+    const correct = question.result === "correct";
+    const passageEntry = byPassage.get(question.passageId) ?? { correct: 0, total: 0 };
+    passageEntry.total += 1;
+    if (correct) passageEntry.correct += 1;
+    byPassage.set(question.passageId, passageEntry);
+
+    const typeEntry = byType.get(question.type) ?? { correct: 0, total: 0 };
+    typeEntry.total += 1;
+    if (correct) typeEntry.correct += 1;
+    byType.set(question.type, typeEntry);
+  }
+
+  const partBreakdown: PartBreakdown[] =
+    attempt.passages.length > 0
+      ? attempt.passages.map((passage, index) => {
+          const entry = byPassage.get(passage.id) ?? { correct: 0, total: 0 };
+          return { passageId: passage.id, label: passage.title?.trim() ? passage.title : `Part ${index + 1}`, correct: entry.correct, total: entry.total };
+        })
+      : [];
+
+  const questionTypeBreakdown: QuestionTypeStat[] = QUESTION_TYPE_ORDER.filter((type) => byType.has(type)).map((type) => {
+    const { correct, total } = byType.get(type)!;
+    return { type, label: QUESTION_TYPE_META[type].label, correct, wrong: total - correct, total, accuracy: total > 0 ? correct / total : 0 };
+  });
+
+  const skillLabel = attempt.testType === "LISTENING" ? "Listening" : "Reading";
+
   return (
-    <div className="mx-auto w-full max-w-3xl px-6 py-12 sm:py-16">
+    <div className="mx-auto w-full max-w-6xl px-6 py-10 sm:py-12">
       <div className="space-y-6">
         <Button asChild variant="ghost" size="sm" className="-ml-2">
           <Link href={`/teacher/band-conversation/${studentId}`}>
@@ -30,62 +83,27 @@ export default async function TeacherAttemptReviewPage({
           </Link>
         </Button>
 
-        <div className="space-y-1.5">
-          <h1 className="font-display text-2xl font-medium tracking-tight">{attempt.testName}</h1>
-          <p className="text-muted-foreground text-sm">
-            {attempt.questions.length} questions · Completed {attempt.completedAt.toLocaleDateString()}
-          </p>
-        </div>
+        <ReviewHeader
+          testTitle={attempt.testName}
+          skillLabel={skillLabel}
+          bandScore={attempt.bandScore}
+          correctCount={correctCount}
+          incorrectCount={incorrectCount}
+          skippedCount={skippedCount}
+          timeUsedSeconds={attempt.durationSeconds}
+          accuracyPercent={accuracyPercent}
+        />
 
-        <ul className="divide-border/70 border-border/70 divide-y rounded-2xl border">
-          {attempt.questions.map((question, index) => (
-            <li key={question.questionId} className="space-y-3 px-4 py-5 sm:px-6">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-sm font-medium">
-                  <span className="text-muted-foreground mr-1.5">{index + 1}.</span>
-                  {question.prompt}
-                </p>
-                {question.result === "correct" && (
-                  <span className="flex shrink-0 items-center gap-1">
-                    <CheckCircle2 className="text-success size-5" aria-hidden="true" />
-                    <span className="sr-only">Correct</span>
-                  </span>
-                )}
-                {question.result === "incorrect" && (
-                  <span className="flex shrink-0 items-center gap-1">
-                    <XCircle className="text-destructive size-5" aria-hidden="true" />
-                    <span className="sr-only">Incorrect</span>
-                  </span>
-                )}
-                {question.result === "unanswered" && (
-                  <span className="flex shrink-0 items-center gap-1">
-                    <Circle className="text-muted-foreground size-5" aria-hidden="true" />
-                    <span className="sr-only">Not answered</span>
-                  </span>
-                )}
-              </div>
-
-              <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-                <div>
-                  <dt className="text-muted-foreground font-medium">Student answer</dt>
-                  <dd className={question.result === "incorrect" ? "text-destructive" : undefined}>
-                    {question.result === "unanswered"
-                      ? "Not answered"
-                      : formatAnswerForDisplay(question.type, question.options, question.studentAnswer)}
-                  </dd>
-                </div>
-                {question.result !== "correct" && (
-                  <div>
-                    <dt className="text-muted-foreground font-medium">Correct answer</dt>
-                    <dd className="text-success">
-                      {formatAnswerForDisplay(question.type, question.options, question.correctAnswer)}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </li>
-          ))}
-        </ul>
+        <ExamReviewSplit
+          testType={attempt.testType}
+          passages={attempt.passages}
+          questions={questions}
+          savedHighlights={[]}
+          resultId={resultId}
+          allowExplainMore={false}
+          partBreakdown={partBreakdown}
+          questionTypeBreakdown={questionTypeBreakdown}
+        />
       </div>
     </div>
   );

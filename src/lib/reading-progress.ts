@@ -1,43 +1,12 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { awardCoins } from "@/lib/coins";
-import {
-  ARTICLE_READ_COMPLETE_COINS,
-  ARTICLE_AUDIO_COMPLETE_COINS,
-  ARTICLE_AUDIO_COMPLETE_THRESHOLD_PERCENT,
-} from "@/lib/coin-economy-constants";
 
 /** A student is considered "done" with an article once they've scrolled past this point. */
 const COMPLETION_THRESHOLD_PERCENT = 95;
-/** The coin reward requires literal full completion — a stricter bar than the "done" marker above, which existed first and stays unchanged. */
-const READ_COIN_THRESHOLD_PERCENT = 100;
 
 export async function getReadingProgress(studentId: string, articleId: string) {
   return prisma.readingProgress.findUnique({ where: { studentId_articleId: { studentId, articleId } } });
-}
-
-/** awardCoins() already no-ops on a repeat idempotencyKey, so this is safe to call on every save that crosses the threshold, not just the first. */
-async function awardArticleReadingCoins(studentId: string, articleId: string) {
-  const article = await prisma.article.findUnique({ where: { id: articleId }, select: { title: true } });
-  await awardCoins(
-    studentId,
-    "ACHIEVEMENT",
-    ARTICLE_READ_COMPLETE_COINS,
-    `ARTICLE_READ:${studentId}:${articleId}`,
-    `Completed reading "${article?.title ?? "an article"}"`
-  );
-}
-
-async function awardArticleAudioCoins(studentId: string, articleId: string) {
-  const article = await prisma.article.findUnique({ where: { id: articleId }, select: { title: true } });
-  await awardCoins(
-    studentId,
-    "ACHIEVEMENT",
-    ARTICLE_AUDIO_COMPLETE_COINS,
-    `ARTICLE_AUDIO:${studentId}:${articleId}`,
-    `Listened to "${article?.title ?? "an article"}"`
-  );
 }
 
 /**
@@ -80,10 +49,6 @@ export async function saveReadingProgress(
     },
   });
 
-  if (input.percentComplete >= READ_COIN_THRESHOLD_PERCENT) {
-    await awardArticleReadingCoins(studentId, articleId);
-  }
-
   return result;
 }
 
@@ -118,10 +83,6 @@ export async function saveAudioProgress(
       lastOpenedAt: new Date(),
     },
   });
-
-  if (input.audioProgress >= ARTICLE_AUDIO_COMPLETE_THRESHOLD_PERCENT) {
-    await awardArticleAudioCoins(studentId, articleId);
-  }
 
   return result;
 }

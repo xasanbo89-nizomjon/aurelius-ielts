@@ -10,6 +10,7 @@ import { FilterPills, type FilterPillOption } from "@/components/dashboard/filte
 import { SearchInput } from "@/components/ui/search-input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 const DIFFICULTY_LABEL: Record<MockTestDifficulty, string> = {
   BEGINNER: "Beginner",
@@ -102,7 +103,12 @@ export function GeneralTestListView({
               href={`${examBasePath}/${test.id}`}
               className="focus-visible:ring-ring/50 block h-full rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              <Card className="h-full gap-3 py-4 transition-all hover:-translate-y-0.5 hover:shadow-soft-lg sm:gap-6 sm:py-6">
+              <Card className="h-full gap-3 overflow-hidden py-4 transition-all hover:-translate-y-0.5 hover:shadow-soft-lg sm:gap-6 sm:py-6">
+                {test.coverImagePath && (
+                  <div className="bg-secondary relative -mx-4 -mt-4 aspect-video sm:-mx-6 sm:-mt-6">
+                    <FallbackImage src={test.coverImagePath} alt="" fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" unoptimized />
+                  </div>
+                )}
                 <CardHeader className="gap-1 sm:gap-1.5">
                   {test.difficulty && (
                     <Badge variant={DIFFICULTY_BADGE_VARIANT[test.difficulty]} className="w-fit text-[11px] sm:text-xs">

@@ -20,7 +20,7 @@ import { getSubscriptionHistory } from "@/lib/subscription-history";
 export const metadata: Metadata = { title: "Subscription" };
 
 const SOURCE_LABEL = {
-  COIN_REDEMPTION: "Coin Redemption",
+  COIN_REDEMPTION: "Legacy Redemption",
   ADMIN_GRANT: "Admin Grant",
   DIRECT_PAYMENT: "Direct Payment",
   TELEGRAM_PURCHASE: "Telegram Purchase",

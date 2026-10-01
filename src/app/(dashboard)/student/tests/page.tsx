@@ -31,7 +31,7 @@ export default function StudentTestsHubPage() {
           icon={Headphones}
         />
         <HomeHubCard
-          title="Full Mock Tests"
+          title="Mock Exams"
           description="Sit all four sections back-to-back under real exam timing."
           href="/student/tests/mock"
           icon={ClipboardCheck}

@@ -8,7 +8,7 @@ import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { DailyStreakBadge } from "@/components/layout/daily-streak-badge";
 import { NotificationsBell } from "@/components/layout/notifications-bell";
-import { PremiumBadge } from "@/components/layout/premium-badge";
+import { PremiumNavBadge } from "@/components/layout/premium-nav-badge";
 import { UserMenu } from "@/components/layout/user-menu";
 
 export function DashboardShell({
@@ -59,7 +59,7 @@ export function DashboardShell({
             <>
               <DailyStreakBadge streakCount={streakCount} bare />
               <NotificationsBell />
-              <PremiumBadge isPremium={isPremium ?? false} daysRemaining={premiumDaysRemaining} />
+              <PremiumNavBadge isPremium={isPremium ?? false} daysRemaining={premiumDaysRemaining} />
               <UserMenu name={user.name} email={user.email} image={user.image} role={role} secondaryItems={secondaryNavItems} />
             </>
           ) : (

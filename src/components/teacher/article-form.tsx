@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ImageIcon, Loader2, Music, Upload, X } from "lucide-react";
 import { toast } from "sonner";
@@ -27,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 export type ExistingArticle = {
   id: string;
@@ -259,7 +259,7 @@ export function ArticleForm({ existingArticle }: { existingArticle?: ExistingArt
         <div className="flex items-center gap-3">
           {coverPreview ? (
             <div className="border-border/70 bg-secondary/30 relative size-16 shrink-0 overflow-hidden rounded-xl border">
-              <Image src={coverPreview} alt="" fill sizes="64px" className="object-cover" unoptimized />
+              <FallbackImage src={coverPreview} alt="" fill sizes="64px" className="object-cover" unoptimized />
             </div>
           ) : (
             <div className="border-border/70 bg-secondary/30 text-muted-foreground flex size-16 shrink-0 items-center justify-center rounded-xl border">

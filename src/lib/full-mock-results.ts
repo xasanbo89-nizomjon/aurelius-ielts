@@ -1,16 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-
-/** Official IELTS overall-band rounding: .25 rounds up to the next .5, .75 rounds up to the next whole band. */
-function roundToIeltsBand(average: number): number {
-  return Math.ceil(average * 2) / 2;
-}
-
-function average(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return values.reduce((sum, v) => sum + v, 0) / values.length;
-}
+import { bandForSection, overallBandFromSections } from "@/lib/full-mock-band-composition";
 
 export type FullMockSectionBand = { label: string; band: number | null };
 
@@ -55,30 +46,14 @@ export async function getFullMockAttemptResults(attemptId: string, studentId: st
   });
   if (!attempt) return null;
 
-  const listeningBand = attempt.sectionResults.find((r) => r.section === "LISTENING")?.result?.bandScore ?? null;
-  const readingBand = attempt.sectionResults.find((r) => r.section === "READING")?.result?.bandScore ?? null;
-
-  const writingBands = attempt.sectionResults
-    .filter((r) => r.section === "WRITING")
-    .map((r) => r.writingSubmission?.bandScore)
-    .filter((b): b is number => b != null);
-  const speakingBands = attempt.sectionResults
-    .filter((r) => r.section === "SPEAKING")
-    .map((r) => r.speakingSubmission?.bandScore)
-    .filter((b): b is number => b != null);
-
-  const writingBand = average(writingBands);
-  const speakingBand = average(speakingBands);
-
   const sections: FullMockResults["sections"] = {
-    listening: { label: "Listening", band: listeningBand },
-    reading: { label: "Reading", band: readingBand },
-    writing: { label: "Writing", band: writingBand },
-    speaking: { label: "Speaking", band: speakingBand },
+    listening: { label: "Listening", band: bandForSection(attempt.sectionResults, "LISTENING") },
+    reading: { label: "Reading", band: bandForSection(attempt.sectionResults, "READING") },
+    writing: { label: "Writing", band: bandForSection(attempt.sectionResults, "WRITING") },
+    speaking: { label: "Speaking", band: bandForSection(attempt.sectionResults, "SPEAKING") },
   };
 
-  const allBands = [listeningBand, readingBand, writingBand, speakingBand];
-  const overallBand = allBands.every((b): b is number => b != null) ? roundToIeltsBand(average(allBands as number[])!) : null;
+  const overallBand = overallBandFromSections(attempt.sectionResults);
 
   const known = Object.values(sections).filter((s) => s.band != null) as { label: string; band: number }[];
   const sorted = [...known].sort((a, b) => b.band - a.band);

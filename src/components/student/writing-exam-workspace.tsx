@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { CalendarClock, Home, Loader2, Maximize2, Minimize2, Target } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { WritingSubmitReviewDialog } from "@/components/student/writing-submit-review-dialog";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 /** Real IELTS convention: Task 1 = 20 minutes, Task 2 = 40 minutes. Purely a visible countdown — never force-submits, since an essay submission must always be a deliberate student action. */
 const TASK_DURATION_SECONDS: Record<AssignedWritingTask["taskNumber"], number> = {
@@ -215,7 +215,7 @@ export function WritingExamWorkspace({ task, draft }: { task: AssignedWritingTas
           <p className="text-sm leading-relaxed whitespace-pre-wrap">{task.prompt}</p>
           {task.imageUrl && (
             <div className="bg-secondary relative aspect-video w-full max-w-md overflow-hidden rounded-lg">
-              <Image src={task.imageUrl} alt="Task 1 visual" fill sizes="480px" className="object-contain" unoptimized />
+              <FallbackImage src={task.imageUrl} alt="Task 1 visual" fill sizes="480px" className="object-contain" unoptimized />
             </div>
           )}
           {task.visualDescription && <p className="text-muted-foreground text-xs">Visual: {task.visualDescription}</p>}

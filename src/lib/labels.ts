@@ -1,5 +1,7 @@
 import type {
   ArticleDifficulty,
+  ListeningAccent,
+  MockTestDifficulty,
   SkillType,
   SubscriptionStatus,
   VocabularyStatus,
@@ -30,6 +32,27 @@ export const ARTICLE_DIFFICULTY_LABELS: Record<ArticleDifficulty, string> = {
   INTERMEDIATE: "Intermediate",
   ADVANCED: "Advanced",
   IELTS_ACADEMIC: "IELTS Academic",
+};
+
+/** Same labels/badge colors general-test-list-view.tsx already uses for MockTestDifficulty — centralized here so Phase 47's Mock Exam cards can reuse them without duplicating. */
+export const MOCK_TEST_DIFFICULTY_LABELS: Record<MockTestDifficulty, string> = {
+  BEGINNER: "Beginner",
+  INTERMEDIATE: "Intermediate",
+  ADVANCED: "Advanced",
+};
+
+export const MOCK_TEST_DIFFICULTY_BADGE_VARIANT: Record<MockTestDifficulty, "success" | "accent" | "destructive"> = {
+  BEGINNER: "success",
+  INTERMEDIATE: "accent",
+  ADVANCED: "destructive",
+};
+
+/** Phase 45 — Media Library 2.0's Listening Library accent types. */
+export const LISTENING_ACCENT_LABELS: Record<ListeningAccent, string> = {
+  BRITISH: "British",
+  AMERICAN: "American",
+  AUSTRALIAN: "Australian",
+  CANADIAN: "Canadian",
 };
 
 /**
