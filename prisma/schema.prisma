@@ -69,6 +69,19 @@ enum QuestionType {
   SUMMARY_COMPLETION
 }
 
+/// Phase 50 — PDF Test Importer's staging lifecycle. PARSED means the AI
+/// extraction succeeded and the teacher can review/edit before committing;
+/// IMPORTED means the teacher confirmed and a real MockTest now exists
+/// (resultMockTestId is set). FAILED keeps the row (with errorMessage) so
+/// the teacher sees what happened rather than the upload silently vanishing.
+enum ImportedTestStatus {
+  UPLOADED
+  PARSING
+  PARSED
+  FAILED
+  IMPORTED
+}
+
 enum SubmissionStatus {
   /// An unsubmitted, still-editable essay — never analyzed, never visible to a teacher.
   DRAFT
@@ -342,6 +355,8 @@ model TeacherProfile {
   listeningLibraryItems   ListeningLibraryItem[]
   /// Phase 47 — Skill Media Library's platform-wide cover banners (Root Teacher only — see SkillCoverImage).
   updatedSkillCoverImages SkillCoverImage[]
+  /// Phase 50 — PDF Test Importer staging rows.
+  importedTests           ImportedTest[]
 
   @@map("teacher_profiles")
 }
@@ -386,6 +401,8 @@ model MockTest {
   assignments           Assignment[]
   fullMockReadingUses   FullMockReadingSection[]
   fullMockListeningUses FullMockListeningSection[]
+  /// Phase 50 — set when this test was created via the PDF Importer's confirm step.
+  importedFrom          ImportedTest?
 
   @@map("mock_tests")
 }
@@ -484,6 +501,113 @@ model Question {
   bookmarks             QuestionBookmark[]
 
   @@map("questions")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 50 — PDF Test Importer: a staging/review layer only. Nothing here is
+// ever shown to a student or graded directly — a teacher uploads a Reading
+// or Listening IELTS PDF, AI extraction populates these rows, the teacher
+// reviews/edits them, and confirming converts them into a real MockTest +
+// Passage + Question tree through the exact same tm.createTest/addPassage/
+// addQuestion functions a manually-built test uses (src/lib/exam/test-management.ts)
+// — so an imported test is scored by the existing engine with zero changes
+// and is indistinguishable from one a teacher built by hand. These rows are
+// kept after import (status -> IMPORTED) purely as provenance/audit trail.
+// ---------------------------------------------------------------------------
+
+model ImportedTest {
+  id             String             @id @default(cuid())
+  teacherId      String
+  teacher        TeacherProfile     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  /// Only READING or LISTENING are valid imports — enforced in the Zod
+  /// validation layer, not the DB, since TestType is shared with other models.
+  type           TestType
+  sourceFileName String
+  /// The uploaded PDF's Supabase Storage object path (bucket "test-import-pdfs") — teacher-only, never linked from any student-facing page.
+  pdfPath        String
+  status         ImportedTestStatus @default(UPLOADED)
+  /// AI-detected test title, editable by the teacher before import; falls back to the source file name if detection fails.
+  title          String?
+  /// The raw PDF text extraction, kept for debugging/re-parsing — never shown in any UI.
+  rawExtractedText String?          @db.Text
+  errorMessage   String?
+
+  /// Set once the teacher confirms the import — the real, live MockTest this staging data became. SetNull (not Cascade) so deleting the live test later never cascades back into deleting this audit row.
+  resultMockTestId String?  @unique
+  resultMockTest   MockTest? @relation(fields: [resultMockTestId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  passages ImportedPassage[]
+  answers  ImportedAnswer[]
+
+  @@index([teacherId])
+  @@map("imported_tests")
+}
+
+model ImportedPassage {
+  id             String       @id @default(cuid())
+  importedTestId String
+  importedTest   ImportedTest @relation(fields: [importedTestId], references: [id], onDelete: Cascade)
+
+  title      String
+  content    String @db.Text
+  orderIndex Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questionGroups ImportedQuestionGroup[]
+
+  @@index([importedTestId])
+  @@map("imported_passages")
+}
+
+/// One row per detected question block (e.g. "Questions 1-5, Fill in the
+/// Blank") — never one row per individual question number, matching the
+/// spec's "merge question groups, don't create one DB row per question."
+/// `questionsJson` holds the normalized per-type payload (see
+/// src/lib/exam/pdf-import-conversion.ts for the exact shape) that the
+/// confirm step turns into 1 or N real Question rows, exactly mirroring how
+/// Question.options already encodes grouped sub-answers for
+/// SUMMARY_COMPLETION/MATCHING today.
+model ImportedQuestionGroup {
+  id                String          @id @default(cuid())
+  importedPassageId String
+  importedPassage   ImportedPassage @relation(fields: [importedPassageId], references: [id], onDelete: Cascade)
+
+  startNumber  Int
+  endNumber    Int
+  questionType QuestionType
+  instructions String       @db.Text
+  questionsJson Json
+  orderIndex   Int          @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([importedPassageId])
+  @@map("imported_question_groups")
+}
+
+/// Question number -> detected answer text, parsed from the PDF's answer
+/// key section. Teacher-only for the entire lifetime of this row — never
+/// queried from any student-facing code path.
+model ImportedAnswer {
+  id             String       @id @default(cuid())
+  importedTestId String
+  importedTest   ImportedTest @relation(fields: [importedTestId], references: [id], onDelete: Cascade)
+
+  questionNumber Int
+  answerText     String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([importedTestId, questionNumber])
+  @@index([importedTestId])
+  @@map("imported_answers")
 }
 
 /// Phase 24 — "Bookmark difficult questions" (Reading/Listening). Separate

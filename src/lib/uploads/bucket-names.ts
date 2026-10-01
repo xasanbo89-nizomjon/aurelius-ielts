@@ -14,3 +14,5 @@ export const MEDIA_LIBRARY_THUMBNAILS_BUCKET = "media-library-thumbnails";
 /** Phase 45 — Reading Library PDFs and Listening Library audio each get their own bucket, uploaded via the same direct-to-Supabase signed-URL pattern as article audio (large files, never routed through a Server Action body). */
 export const READING_LIBRARY_BUCKET = "reading-library";
 export const LISTENING_LIBRARY_AUDIO_BUCKET = "listening-library-audio";
+/** Phase 50 — PDF Test Importer's source PDFs. Teacher-only: never linked from any student-facing page, same storage model as reading-library (object paths aren't guessable, and nothing in student code ever reads this bucket name). */
+export const TEST_IMPORT_PDF_BUCKET = "test-import-pdfs";

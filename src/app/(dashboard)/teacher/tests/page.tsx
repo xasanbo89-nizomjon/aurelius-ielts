@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileText, ImageIcon, Layers, Plus, Target, TrendingUp } from "lucide-react";
+import { FileText, ImageIcon, Layers, Plus, Target, TrendingUp, Upload } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -75,6 +75,11 @@ export default async function TeacherTestsPage({
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput name="q" placeholder="Search tests…" defaultValue={q} />
+            <Button asChild variant="outline">
+              <Link href="/teacher/tests/import">
+                <Upload className="size-4" /> Import PDF Test
+              </Link>
+            </Button>
             <Button asChild variant="outline">
               <Link href="/teacher/tests/full-mock/new">
                 <Layers className="size-4" /> Create Full Mock Test

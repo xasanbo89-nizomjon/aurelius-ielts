@@ -116,3 +116,21 @@ export async function uploadToSupabase(
   const { data } = client.storage.from(bucket).getPublicUrl(objectPath);
   return data.publicUrl;
 }
+
+/**
+ * Phase 50 — downloads an object's bytes back into the server for
+ * processing (PDF text extraction). Every other upload in this codebase is
+ * write-only from the server's point of view (store a path, let the browser
+ * fetch the public URL directly) — this is the first read-back, needed
+ * because pdf-parse needs the actual buffer, not a URL.
+ */
+export async function downloadFromSupabase(bucket: string, objectPath: string): Promise<Buffer> {
+  const client = getSupabaseAdmin();
+
+  const { data, error } = await client.storage.from(bucket).download(objectPath);
+  if (error || !data) {
+    throw new Error(`Could not download the file from storage: ${error?.message ?? "unknown error"}`);
+  }
+
+  return Buffer.from(await data.arrayBuffer());
+}

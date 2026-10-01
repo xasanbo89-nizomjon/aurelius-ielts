@@ -4,9 +4,9 @@ import { randomUUID } from "crypto";
 import { createSignedUploadUrl, type SignedUpload } from "@/lib/uploads/supabase";
 import { validateDocumentFile } from "@/lib/uploads/document-constraints";
 import { validateAudioFile } from "@/lib/uploads/audio-constraints";
-import { READING_LIBRARY_BUCKET, LISTENING_LIBRARY_AUDIO_BUCKET } from "@/lib/uploads/bucket-names";
+import { READING_LIBRARY_BUCKET, LISTENING_LIBRARY_AUDIO_BUCKET, TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
 
-export { READING_LIBRARY_BUCKET, LISTENING_LIBRARY_AUDIO_BUCKET };
+export { READING_LIBRARY_BUCKET, LISTENING_LIBRARY_AUDIO_BUCKET, TEST_IMPORT_PDF_BUCKET };
 
 /**
  * Phase 45 — Reading Library PDFs (up to 20MB) go straight from the browser
@@ -41,4 +41,22 @@ export async function prepareListeningLibraryAudioUpload(
   }
   const objectPath = `${teacherId}/${randomUUID()}${validation.extension}`;
   return createSignedUploadUrl(LISTENING_LIBRARY_AUDIO_BUCKET, objectPath);
+}
+
+/**
+ * Phase 50 — PDF Test Importer source files, same large-file direct-upload
+ * reasoning as the two above. The uploaded object is read back server-side
+ * afterward (downloadFromSupabase) for text extraction — see
+ * src/lib/pdf-test-import.ts.
+ */
+export async function prepareTestImportPdfUpload(
+  teacherId: string,
+  file: { name: string; size: number; type?: string }
+): Promise<SignedUpload> {
+  const validation = validateDocumentFile(file);
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+  const objectPath = `${teacherId}/${randomUUID()}${validation.extension}`;
+  return createSignedUploadUrl(TEST_IMPORT_PDF_BUCKET, objectPath);
 }
