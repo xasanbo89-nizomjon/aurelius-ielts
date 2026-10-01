@@ -29,11 +29,18 @@ import { SummaryCompletionEditor } from "@/components/teacher/question-editors/s
 export type ExistingQuestion = {
   id: string;
   passageId: string | null;
+  questionGroupId: string | null;
   type: QuestionType;
   prompt: string;
   points: number;
   options: unknown;
   correctAnswer: unknown;
+};
+
+export type PassageOption = {
+  id: string;
+  title: string;
+  questionGroups: { id: string; title: string; startQuestion: number; endQuestion: number }[];
 };
 
 export function QuestionEditorDialog({
@@ -43,16 +50,19 @@ export function QuestionEditorDialog({
   passages,
   existingQuestion,
   defaultPassageId,
+  defaultQuestionGroupId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   testId: string;
-  passages: { id: string; title: string }[];
+  passages: PassageOption[];
   existingQuestion?: ExistingQuestion;
   defaultPassageId?: string;
+  defaultQuestionGroupId?: string;
 }) {
   const [type, setType] = useState<QuestionType>("MULTIPLE_CHOICE");
   const [passageId, setPassageId] = useState("");
+  const [questionGroupId, setQuestionGroupId] = useState<string>("");
   const [prompt, setPrompt] = useState("");
   const [points, setPoints] = useState(1);
   const [options, setOptions] = useState<unknown>({});
@@ -65,6 +75,7 @@ export function QuestionEditorDialog({
     if (existingQuestion) {
       setType(existingQuestion.type);
       setPassageId(existingQuestion.passageId ?? "");
+      setQuestionGroupId(existingQuestion.questionGroupId ?? "");
       setPrompt(existingQuestion.prompt);
       setPoints(existingQuestion.points);
       setOptions(existingQuestion.options ?? {});
@@ -73,6 +84,7 @@ export function QuestionEditorDialog({
       const defaults = defaultPayloadFor("MULTIPLE_CHOICE");
       setType("MULTIPLE_CHOICE");
       setPassageId(defaultPassageId ?? passages[0]?.id ?? "");
+      setQuestionGroupId(defaultQuestionGroupId ?? "");
       setPrompt("");
       setPoints(1);
       setOptions(defaults.options);
@@ -80,6 +92,8 @@ export function QuestionEditorDialog({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, existingQuestion]);
+
+  const availableGroups = passages.find((p) => p.id === passageId)?.questionGroups ?? [];
 
   function handleTypeChange(nextType: QuestionType) {
     setType(nextType);
@@ -100,7 +114,7 @@ export function QuestionEditorDialog({
     }
 
     setSubmitting(true);
-    const base = { passageId: passageId || undefined, type, prompt, points };
+    const base = { passageId: passageId || undefined, questionGroupId: questionGroupId || undefined, type, prompt, points };
     const result = existingQuestion
       ? await updateQuestionAction(existingQuestion.id, testId, base, options as never, correctAnswer as never)
       : await addQuestionAction(testId, base, options as never, correctAnswer as never);
@@ -124,7 +138,7 @@ export function QuestionEditorDialog({
         </DialogHeader>
 
         <div className="space-y-5">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label>Question type</Label>
               <Select value={type} onValueChange={(value) => handleTypeChange(value as QuestionType)}>
@@ -143,7 +157,15 @@ export function QuestionEditorDialog({
 
             <div className="space-y-1.5">
               <Label>Passage / section</Label>
-              <Select value={passageId} onValueChange={setPassageId}>
+              <Select
+                value={passageId}
+                onValueChange={(value) => {
+                  setPassageId(value);
+                  if (!passages.find((p) => p.id === value)?.questionGroups.some((g) => g.id === questionGroupId)) {
+                    setQuestionGroupId("");
+                  }
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder={passages.length === 0 ? "No passages yet" : "No passage"} />
                 </SelectTrigger>
@@ -151,6 +173,23 @@ export function QuestionEditorDialog({
                   {passages.map((passage) => (
                     <SelectItem key={passage.id} value={passage.id}>
                       {passage.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Question group</Label>
+              <Select value={questionGroupId || "none"} onValueChange={(value) => setQuestionGroupId(value === "none" ? "" : value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="No group" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No group</SelectItem>
+                  {availableGroups.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      Questions {group.startQuestion}-{group.endQuestion}: {group.title}
                     </SelectItem>
                   ))}
                 </SelectContent>

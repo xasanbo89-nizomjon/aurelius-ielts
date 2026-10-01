@@ -12,7 +12,7 @@ import {
   importedQuestionGroupJsonSchema,
   type ImportedQuestionGroupJson,
 } from "@/lib/exam/pdf-import-conversion";
-import { createTestSchema, passageSchema, questionBaseSchema } from "@/lib/validations/test-management";
+import { createTestSchema, passageSchema, questionBaseSchema, questionGroupSchema } from "@/lib/validations/test-management";
 
 export class OwnershipError extends Error {
   constructor(message = "You don't have access to this import.") {
@@ -305,17 +305,26 @@ export async function confirmImport(
     options: Prisma.InputJsonValue;
     correctAnswer: Prisma.InputJsonValue;
   };
-  type PlannedPassage = { title: string; content: string; questions: PlannedQuestion[] };
+  type PlannedGroup = {
+    title: string;
+    startQuestion: number;
+    endQuestion: number;
+    instructions?: string;
+    questions: PlannedQuestion[];
+  };
+  type PlannedPassage = { title: string; content: string; groups: PlannedGroup[] };
 
   const plan: PlannedPassage[] = [];
   const warnings: ConfirmImportWarning[] = [];
 
   for (const importedPassage of row.passages) {
     const parsedPassage = passageSchema.parse({ title: importedPassage.title, content: importedPassage.content || " " });
-    const questions: PlannedQuestion[] = [];
+    const groups: PlannedGroup[] = [];
 
     for (const group of importedPassage.questionGroups) {
       const payloads = buildQuestionPayloadsFromGroup(group, answersByNumber);
+      const questions: PlannedQuestion[] = [];
+
       for (const payload of payloads) {
         const parsedBase = questionBaseSchema.parse({ type: payload.type, prompt: payload.prompt, points: payload.points });
         const { options, correctAnswer } = tm.validateQuestionPayload(payload.type, payload.options, payload.correctAnswer);
@@ -330,24 +339,48 @@ export async function confirmImport(
           warnings.push({ questionNumbers: payload.unmatchedNumbers, passageTitle: parsedPassage.title });
         }
       }
+
+      // Phase 50.1 — real QuestionGroup, "Questions {start}-{end}" by default (the teacher can rename it afterward from the test editor).
+      const parsedGroup = questionGroupSchema.parse({
+        title: `Questions ${group.startNumber}-${group.endNumber}`,
+        startQuestion: group.startNumber,
+        endQuestion: group.endNumber,
+        instructions: group.instructions,
+      });
+      groups.push({
+        title: parsedGroup.title,
+        startQuestion: parsedGroup.startQuestion,
+        endQuestion: parsedGroup.endQuestion,
+        instructions: parsedGroup.instructions,
+        questions,
+      });
     }
 
-    plan.push({ title: parsedPassage.title, content: parsedPassage.content, questions });
+    plan.push({ title: parsedPassage.title, content: parsedPassage.content, groups });
   }
 
   const mockTest = await tm.createTest(teacherId, parsedTest);
 
   for (const plannedPassage of plan) {
     const realPassage = await tm.addPassage(mockTest.id, teacherId, { title: plannedPassage.title, content: plannedPassage.content });
-    for (const question of plannedPassage.questions) {
-      await tm.addQuestion(mockTest.id, teacherId, {
-        passageId: realPassage.id,
-        type: question.type,
-        prompt: question.prompt,
-        points: question.points,
-        options: question.options,
-        correctAnswer: question.correctAnswer,
+    for (const plannedGroup of plannedPassage.groups) {
+      const realGroup = await tm.addQuestionGroup(realPassage.id, teacherId, {
+        title: plannedGroup.title,
+        startQuestion: plannedGroup.startQuestion,
+        endQuestion: plannedGroup.endQuestion,
+        instructions: plannedGroup.instructions,
       });
+      for (const question of plannedGroup.questions) {
+        await tm.addQuestion(mockTest.id, teacherId, {
+          passageId: realPassage.id,
+          questionGroupId: realGroup.id,
+          type: question.type,
+          prompt: question.prompt,
+          points: question.points,
+          options: question.options,
+          correctAnswer: question.correctAnswer,
+        });
+      }
     }
   }
 

@@ -30,7 +30,11 @@ export default async function TestEditorPage({
     include: {
       passages: {
         orderBy: { orderIndex: "asc" },
-        include: { attachments: { orderBy: { orderIndex: "asc" } } },
+        include: {
+          attachments: { orderBy: { orderIndex: "asc" } },
+          // Phase 50.1 — fetched in the same single query as everything else, no N+1: one round trip for the whole editor.
+          questionGroups: { orderBy: { orderIndex: "asc" } },
+        },
       },
       questions: { orderBy: { orderIndex: "asc" } },
       _count: { select: { results: true } },
@@ -84,10 +88,22 @@ export default async function TestEditorPage({
 
       <QuestionsManager
         testId={test.id}
-        passages={test.passages.map((passage) => ({ id: passage.id, title: passage.title }))}
+        passages={test.passages.map((passage) => ({
+          id: passage.id,
+          title: passage.title,
+          questionGroups: passage.questionGroups.map((group) => ({
+            id: group.id,
+            title: group.title,
+            startQuestion: group.startQuestion,
+            endQuestion: group.endQuestion,
+            instructions: group.instructions,
+            orderIndex: group.orderIndex,
+          })),
+        }))}
         questions={test.questions.map((question) => ({
           id: question.id,
           passageId: question.passageId,
+          questionGroupId: question.questionGroupId,
           type: question.type,
           prompt: question.prompt,
           points: question.points,

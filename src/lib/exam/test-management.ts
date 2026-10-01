@@ -32,6 +32,14 @@ async function assertOwnsQuestion(questionId: string, teacherId: string) {
   return question;
 }
 
+async function assertOwnsQuestionGroup(groupId: string, teacherId: string) {
+  const group = await prisma.questionGroup.findFirst({
+    where: { id: groupId, passage: { mockTest: { createdById: teacherId } } },
+  });
+  if (!group) throw new OwnershipError("You don't have access to this question group.");
+  return group;
+}
+
 /** Validates a question's `options`/`correctAnswer` against its type's schema. Throws on mismatch. */
 export function validateQuestionPayload(type: QuestionType, options: unknown, correctAnswer: unknown) {
   const meta = QUESTION_TYPE_META[type];
@@ -239,6 +247,8 @@ export async function deletePassageAttachment(attachmentId: string, teacherId: s
 
 export type QuestionInput = {
   passageId?: string | null;
+  /** Phase 50.1 — optional teacher-side organization (see QuestionGroup). Never affects grading or the student view. */
+  questionGroupId?: string | null;
   type: QuestionType;
   prompt: string;
   options: Prisma.InputJsonValue;
@@ -259,6 +269,7 @@ export async function addQuestion(testId: string, teacherId: string, input: Ques
     data: {
       mockTestId: testId,
       passageId: input.passageId || null,
+      questionGroupId: input.questionGroupId || null,
       type: input.type,
       prompt: input.prompt,
       options: input.options,
@@ -284,6 +295,7 @@ export async function updateQuestion(
     where: { id: questionId },
     data: {
       passageId: input.passageId === undefined ? undefined : input.passageId || null,
+      questionGroupId: input.questionGroupId === undefined ? undefined : input.questionGroupId || null,
       type: input.type,
       prompt: input.prompt,
       options: input.options,
@@ -321,5 +333,75 @@ export async function moveQuestion(questionId: string, teacherId: string, direct
   await prisma.$transaction([
     prisma.question.update({ where: { id: question.id }, data: { orderIndex: neighbor.orderIndex } }),
     prisma.question.update({ where: { id: neighbor.id }, data: { orderIndex: question.orderIndex } }),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// Question groups (Phase 50.1) — teacher-side organization within a passage,
+// e.g. "Questions 1-5". Purely cosmetic: never read by grading or the
+// student exam-taking UI.
+// ---------------------------------------------------------------------------
+
+export type QuestionGroupInput = {
+  title: string;
+  startQuestion: number;
+  endQuestion: number;
+  instructions?: string | null;
+};
+
+export async function addQuestionGroup(passageId: string, teacherId: string, input: QuestionGroupInput) {
+  await assertOwnsPassage(passageId, teacherId);
+
+  const maxOrder = await prisma.questionGroup.aggregate({
+    where: { passageId },
+    _max: { orderIndex: true },
+  });
+
+  return prisma.questionGroup.create({
+    data: {
+      passageId,
+      title: input.title,
+      startQuestion: input.startQuestion,
+      endQuestion: input.endQuestion,
+      instructions: input.instructions || null,
+      orderIndex: (maxOrder._max.orderIndex ?? -1) + 1,
+    },
+  });
+}
+
+export async function updateQuestionGroup(groupId: string, teacherId: string, input: Partial<QuestionGroupInput>) {
+  await assertOwnsQuestionGroup(groupId, teacherId);
+  return prisma.questionGroup.update({
+    where: { id: groupId },
+    data: {
+      title: input.title,
+      startQuestion: input.startQuestion,
+      endQuestion: input.endQuestion,
+      instructions: input.instructions === undefined ? undefined : input.instructions || null,
+    },
+  });
+}
+
+/** Deleting a group only ungroups its questions (onDelete: SetNull) — it never deletes a question or any real student Answer history attached to it. */
+export async function deleteQuestionGroup(groupId: string, teacherId: string) {
+  await assertOwnsQuestionGroup(groupId, teacherId);
+  await prisma.questionGroup.delete({ where: { id: groupId } });
+}
+
+export async function moveQuestionGroup(groupId: string, teacherId: string, direction: "up" | "down") {
+  const group = await assertOwnsQuestionGroup(groupId, teacherId);
+
+  const neighbor = await prisma.questionGroup.findFirst({
+    where: {
+      passageId: group.passageId,
+      orderIndex: direction === "up" ? { lt: group.orderIndex } : { gt: group.orderIndex },
+    },
+    orderBy: { orderIndex: direction === "up" ? "desc" : "asc" },
+  });
+  if (!neighbor) return;
+
+  await prisma.$transaction([
+    prisma.questionGroup.update({ where: { id: group.id }, data: { orderIndex: neighbor.orderIndex } }),
+    prisma.questionGroup.update({ where: { id: neighbor.id }, data: { orderIndex: group.orderIndex } }),
   ]);
 }

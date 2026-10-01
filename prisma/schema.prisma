@@ -440,8 +440,39 @@ model Passage {
   /// a teacher attaches to a Reading passage or Listening section, shown
   /// alongside the text/audio in the split-screen exam layout.
   attachments PassageAttachment[]
+  /// Phase 50.1 — teacher-side organization only (e.g. "Questions 1-5"). Purely cosmetic for authoring/review — students always see a plain, ungrouped question list (see Question.questionGroupId).
+  questionGroups QuestionGroup[]
 
   @@map("passages")
+}
+
+/// Phase 50.1 — groups a contiguous range of a passage's questions under one
+/// shared instruction block for the TEACHER-FACING test editor and the PDF
+/// importer, matching how a real IELTS paper prints "Questions 1-5" headers.
+/// Deliberately NOT used anywhere in the student exam-taking UI or the
+/// grading engine (src/lib/exam/grading.ts, attempts.ts) — Question.questionGroupId
+/// is nullable and onDelete: SetNull precisely so this stays a pure, optional
+/// authoring convenience that can never affect scoring, student-facing
+/// rendering, or a test's validity if left unset (every pre-existing test
+/// has no QuestionGroup rows and keeps working unchanged).
+model QuestionGroup {
+  id        String  @id @default(cuid())
+  passageId String
+  passage   Passage @relation(fields: [passageId], references: [id], onDelete: Cascade)
+
+  title         String
+  startQuestion Int
+  endQuestion   Int
+  instructions  String? @db.Text
+  orderIndex    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questions Question[]
+
+  @@index([passageId])
+  @@map("question_groups")
 }
 
 enum PassageAttachmentType {
@@ -484,6 +515,14 @@ model Question {
   mockTest   MockTest @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
   passageId  String?
   passage    Passage? @relation(fields: [passageId], references: [id], onDelete: Cascade)
+  /// Phase 50.1 — optional teacher-side grouping (see QuestionGroup). SetNull
+  /// (not Cascade): deleting a group only ungroups its questions, never
+  /// deletes them or any real student Answer history attached to them. Null
+  /// for every question created before this phase, and for any question a
+  /// teacher deliberately leaves ungrouped — both render fine (see
+  /// QuestionsManager's "Ungrouped Questions" bucket).
+  questionGroupId String?
+  questionGroup   QuestionGroup? @relation(fields: [questionGroupId], references: [id], onDelete: SetNull)
 
   type          QuestionType
   prompt        String       @db.Text

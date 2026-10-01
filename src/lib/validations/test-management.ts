@@ -51,8 +51,23 @@ export const questionTypeSchema = z.enum([
 
 export const questionBaseSchema = z.object({
   passageId: z.string().optional(),
+  questionGroupId: z.string().optional(),
   type: questionTypeSchema,
   prompt: z.string().trim().min(1, "Prompt is required").max(4000),
   points: z.coerce.number().int().positive().max(20).default(1),
 });
 export type QuestionBaseInput = z.infer<typeof questionBaseSchema>;
+
+/** Phase 50.1 — "Questions 1-5"-style teacher-side grouping within a passage. */
+export const questionGroupSchema = z
+  .object({
+    title: z.string().trim().min(1, "Title is required").max(160),
+    startQuestion: z.coerce.number().int().positive(),
+    endQuestion: z.coerce.number().int().positive(),
+    instructions: z.string().trim().max(2000).optional(),
+  })
+  .refine((data) => data.endQuestion >= data.startQuestion, {
+    message: "End question must be the same as or after the start question.",
+    path: ["endQuestion"],
+  });
+export type QuestionGroupInput = z.infer<typeof questionGroupSchema>;

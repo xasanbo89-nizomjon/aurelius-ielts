@@ -13,10 +13,12 @@ import {
   updateTestSchema,
   passageSchema,
   questionBaseSchema,
+  questionGroupSchema,
   type CreateTestInput,
   type UpdateTestInput,
   type PassageInput,
   type QuestionBaseInput,
+  type QuestionGroupInput,
 } from "@/lib/validations/test-management";
 
 export type ActionResult = { success: true } | { success: false; error: string };
@@ -254,6 +256,65 @@ export async function moveQuestionAction(
     return { success: true };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not reorder the question.") };
+  }
+}
+
+/** Phase 50.1 — "Questions 1-5"-style teacher-side grouping within a passage. */
+export async function addQuestionGroupAction(
+  testId: string,
+  passageId: string,
+  input: QuestionGroupInput
+): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    const parsed = questionGroupSchema.parse(input);
+    await tm.addQuestionGroup(passageId, profile.id, parsed);
+    revalidatePath(`/teacher/tests/${testId}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not add the question group.") };
+  }
+}
+
+export async function updateQuestionGroupAction(
+  groupId: string,
+  testId: string,
+  input: QuestionGroupInput
+): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    const parsed = questionGroupSchema.parse(input);
+    await tm.updateQuestionGroup(groupId, profile.id, parsed);
+    revalidatePath(`/teacher/tests/${testId}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not update the question group.") };
+  }
+}
+
+export async function deleteQuestionGroupAction(groupId: string, testId: string): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    await tm.deleteQuestionGroup(groupId, profile.id);
+    revalidatePath(`/teacher/tests/${testId}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not delete the question group.") };
+  }
+}
+
+export async function moveQuestionGroupAction(
+  groupId: string,
+  testId: string,
+  direction: "up" | "down"
+): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    await tm.moveQuestionGroup(groupId, profile.id, direction);
+    revalidatePath(`/teacher/tests/${testId}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not reorder the question group.") };
   }
 }
 
