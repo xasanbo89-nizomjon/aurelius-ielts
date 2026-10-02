@@ -6,6 +6,7 @@ import { CheckCircle2, Clock, Gauge, Lightbulb, ListChecks, SkipForward, Target,
 import { requireStudentProfile } from "@/lib/session";
 import { getAttemptSummary } from "@/lib/exam/attempts";
 import { isResponseAnswered } from "@/lib/exam/grading";
+import { formatNumberRange, summarizeAttemptSlots } from "@/lib/exam/question-numbering";
 import { getResultInsights } from "@/lib/exam/result-insights";
 import { findInProgressFullMockLinkForResult } from "@/lib/full-mock-attempts";
 import { formatDuration } from "@/lib/format";
@@ -37,16 +38,30 @@ export default async function ExamResultsPage({
   const skillHref = attempt.skill === "LISTENING" ? "/student/listening" : "/student/reading";
   const skillLabel = attempt.skill === "LISTENING" ? "Listening" : "Reading";
 
-  const wrongQuestions = attempt.mockTest.questions
-    .map((question, index) => ({ question, index: index + 1, answer: answerByQuestion.get(question.id) }))
-    .filter(({ answer }) => !answer?.isCorrect);
+  // Phase A — counts are per NUMBERED question (a matching / summary row covers several), so a 40-question test reads "x/40" here, matching the exam screen and the teacher's import review.
+  const { rows, totals } = summarizeAttemptSlots(
+    attempt.mockTest.questions,
+    new Map(attempt.answers.map((answer) => [answer.questionId, answer.response])),
+    new Map(attempt.answers.map((answer) => [answer.questionId, answer.isCorrect]))
+  );
 
-  const correctQuestions = attempt.mockTest.questions
-    .map((question, index) => ({ question, index: index + 1, answer: answerByQuestion.get(question.id) }))
-    .filter(({ answer }) => answer?.isCorrect);
+  const wrongQuestions = rows
+    .filter((row) => row.slots.some((slot) => !slot.correct))
+    .map((row) => ({
+      question: row,
+      label: formatNumberRange(row.startNumber, row.endNumber),
+      correctInRow: row.slots.filter((slot) => slot.correct).length,
+      answer: answerByQuestion.get(row.id),
+    }));
 
-  const totalQuestions = attempt.mockTest.questions.length;
-  const percent = totalQuestions > 0 ? Math.round((correctQuestions.length / totalQuestions) * 100) : null;
+  const correctQuestions = rows
+    .filter((row) => row.slots.every((slot) => slot.correct))
+    .map((row) => ({ question: row, label: formatNumberRange(row.startNumber, row.endNumber) }));
+
+  const totalQuestions = totals.total;
+  const correctCount = totals.correct;
+  const wrongCount = totals.total - totals.correct;
+  const percent = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : null;
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-12 sm:py-16">
@@ -66,7 +81,7 @@ export default async function ExamResultsPage({
               <p className="font-display text-2xl font-medium">Not available yet</p>
             )}
             <p className="text-muted-foreground text-sm">
-              {correctQuestions.length}/{totalQuestions} Correct
+              {correctCount}/{totalQuestions} Correct
               {percent != null && ` · ${percent}%`}
             </p>
             <Badge variant="success" className="mt-1 flex items-center gap-1">
@@ -74,7 +89,7 @@ export default async function ExamResultsPage({
             </Badge>
             {attempt.bandScore == null && (
               <p className="text-muted-foreground max-w-sm text-xs">
-                Your teacher hasn&apos;t set up a band conversion table for this module yet — your real score ({correctQuestions.length}/
+                Your teacher hasn&apos;t set up a band conversion table for this module yet — your real score ({correctCount}/
                 {totalQuestions}) is saved and will show a band the moment one is configured.
               </p>
             )}
@@ -217,7 +232,7 @@ export default async function ExamResultsPage({
           <div className="space-y-3">
             <h2 className="flex items-center gap-2 text-sm font-medium tracking-wide uppercase">
               <span className="bg-destructive/10 text-destructive flex size-5 items-center justify-center rounded-full text-xs">
-                {wrongQuestions.length}
+                {wrongCount}
               </span>
               Wrong Answers
             </h2>
@@ -225,12 +240,13 @@ export default async function ExamResultsPage({
               <p className="text-muted-foreground text-sm">Every question was answered correctly.</p>
             ) : (
               <div className="space-y-3">
-                {wrongQuestions.map(({ question, index, answer }) => (
+                {wrongQuestions.map(({ question, label, correctInRow, answer }) => (
                   <WrongAnswerCard
                     key={question.id}
                     resultId={resultId}
                     questionId={question.id}
-                    index={index}
+                    label={question.span > 1 ? `Questions ${label}` : `Question ${label}`}
+                    detail={question.span > 1 ? `${correctInRow}/${question.span} correct` : undefined}
                     prompt={question.prompt}
                     answered={isResponseAnswered(answer?.response)}
                   />
@@ -242,7 +258,7 @@ export default async function ExamResultsPage({
           <div className="space-y-3">
             <h2 className="flex items-center gap-2 text-sm font-medium tracking-wide uppercase">
               <span className="bg-success/10 text-success flex size-5 items-center justify-center rounded-full text-xs">
-                {correctQuestions.length}
+                {correctCount}
               </span>
               Correct Answers
             </h2>
@@ -250,12 +266,14 @@ export default async function ExamResultsPage({
               <p className="text-muted-foreground text-sm">No correct answers yet — review below and try again.</p>
             ) : (
               <div className="space-y-2">
-                {correctQuestions.map(({ question, index }) => (
+                {correctQuestions.map(({ question, label }) => (
                   <Card key={question.id} className="py-3.5">
                     <CardContent className="flex items-start gap-2.5">
                       <CheckCircle2 className="text-success mt-0.5 size-4 shrink-0" aria-hidden="true" />
                       <div className="min-w-0 flex-1">
-                        <span className="text-muted-foreground text-xs font-medium">Question {index}</span>
+                        <span className="text-muted-foreground text-xs font-medium">
+                          {question.span > 1 ? "Questions" : "Question"} {label}
+                        </span>
                         <p className="text-sm">{question.prompt}</p>
                       </div>
                     </CardContent>

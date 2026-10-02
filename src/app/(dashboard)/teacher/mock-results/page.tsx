@@ -12,8 +12,15 @@ import { ExportMockResultsButtons } from "@/components/teacher/export-mock-resul
 
 export const metadata: Metadata = { title: "Mock Results" };
 
-function formatBand(band: number | null): string {
+function formatBand(band: number | null, included = true): string {
+  if (!included) return "n/a";
   return band != null ? band.toFixed(1) : "—";
+}
+
+const dateTimeFormat = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+function formatDateTime(date: Date | null): string {
+  return date ? dateTimeFormat.format(date) : "—";
 }
 
 export default async function TeacherMockResultsPage({
@@ -25,6 +32,8 @@ export default async function TeacherMockResultsPage({
   const { q } = await searchParams;
 
   const rows = await listMockResultsForTeacher(profile.id, q);
+  // A Speaking column only appears when at least one of these mocks actually tests Speaking.
+  const showSpeaking = rows.some((row) => row.includes.speaking);
 
   return (
     <>
@@ -46,28 +55,35 @@ export default async function TeacherMockResultsPage({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Access Code</TableHead>
-              <TableHead>Mock</TableHead>
               <TableHead>Student</TableHead>
-              <TableHead>Reading</TableHead>
               <TableHead>Listening</TableHead>
+              <TableHead>Reading</TableHead>
               <TableHead>Writing</TableHead>
-              <TableHead>Speaking</TableHead>
+              {showSpeaking && <TableHead>Speaking</TableHead>}
               <TableHead>Overall Band</TableHead>
+              <TableHead>Started At</TableHead>
+              <TableHead>Completed At</TableHead>
+              <TableHead>Mock Code</TableHead>
+              <TableHead>Mock</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.attemptId}>
+                <TableCell>
+                  <p className="font-medium">{row.studentName}</p>
+                  <p className="text-muted-foreground text-xs">{row.studentEmail}</p>
+                </TableCell>
+                <TableCell>{formatBand(row.listeningBand)}</TableCell>
+                <TableCell>{formatBand(row.readingBand)}</TableCell>
+                <TableCell>{formatBand(row.writingBand, row.includes.writing)}</TableCell>
+                {showSpeaking && <TableCell>{formatBand(row.speakingBand, row.includes.speaking)}</TableCell>}
+                <TableCell className="font-medium">{formatBand(row.overallBand)}</TableCell>
+                <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{formatDateTime(row.startedAt)}</TableCell>
+                <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{formatDateTime(row.completedAt)}</TableCell>
                 <TableCell className="font-mono text-xs">{row.accessCode ?? "—"}</TableCell>
                 <TableCell className="max-w-48 truncate">{row.mockTitle}</TableCell>
-                <TableCell>{row.studentName}</TableCell>
-                <TableCell>{formatBand(row.readingBand)}</TableCell>
-                <TableCell>{formatBand(row.listeningBand)}</TableCell>
-                <TableCell>{formatBand(row.writingBand)}</TableCell>
-                <TableCell>{formatBand(row.speakingBand)}</TableCell>
-                <TableCell className="font-medium">{formatBand(row.overallBand)}</TableCell>
                 <TableCell>
                   <Badge variant={row.status === "COMPLETED" ? "success" : "outline"}>
                     {row.status === "COMPLETED" ? "Completed" : "In Progress"}

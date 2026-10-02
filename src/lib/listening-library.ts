@@ -2,6 +2,7 @@ import "server-only";
 import type { ArticleDifficulty, ArticleStatus, ListeningAccent } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { deleteStoredFiles } from "@/lib/uploads/storage-cleanup";
 import type { CreateListeningLibraryItemInput, UpdateListeningLibraryItemInput } from "@/lib/validations/listening-library";
 
 export async function createListeningLibraryItem(teacherId: string, input: CreateListeningLibraryItemInput) {
@@ -66,6 +67,8 @@ export async function deleteListeningLibraryItem(itemId: string, teacherId: stri
   const item = await prisma.listeningLibraryItem.findFirst({ where: { id: itemId, createdById: teacherId } });
   if (!item) throw new Error("Listening library item not found.");
   await prisma.listeningLibraryItem.delete({ where: { id: itemId } });
+  // Phase A — the audio and cover live in Storage, not the database, so they must be deleted explicitly or they're orphaned.
+  await deleteStoredFiles([item.audioPath, item.coverImagePath]);
 }
 
 export async function listListeningLibraryItemsForTeacher(teacherId: string) {

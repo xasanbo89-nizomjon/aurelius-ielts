@@ -55,7 +55,7 @@ export default async function FullMockStartPage({
                 This mock requires an access code from your teacher before you can start it.
               </p>
             </div>
-            <MockAccessCodeGate />
+            <MockAccessCodeGate fullMockTestId={fullMockTestId} redirectOnSuccess={false} />
           </CardContent>
         </Card>
       </div>
@@ -87,11 +87,13 @@ export default async function FullMockStartPage({
 
           <div className="flex flex-wrap items-center justify-center gap-1.5">
             {[
-              { label: "Listening", icon: Headphones },
-              { label: "Reading", icon: BookOpen },
-              { label: "Writing", icon: PenLine },
-              { label: "Speaking", icon: Mic },
-            ].map(({ label, icon: Icon }) => (
+              { label: "Listening", icon: Headphones, shown: true },
+              { label: "Reading", icon: BookOpen, shown: true },
+              { label: "Writing", icon: PenLine, shown: test.includes.writing },
+              { label: "Speaking", icon: Mic, shown: test.includes.speaking },
+            ]
+              .filter((section) => section.shown)
+              .map(({ label, icon: Icon }) => (
               <Badge key={label} variant="accent" className="flex items-center gap-1">
                 <Icon className="size-3" aria-hidden="true" /> {label}
               </Badge>
@@ -132,7 +134,14 @@ export default async function FullMockStartPage({
           <p className="text-muted-foreground text-xs">
             {progress
               ? `${progress.completedCount}/${progress.totalCount} sections complete · ~${progress.estimatedMinutesRemaining} min remaining`
-              : "You'll go through Listening, Reading, Writing, then Speaking, in order. You can leave and resume from where you left off."}
+              : `You'll go through ${[
+                  "Listening",
+                  "Reading",
+                  ...(test.includes.writing ? ["Writing"] : []),
+                  ...(test.includes.speaking ? ["Speaking"] : []),
+                ]
+                  .join(", ")
+                  .replace(/, ([^,]*)$/, ", then $1")}, in order. You can leave and resume from where you left off.`}
           </p>
         </CardContent>
       </Card>

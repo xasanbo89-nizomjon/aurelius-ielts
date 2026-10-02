@@ -38,6 +38,9 @@ export default async function TestEditorPage({
       },
       questions: { orderBy: { orderIndex: "asc" } },
       _count: { select: { results: true } },
+      fullMockReadingUses: { select: { fullMockTest: { select: { title: true } } } },
+      fullMockListeningUses: { select: { fullMockTest: { select: { title: true } } } },
+      packageFullMockTest: { select: { title: true } },
     },
   });
 
@@ -70,7 +73,10 @@ export default async function TestEditorPage({
               testId={test.id}
               isPublished={test.isPublished}
               isArchived={test.isArchived}
-              hasResults={test._count.results > 0}
+              attemptCount={test._count.results}
+              ownerMockTitle={test.packageFullMockTest?.title ?? null}
+              usedInFullMocks={[...new Set([...test.fullMockReadingUses, ...test.fullMockListeningUses].map((use) => use.fullMockTest.title))]}
+              redirectAfterDelete="/teacher/tests"
             />
           </div>
         }

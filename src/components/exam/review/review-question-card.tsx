@@ -22,7 +22,10 @@ const STATUS_META: Record<ReviewQuestionStatus, { icon: typeof CheckCircle2; lab
  * question the student got right doesn't need its own answer repeated back.
  */
 export function ReviewQuestionCard({
-  number,
+  numberLabel,
+  grouped,
+  correctInRow,
+  span,
   prompt,
   type,
   options,
@@ -35,7 +38,12 @@ export function ReviewQuestionCard({
   active,
   onActivate,
 }: {
-  number: number;
+  /** "7" for a single question, "22–26" for a matching / summary row covering several. */
+  numberLabel: string;
+  grouped: boolean;
+  /** How many of the row's `span` numbered questions were right — a grouped row can be partly correct. */
+  correctInRow: number;
+  span: number;
   prompt: string;
   type: QuestionType;
   options: unknown;
@@ -61,11 +69,11 @@ export function ReviewQuestionCard({
       <CardContent className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <p className="min-w-0 flex-1 text-sm font-medium">
-            <span className="text-muted-foreground mr-1.5">{number}.</span>
+            <span className="text-muted-foreground mr-1.5">{grouped ? `Questions ${numberLabel}` : `${numberLabel}.`}</span>
             {prompt}
           </p>
           <span className={cn("flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium", meta.badgeClassName)}>
-            <Icon className="size-3.5" aria-hidden="true" /> {meta.label}
+            <Icon className="size-3.5" aria-hidden="true" /> {grouped && status !== "correct" && correctInRow > 0 ? `${correctInRow}/${span} correct` : meta.label}
           </span>
         </div>
 

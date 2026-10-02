@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import type { QuestionType } from "@prisma/client";
 
 import { findAnswerEvidenceOffset } from "@/lib/exam/answer-evidence";
+import { evaluateSlots, formatNumberRange, numberQuestions, slotStatus } from "@/lib/exam/question-numbering";
 import { resolvePassageAudioSrc } from "@/lib/uploads/audio-constraints";
 import type { ExamAttachment } from "@/components/exam/passage-attachments";
 import { MobileSplitTabs } from "@/components/exam/mobile-split-tabs";
@@ -127,7 +128,15 @@ export function ExamReviewSplit({
   partBreakdown: PartBreakdown[];
   questionTypeBreakdown: QuestionTypeStat[];
 }) {
-  const numberedQuestions = useMemo(() => questions.map((question, index) => ({ ...question, number: index + 1 })), [questions]);
+  // Phase A — a matching / summary row covers several IELTS numbers, so numbering (and the navigator) is per NUMBER, not per row: a 40-question test shows 1–40 here exactly as it did in the exam.
+  const numberedQuestions = useMemo(
+    () =>
+      numberQuestions(questions).map((question) => ({
+        ...question,
+        slots: evaluateSlots(question, question.studentAnswer ?? undefined, question.status === "correct"),
+      })),
+    [questions]
+  );
   const [activeQuestionId, setActiveQuestionId] = useState(numberedQuestions[0]?.id ?? "");
   const [activePassageId, setActivePassageId] = useState(passages[0]?.id ?? "");
   const audioPlayerRef = useRef<ReviewAudioPlayerHandle>(null);
@@ -160,11 +169,14 @@ export function ExamReviewSplit({
     document.getElementById(`review-question-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  const navigatorItems: ReviewNavigatorItem[] = numberedQuestions.map((question) => ({
-    id: question.id,
-    number: question.number,
-    status: question.status,
-  }));
+  const navigatorItems: ReviewNavigatorItem[] = numberedQuestions.flatMap((question) =>
+    question.slots.map((slot) => ({
+      id: `${question.id}:${slot.number}`,
+      questionId: question.id,
+      number: slot.number,
+      status: slotStatus(slot),
+    }))
+  );
 
   const audioSrc = displayedPassage ? resolvePassageAudioSrc(displayedPassage) : null;
 
@@ -197,7 +209,10 @@ export function ExamReviewSplit({
           {numberedQuestions.map((question) => (
             <ReviewQuestionCard
               key={question.id}
-              number={question.number}
+              numberLabel={formatNumberRange(question.startNumber, question.endNumber)}
+              grouped={question.span > 1}
+              correctInRow={question.slots.filter((slot) => slot.correct).length}
+              span={question.span}
               prompt={question.prompt}
               type={question.type}
               options={question.options}

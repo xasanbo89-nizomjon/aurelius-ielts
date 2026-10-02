@@ -13,13 +13,15 @@ export const SIMULATABLE_TEST_TYPES = ["READING", "LISTENING"] as const;
  * otherwise starts a fresh one. Only Reading/Listening tests are
  * simulatable in this phase.
  */
-export async function getOrCreateAttempt(studentId: string, mockTestId: string) {
+export async function getOrCreateAttempt(studentId: string, mockTestId: string, options: { viaFullMock?: boolean } = {}) {
   const mockTest = await prisma.mockTest.findUnique({
     where: { id: mockTestId },
-    select: { id: true, type: true, isPublished: true, isArchived: true },
+    select: { id: true, type: true, isPublished: true, isArchived: true, packageFullMockTestId: true },
   });
 
   if (!mockTest || !mockTest.isPublished || mockTest.isArchived) return null;
+  // A test built for a Full Mock package can only be sat through that mock (and so through its access code) — never started on its own.
+  if (mockTest.packageFullMockTestId && !options.viaFullMock) return null;
   if (!SIMULATABLE_TEST_TYPES.includes(mockTest.type as (typeof SIMULATABLE_TEST_TYPES)[number])) {
     return null;
   }

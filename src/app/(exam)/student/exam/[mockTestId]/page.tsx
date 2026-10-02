@@ -6,6 +6,7 @@ import { BookOpen, Clock, FileQuestion, Headphones, Lock } from "lucide-react";
 import { requireStudentProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hasActiveAccess } from "@/lib/subscription";
+import { getQuestionNumberCount } from "@/lib/exam/question-counts";
 import { startAttemptAction } from "@/actions/exam.actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,7 +23,7 @@ export default async function ExamStartPage({
   const { profile } = await requireStudentProfile();
 
   const test = await prisma.mockTest.findFirst({
-    where: { id: mockTestId, isPublished: true, isArchived: false, type: { in: ["READING", "LISTENING"] } },
+    where: { id: mockTestId, isPublished: true, isArchived: false, packageFullMockTestId: null, type: { in: ["READING", "LISTENING"] } },
     select: {
       id: true,
       title: true,
@@ -30,11 +31,11 @@ export default async function ExamStartPage({
       type: true,
       category: true,
       durationMinutes: true,
-      _count: { select: { questions: true } },
     },
   });
 
   if (!test) notFound();
+  const questionCount = await getQuestionNumberCount(test.id);
 
   const canStart = test.category === "CAMBRIDGE" || (await hasActiveAccess(profile.id));
   const boundStart = startAttemptAction.bind(null, test.id);
@@ -64,7 +65,7 @@ export default async function ExamStartPage({
               <dt className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
                 <FileQuestion className="size-3.5" aria-hidden="true" /> Questions
               </dt>
-              <dd className="font-display mt-1 text-xl font-medium">{test._count.questions}</dd>
+              <dd className="font-display mt-1 text-xl font-medium">{questionCount}</dd>
             </div>
             <div className="bg-secondary/50 rounded-xl px-4 py-3.5">
               <dt className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">

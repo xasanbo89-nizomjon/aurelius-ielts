@@ -30,7 +30,7 @@ export function MockAccessCodeGate({ fullMockTestId, redirectOnSuccess = true }:
     }
 
     setSubmitting(true);
-    const result = await redeemMockAccessCodeAction({ code });
+    const result = await redeemMockAccessCodeAction({ code, fullMockTestId });
     setSubmitting(false);
 
     if (!result.success) {

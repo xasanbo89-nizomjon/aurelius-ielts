@@ -1,7 +1,8 @@
 import type { QuestionType } from "@prisma/client";
 
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
-import { importedQuestionGroupJsonSchema, type ImportedQuestionGroupJson } from "@/lib/exam/pdf-import-conversion";
+import { importedQuestionGroupJsonSchema, missingSummaryBlankNumbers, type ImportedQuestionGroupJson } from "@/lib/exam/pdf-import-conversion";
+import { LISTENING_PART_COUNT, LISTENING_TOTAL_QUESTIONS, listeningPartOf, listeningPartRange } from "@/lib/exam/listening-structure";
 
 /**
  * Phase 50.4 — the completeness gate for a PDF import. Pure (no DB, no
@@ -34,7 +35,8 @@ export type ImportIssueCode =
   | "DUPLICATE_QUESTION"
   | "ANSWER_WITHOUT_QUESTION"
   | "QUESTION_WITHOUT_ANSWER"
-  | "INVALID_GROUP";
+  | "INVALID_GROUP"
+  | "INCOMPLETE_LISTENING";
 
 export type ImportIssue = { code: ImportIssueCode; message: string; questionNumbers: number[]; passageId?: string; groupId?: string };
 
@@ -139,7 +141,20 @@ function groupImportProblems(group: ValidationGroupInput, json: ImportedQuestion
   }
 
   if (type === "SUMMARY_COMPLETION") {
-    if (!json.summaryText || json.summaryText.trim().length === 0) problems.push("has no summary text");
+    if (!json.summaryText || json.summaryText.trim().length === 0) {
+      problems.push("has no summary text");
+    } else {
+      // A blank the student has no answer box for is a question they can't answer — block the import and say exactly which (see insertSummaryBlankMarkers for what is auto-detected).
+      const unplaced = missingSummaryBlankNumbers(json.summaryText, group.startNumber, group.endNumber);
+      if (unplaced.length > 0) {
+        problems.push(
+          `the summary text doesn't show where ${questionsLabel(unplaced).toLowerCase()} go${unplaced.length === 1 ? "es" : ""} — edit the summary and write ${unplaced
+            .slice(0, 3)
+            .map((n) => `{{${n}}}`)
+            .join(", ")}${unplaced.length > 3 ? ", …" : ""} where each answer box belongs`
+        );
+      }
+    }
     return problems;
   }
 
@@ -165,7 +180,11 @@ function groupImportProblems(group: ValidationGroupInput, json: ImportedQuestion
 export function validateImportedTest(
   passages: ValidationPassageInput[],
   answerNumbers: number[],
-  options: { sectionLabel?: "Passage" | "Section" } = {}
+  options: {
+    sectionLabel?: "Passage" | "Section";
+    /** Phase B — hold the import to the fixed shape of a real Listening test (4 parts, questions 1–40, ten per part), so a partial Listening test can never be created. */
+    listeningStructure?: boolean;
+  } = {}
 ): ImportValidation {
   const sectionLabel = options.sectionLabel ?? "Passage";
   const issues: ImportIssue[] = [];
@@ -287,6 +306,32 @@ export function validateImportedTest(
           : `${questionsLabel(questionsWithoutAnswer)} ${questionsWithoutAnswer.length === 1 ? "has" : "have"} no answer in the answer key.`,
       questionNumbers: questionsWithoutAnswer,
     });
+  }
+
+  if (options.listeningStructure && passages.length > 0) {
+    const problems: string[] = [];
+    if (passages.length !== LISTENING_PART_COUNT) {
+      problems.push(`it has ${passages.length} part${passages.length === 1 ? "" : "s"} instead of ${LISTENING_PART_COUNT}`);
+    }
+    const fullSet = Array.from({ length: LISTENING_TOTAL_QUESTIONS }, (_, i) => i + 1);
+    const absent = fullSet.filter((n) => !questionSet.has(n));
+    if (absent.length > 0) problems.push(`questions ${formatNumberRanges(absent)} weren't found (${questionSet.size} of ${LISTENING_TOTAL_QUESTIONS})`);
+    const outside = [...questionSet].filter((n) => n < 1 || n > LISTENING_TOTAL_QUESTIONS);
+    if (outside.length > 0) problems.push(`question${outside.length === 1 ? "" : "s"} ${formatNumberRanges(outside)} fall${outside.length === 1 ? "s" : ""} outside 1–${LISTENING_TOTAL_QUESTIONS}`);
+    if (passages.length === LISTENING_PART_COUNT) {
+      passageStats.forEach((stats, index) => {
+        const range = listeningPartRange(index + 1);
+        const misplaced = stats.groups.flatMap((g) => g.extractedNumbers).filter((n) => n >= 1 && n <= LISTENING_TOTAL_QUESTIONS && listeningPartOf(n) !== index + 1);
+        if (misplaced.length > 0) problems.push(`${stats.label} should hold questions ${range.start}–${range.end} but also has ${formatNumberRanges(misplaced)}`);
+      });
+    }
+    if (problems.length > 0) {
+      issues.push({
+        code: "INCOMPLETE_LISTENING",
+        message: `This isn't a complete Listening test (4 parts, questions 1–${LISTENING_TOTAL_QUESTIONS}): ${problems.join("; ")}.`,
+        questionNumbers: absent,
+      });
+    }
   }
 
   const ok = issues.length === 0 && passages.length > 0;

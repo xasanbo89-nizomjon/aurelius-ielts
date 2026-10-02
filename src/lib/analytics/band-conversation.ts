@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
+import { summarizeAttemptSlots } from "@/lib/exam/question-numbering";
 import type { ExamAttachment } from "@/components/exam/passage-attachments";
 import type { QuestionType, SkillType, VocabularyStatus } from "@prisma/client";
 
@@ -275,17 +276,27 @@ export async function getTestHistoryForStudent(studentId: string): Promise<TestH
       bandScore: true,
       durationSeconds: true,
       completedAt: true,
-      mockTest: { select: { title: true, questions: { select: { id: true, points: true } } } },
-      answers: { select: { questionId: true, isCorrect: true } },
+      mockTest: {
+        select: {
+          title: true,
+          questions: { orderBy: { orderIndex: "asc" }, select: { id: true, points: true, type: true, options: true, correctAnswer: true } },
+        },
+      },
+      answers: { select: { questionId: true, isCorrect: true, response: true } },
     },
   });
 
   return results.map((result) => {
     const maxScore = result.mockTest.questions.reduce((sum, q) => sum + q.points, 0);
-    const answeredIds = new Set(result.answers.map((a) => a.questionId));
-    const correctAnswers = result.answers.filter((a) => a.isCorrect === true).length;
-    const incorrectAnswers = result.answers.filter((a) => a.isCorrect === false).length;
-    const unansweredQuestions = result.mockTest.questions.filter((q) => !answeredIds.has(q.id)).length;
+    // Phase A — counted per NUMBERED question (a matching / summary row covers several), so correct + incorrect + unanswered adds up to the same 40 the student sees and the score is out of.
+    const { totals } = summarizeAttemptSlots(
+      result.mockTest.questions,
+      new Map(result.answers.map((a) => [a.questionId, a.response])),
+      new Map(result.answers.map((a) => [a.questionId, a.isCorrect]))
+    );
+    const correctAnswers = totals.correct;
+    const incorrectAnswers = totals.incorrect;
+    const unansweredQuestions = totals.skipped;
 
     return {
       resultId: result.id,

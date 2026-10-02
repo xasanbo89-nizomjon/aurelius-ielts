@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireStudentProfile } from "@/lib/session";
 import { getAttemptSummary } from "@/lib/exam/attempts";
 import { getResultInsights } from "@/lib/exam/result-insights";
+import { summarizeAttemptSlots } from "@/lib/exam/question-numbering";
 import { Button } from "@/components/ui/button";
 import { ReviewHeader } from "@/components/exam/review/review-header";
 import { ExamReviewSplit, type ReviewQuestionData } from "@/components/exam/review/exam-review-split";
@@ -44,9 +45,15 @@ export default async function ExamReviewPage({
     };
   });
 
-  const correctCount = questions.filter((q) => q.status === "correct").length;
-  const incorrectCount = questions.filter((q) => q.status === "incorrect").length;
-  const skippedCount = questions.filter((q) => q.status === "skipped").length;
+  // Phase A — counted per NUMBERED question (a matching / summary row covers several), same as the exam screen and the results page.
+  const { totals } = summarizeAttemptSlots(
+    attempt.mockTest.questions,
+    new Map(attempt.answers.map((answer) => [answer.questionId, answer.response])),
+    new Map(attempt.answers.map((answer) => [answer.questionId, answer.isCorrect]))
+  );
+  const correctCount = totals.correct;
+  const incorrectCount = totals.incorrect;
+  const skippedCount = totals.skipped;
 
   const savedHighlights: ReviewHighlight[] = attempt.highlights.map((highlight) => ({
     id: highlight.id,

@@ -29,7 +29,7 @@ export const getWhatsNewFeed = cache(async function getWhatsNewFeed(
 ): Promise<WhatsNewItem[]> {
   const [tests, articles, writingTasks, updates] = await Promise.all([
     prisma.mockTest.findMany({
-      where: { isPublished: true, isArchived: false },
+      where: { isPublished: true, isArchived: false, packageFullMockTestId: null },
       orderBy: { createdAt: "desc" },
       take: FEED_SLICE,
       select: { id: true, title: true, type: true, createdAt: true },

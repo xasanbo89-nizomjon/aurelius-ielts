@@ -270,45 +270,46 @@ model StudentProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  results                Result[]
-  writingSubmissions     WritingSubmission[]
-  speakingSubmissions    SpeakingSubmission[]
-  assignments            Assignment[]
-  subscriptions          Subscription[]
-  payments               Payment[]
-  aiExplanationRequests  AiExplanationRequest[]
-  studyPlans             StudyPlan[]
-  writingAiActionLogs    WritingAiActionLog[]
-  promoCodeRedemptions   PromoCodeRedemption[]
-  articleViews           ArticleView[]
-  readingProgress        ReadingProgress[]
-  vocabulary             StudentVocabulary[]
-  vocabularyLookups      VocabularyLookup[]
-  vocabularyAiActionLogs VocabularyAiActionLog[]
-  notificationReads      NotificationRead[]
-  trialAuditLogs         TrialAuditLog[]
-  writingFeedback        WritingFeedback?
-  writingPractice        WritingPractice?
-  studyActivities        StudyActivity[]
-  studyStreak            StudyStreak?
-  achievementUnlocks     AchievementUnlock[]
-  writingTaskAssignments WritingTaskAssignment[]
-  aiInsightCache         AIInsightCache[]
-  questionBookmarks      QuestionBookmark[]
-  writingTaskBookmarks   WritingTaskBookmark[]
-  invoices               Invoice[]
-  premiumRequests        PremiumRequest[]
-  fullMockAttempts       FullMockAttempt[]
-  articleHighlights      ArticleHighlight[]
-  articleNotes           ArticleNote[]
-  articleBookmarks       ArticleBookmark[]
-  speakingAttempts       SpeakingAttempt[]
+  results                   Result[]
+  writingSubmissions        WritingSubmission[]
+  speakingSubmissions       SpeakingSubmission[]
+  assignments               Assignment[]
+  subscriptions             Subscription[]
+  payments                  Payment[]
+  aiExplanationRequests     AiExplanationRequest[]
+  studyPlans                StudyPlan[]
+  writingAiActionLogs       WritingAiActionLog[]
+  promoCodeRedemptions      PromoCodeRedemption[]
+  articleViews              ArticleView[]
+  readingProgress           ReadingProgress[]
+  vocabulary                StudentVocabulary[]
+  vocabularyLookups         VocabularyLookup[]
+  vocabularyAiActionLogs    VocabularyAiActionLog[]
+  notificationReads         NotificationRead[]
+  trialAuditLogs            TrialAuditLog[]
+  writingFeedback           WritingFeedback?
+  writingPractice           WritingPractice?
+  studyActivities           StudyActivity[]
+  studyStreak               StudyStreak?
+  achievementUnlocks        AchievementUnlock[]
+  writingTaskAssignments    WritingTaskAssignment[]
+  aiInsightCache            AIInsightCache[]
+  questionBookmarks         QuestionBookmark[]
+  writingTaskBookmarks      WritingTaskBookmark[]
+  invoices                  Invoice[]
+  premiumRequests           PremiumRequest[]
+  fullMockAttempts          FullMockAttempt[]
+  articleHighlights         ArticleHighlight[]
+  articleNotes              ArticleNote[]
+  articleBookmarks          ArticleBookmark[]
+  speakingAttempts          SpeakingAttempt[]
   /// Phase 45 — Media Library 2.0.
   readingLibraryBookmarks   ReadingLibraryBookmark[]
   listeningLibraryBookmarks ListeningLibraryBookmark[]
   /// Phase 51 — Mock Access Code System.
-  assignedMockAccessCodes MockAccessCode[] @relation("MockAccessCodeAssigned")
-  redeemedMockAccessCodes MockAccessCode[] @relation("MockAccessCodeRedeemed")
+  assignedMockAccessCodes   MockAccessCode[]           @relation("MockAccessCodeAssigned")
+  redeemedMockAccessCodes   MockAccessCode[]           @relation("MockAccessCodeRedeemed")
+  mockAccessCodeRedemptions MockAccessCodeRedemption[] @relation("MockAccessCodeRedemptions")
 
   @@map("student_profiles")
 }
@@ -338,8 +339,8 @@ model TeacherProfile {
   mockTests               MockTest[]
   assignments             Assignment[]
   promoCodes              PromoCode[]
-  reviewedWritings        WritingSubmission[]   @relation("WritingReviewer")
-  reviewedSpeakings       SpeakingSubmission[]  @relation("SpeakingReviewer")
+  reviewedWritings        WritingSubmission[]    @relation("WritingReviewer")
+  reviewedSpeakings       SpeakingSubmission[]   @relation("SpeakingReviewer")
   bandConversionRanges    BandConversionRange[]
   updates                 Update[]
   aiSettings              AiSettings?
@@ -348,7 +349,7 @@ model TeacherProfile {
   trialAuditLogs          TrialAuditLog[]
   writingTasks            WritingTask[]
   speakingTasks           SpeakingTask[]
-  reviewedPremiumRequests PremiumRequest[]      @relation("PremiumRequestReviewer")
+  reviewedPremiumRequests PremiumRequest[]       @relation("PremiumRequestReviewer")
   fullMockTests           FullMockTest[]
   speakingTopics          SpeakingTopic[]
   mediaFiles              MediaFile[]
@@ -409,6 +410,11 @@ model MockTest {
   /// Phase 50 — set when this test was created via the PDF Importer's confirm step.
   importedFrom          ImportedTest?
 
+  /// Phase B — set when this test was created as one section of a Full Mock PACKAGE (the one-shot builder). A package-owned test belongs to exactly that mock: it is never offered as a standalone practice test (so it can't be sat outside the mock's access code), it can't be linked into any other mock, and it is deleted together with its package. Null for every test authored on its own. SetNull so a bare database-level delete of the mock can never take real attempt data with it.
+  packageFullMockTestId String?
+  packageFullMockTest   FullMockTest? @relation("FullMockPackageTests", fields: [packageFullMockTestId], references: [id], onDelete: SetNull)
+
+  @@index([packageFullMockTestId])
   @@map("mock_tests")
 }
 
@@ -438,13 +444,13 @@ model Passage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  questions   Question[]
-  highlights  Highlight[]
-  notes       Note[]
+  questions      Question[]
+  highlights     Highlight[]
+  notes          Note[]
   /// Phase 35 — real visual materials (images/charts/tables/diagrams/maps)
   /// a teacher attaches to a Reading passage or Listening section, shown
   /// alongside the text/audio in the split-screen exam layout.
-  attachments PassageAttachment[]
+  attachments    PassageAttachment[]
   /// Phase 50.1 — teacher-side organization only (e.g. "Questions 1-5"). Purely cosmetic for authoring/review — students always see a plain, ungrouped question list (see Question.questionGroupId).
   questionGroups QuestionGroup[]
 
@@ -515,11 +521,11 @@ model PassageAttachment {
 }
 
 model Question {
-  id         String   @id @default(cuid())
-  mockTestId String
-  mockTest   MockTest @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
-  passageId  String?
-  passage    Passage? @relation(fields: [passageId], references: [id], onDelete: Cascade)
+  id              String         @id @default(cuid())
+  mockTestId      String
+  mockTest        MockTest       @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+  passageId       String?
+  passage         Passage?       @relation(fields: [passageId], references: [id], onDelete: Cascade)
   /// Phase 50.1 — optional teacher-side grouping (see QuestionGroup). SetNull
   /// (not Cascade): deleting a group only ungroups its questions, never
   /// deletes them or any real student Answer history attached to them. Null
@@ -560,24 +566,24 @@ model Question {
 // ---------------------------------------------------------------------------
 
 model ImportedTest {
-  id             String             @id @default(cuid())
-  teacherId      String
-  teacher        TeacherProfile     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  id               String             @id @default(cuid())
+  teacherId        String
+  teacher          TeacherProfile     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   /// Only READING or LISTENING are valid imports — enforced in the Zod
   /// validation layer, not the DB, since TestType is shared with other models.
-  type           TestType
-  sourceFileName String
+  type             TestType
+  sourceFileName   String
   /// The uploaded PDF's Supabase Storage object path (bucket "test-import-pdfs") — teacher-only, never linked from any student-facing page.
-  pdfPath        String
-  status         ImportedTestStatus @default(UPLOADED)
+  pdfPath          String
+  status           ImportedTestStatus @default(UPLOADED)
   /// AI-detected test title, editable by the teacher before import; falls back to the source file name if detection fails.
-  title          String?
+  title            String?
   /// The raw PDF text extraction, kept for debugging/re-parsing — never shown in any UI.
-  rawExtractedText String?          @db.Text
-  errorMessage   String?
+  rawExtractedText String?            @db.Text
+  errorMessage     String?
 
   /// Set once the teacher confirms the import — the real, live MockTest this staging data became. SetNull (not Cascade) so deleting the live test later never cascades back into deleting this audit row.
-  resultMockTestId String?  @unique
+  resultMockTestId String?   @unique
   resultMockTest   MockTest? @relation(fields: [resultMockTestId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
@@ -621,12 +627,12 @@ model ImportedQuestionGroup {
   importedPassageId String
   importedPassage   ImportedPassage @relation(fields: [importedPassageId], references: [id], onDelete: Cascade)
 
-  startNumber  Int
-  endNumber    Int
-  questionType QuestionType
-  instructions String       @db.Text
+  startNumber   Int
+  endNumber     Int
+  questionType  QuestionType
+  instructions  String       @db.Text
   questionsJson Json
-  orderIndex   Int          @default(0)
+  orderIndex    Int          @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -965,8 +971,8 @@ model WritingTask {
   /// map/process image), reusing the Phase 38 Media Library exactly like
   /// PassageAttachment/ArticleAttachment do. Null for Task 2 and for Task 1
   /// tasks still only using the text description above.
-  imageMediaFileId String?
-  imageMediaFile   MediaFile? @relation(fields: [imageMediaFileId], references: [id], onDelete: SetNull)
+  imageMediaFileId  String?
+  imageMediaFile    MediaFile?          @relation(fields: [imageMediaFileId], references: [id], onDelete: SetNull)
   /// Phase 14 — supersedes the old `isPublished` boolean with a real
   /// 3-state lifecycle (Create -> Publish -> Archive), matching the Root
   /// Teacher Writing Tasks workflow. Only PUBLISHED tasks are ever visible
@@ -1109,7 +1115,7 @@ model SpeakingTask {
   part   Int
   prompt String @db.Text
 
-  status SpeakingTaskStatus @default(DRAFT)
+  status         SpeakingTaskStatus @default(DRAFT)
   /// Phase 47 — Skill Media Library's "Content thumbnails" for Speaking topics.
   coverImagePath String?
 
@@ -1349,11 +1355,11 @@ enum FullMockTestStatus {
 }
 
 model FullMockTest {
-  id               String             @id @default(cuid())
+  id               String              @id @default(cuid())
   title            String
-  description      String?            @db.Text
+  description      String?             @db.Text
   coverImagePath   String?
-  status           FullMockTestStatus @default(DRAFT)
+  status           FullMockTestStatus  @default(DRAFT)
   /// A real, teacher-set guidance range shown on the card (e.g. 6.0-7.5) —
   /// never computed/invented; null until the teacher sets it in Step 1/6.
   estimatedBandMin Float?
@@ -1369,7 +1375,7 @@ model FullMockTest {
   /// CAMBRIDGE-category Full Mock Test is the "Free users: limited" tier's
   /// real free inventory, GENERAL is premium-gated. Defaults to GENERAL so
   /// every pre-Phase-47 test stays premium-gated exactly as it already was.
-  category         MockTestCategory   @default(GENERAL)
+  category         MockTestCategory    @default(GENERAL)
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -1384,6 +1390,8 @@ model FullMockTest {
   attempts          FullMockAttempt[]
   /// Phase 51 — Mock Access Code System.
   accessCodes       MockAccessCode[]
+  /// Phase B — the Reading / Listening tests this mock owns (see MockTest.packageFullMockTestId).
+  packageTests      MockTest[]                 @relation("FullMockPackageTests")
 
   @@map("full_mock_tests")
 }
@@ -1539,16 +1547,37 @@ model MockAccessCode {
   isActive  Boolean   @default(true)
   expiresAt DateTime?
 
+  /// Phase A — how many DIFFERENT students may redeem this code. 1 (the default, and what every pre-existing code gets) is the original one-student-per-code behavior; a larger number makes a shared classroom code; null means unlimited. A code pre-assigned to a student is always effectively 1.
+  maxRedemptions  Int? @default(1)
+  /// Phase A — distinct students who have redeemed it so far (= rows in redemptions). Kept as a column so the "is it used up?" check is one atomic guarded UPDATE, same technique as PromoCode's usage limit.
+  redemptionCount Int  @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  attempts FullMockAttempt[]
+  attempts    FullMockAttempt[]
+  redemptions MockAccessCodeRedemption[]
 
   @@index([fullMockTestId])
   @@index([createdById])
   @@index([assignedStudentId])
   @@index([redeemedByStudentId])
   @@map("mock_access_codes")
+}
+
+/// Phase A — one row per (code, student) that redeemed it. This is what makes a code reusable across several students: the student's own gate check ("have I redeemed this?") reads here, so one student re-entering the code never consumes a second use, and every student keeps their own attempt.
+model MockAccessCodeRedemption {
+  id           String         @id @default(cuid())
+  accessCodeId String
+  accessCode   MockAccessCode @relation(fields: [accessCodeId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      StudentProfile @relation("MockAccessCodeRedemptions", fields: [studentId], references: [id], onDelete: Cascade)
+
+  redeemedAt DateTime @default(now())
+
+  @@unique([accessCodeId, studentId])
+  @@index([studentId])
+  @@map("mock_access_code_redemptions")
 }
 
 /// Links ONE real completed Result / WritingSubmission / SpeakingSubmission
@@ -2686,16 +2715,16 @@ model MediaFolder {
 model MediaFile {
   id String @id @default(cuid())
 
-  fileName String
+  fileName    String
   /// Phase 47 — a real teacher-set display title, distinct from the raw uploaded fileName. Null until a teacher sets one (falls back to fileName for display).
   title       String?
   /// Phase 47 — a real teacher-set description. Null until a teacher sets one.
-  description String? @db.Text
-  type     MediaFileType
-  mimeType String
-  path     String
+  description String?       @db.Text
+  type        MediaFileType
+  mimeType    String
+  path        String
   /// Bytes — read from the real uploaded file, never estimated. The basis for the 5GB teacher storage quota.
-  size     Int
+  size        Int
   /// Phase 47 — SHA-256 of the ORIGINAL uploaded bytes (before any image compression), used to detect and skip re-uploading a file this teacher already has in their library ("avoid duplicate uploads"). Null for every file uploaded before this existed.
   contentHash String?
 

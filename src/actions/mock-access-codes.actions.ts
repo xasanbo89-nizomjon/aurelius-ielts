@@ -8,6 +8,7 @@ import {
   createMockAccessCodeSchema,
   createBulkMockAccessCodesSchema,
   updateMockAccessCodeExpirySchema,
+  updateMockAccessCodeMaxRedemptionsSchema,
   redeemMockAccessCodeSchema,
 } from "@/lib/validations/mock-access-codes";
 import { friendlyErrorMessage } from "@/lib/validation-error";
@@ -27,6 +28,7 @@ export async function createMockAccessCodeAction(fullMockTestId: string, input: 
     const row = await mockAccessCodes.createMockAccessCode(fullMockTestId, profile.id, {
       assignedStudentId: parsed.assignedStudentId,
       expiresAt: parsed.expiresAt ?? null,
+      maxRedemptions: parsed.maxRedemptions,
     });
     revalidatePath(`/teacher/tests/full-mock/${fullMockTestId}/access-codes`);
     return { success: true, code: row.code };
@@ -44,6 +46,7 @@ export async function createBulkMockAccessCodesAction(fullMockTestId: string, in
     const rows = await mockAccessCodes.createBulkMockAccessCodes(fullMockTestId, profile.id, {
       count: parsed.count,
       expiresAt: parsed.expiresAt ?? null,
+      maxRedemptions: parsed.maxRedemptions,
     });
     revalidatePath(`/teacher/tests/full-mock/${fullMockTestId}/access-codes`);
     return { success: true, codes: rows.map((r) => r.code) };
@@ -75,6 +78,18 @@ export async function updateMockAccessCodeExpiryAction(accessCodeId: string, ful
   }
 }
 
+export async function updateMockAccessCodeMaxRedemptionsAction(accessCodeId: string, fullMockTestId: string, input: unknown): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    const parsed = updateMockAccessCodeMaxRedemptionsSchema.parse(input);
+    await mockAccessCodes.updateMockAccessCodeMaxRedemptions(accessCodeId, profile.id, parsed.maxRedemptions);
+    revalidatePath(`/teacher/tests/full-mock/${fullMockTestId}/access-codes`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not update how many students can use this code.") };
+  }
+}
+
 export async function deleteMockAccessCodeAction(accessCodeId: string, fullMockTestId: string): Promise<ActionResult> {
   try {
     const { profile } = await requireTeacherProfile();
@@ -93,7 +108,7 @@ export async function redeemMockAccessCodeAction(input: unknown): Promise<Redeem
   try {
     const { profile } = await requireStudentProfile();
     const parsed = redeemMockAccessCodeSchema.parse(input);
-    const result = await mockAccessCodes.redeemMockAccessCode(parsed.code, profile.id);
+    const result = await mockAccessCodes.redeemMockAccessCode(parsed.code, profile.id, { expectedFullMockTestId: parsed.fullMockTestId });
     if (!result.ok) {
       return {
         success: false,
@@ -115,16 +130,33 @@ export async function exportMockResultsAction(format: ExportFormat, search?: str
     const { profile } = await requireTeacherProfile();
     const rows = await mockAccessCodes.listMockResultsForTeacher(profile.id, search);
 
-    const headers = ["Access Code", "Mock", "Student", "Reading", "Listening", "Writing", "Speaking", "Overall Band", "Status"];
+    const showSpeaking = rows.some((r) => r.includes.speaking);
+    const headers = [
+      "Student",
+      "Email",
+      "Listening",
+      "Reading",
+      "Writing",
+      ...(showSpeaking ? ["Speaking"] : []),
+      "Overall Band",
+      "Started At",
+      "Completed At",
+      "Mock Code",
+      "Mock",
+      "Status",
+    ];
     const table = rows.map((r) => [
+      r.studentName,
+      r.studentEmail,
+      r.listeningBand ?? "",
+      r.readingBand ?? "",
+      r.includes.writing ? (r.writingBand ?? "") : "n/a",
+      ...(showSpeaking ? [r.includes.speaking ? (r.speakingBand ?? "") : "n/a"] : []),
+      r.overallBand ?? "",
+      r.startedAt.toISOString(),
+      r.completedAt ? r.completedAt.toISOString() : "",
       r.accessCode ?? "—",
       r.mockTitle,
-      r.studentName,
-      r.readingBand ?? "",
-      r.listeningBand ?? "",
-      r.writingBand ?? "",
-      r.speakingBand ?? "",
-      r.overallBand ?? "",
       r.status === "COMPLETED" ? "Completed" : "In Progress",
     ]);
 

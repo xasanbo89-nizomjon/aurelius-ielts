@@ -1,9 +1,10 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { bandForSection, overallBandFromSections } from "@/lib/full-mock-band-composition";
+import { bandForSection, overallBandFromSections, requiredSectionsFor } from "@/lib/full-mock-band-composition";
 
-export type FullMockSectionBand = { label: string; band: number | null };
+/** `included` is false for a skill the mock doesn't test (e.g. a Listening + Reading + Writing mock has no Speaking) — the results page hides those instead of showing a permanent "—". */
+export type FullMockSectionBand = { label: string; band: number | null; included: boolean };
 
 export type FullMockResults = {
   fullMockTestId: string;
@@ -33,7 +34,7 @@ export async function getFullMockAttemptResults(attemptId: string, studentId: st
     where: { id: attemptId, studentId },
     select: {
       completedAt: true,
-      fullMockTest: { select: { id: true, title: true } },
+      fullMockTest: { select: { id: true, title: true, _count: { select: { writingSections: true, speakingSections: true } } } },
       sectionResults: {
         select: {
           section: true,
@@ -46,16 +47,22 @@ export async function getFullMockAttemptResults(attemptId: string, studentId: st
   });
   if (!attempt) return null;
 
+  const includesWriting = attempt.fullMockTest._count.writingSections > 0;
+  const includesSpeaking = attempt.fullMockTest._count.speakingSections > 0;
+
   const sections: FullMockResults["sections"] = {
-    listening: { label: "Listening", band: bandForSection(attempt.sectionResults, "LISTENING") },
-    reading: { label: "Reading", band: bandForSection(attempt.sectionResults, "READING") },
-    writing: { label: "Writing", band: bandForSection(attempt.sectionResults, "WRITING") },
-    speaking: { label: "Speaking", band: bandForSection(attempt.sectionResults, "SPEAKING") },
+    listening: { label: "Listening", band: bandForSection(attempt.sectionResults, "LISTENING"), included: true },
+    reading: { label: "Reading", band: bandForSection(attempt.sectionResults, "READING"), included: true },
+    writing: { label: "Writing", band: bandForSection(attempt.sectionResults, "WRITING"), included: includesWriting },
+    speaking: { label: "Speaking", band: bandForSection(attempt.sectionResults, "SPEAKING"), included: includesSpeaking },
   };
 
-  const overallBand = overallBandFromSections(attempt.sectionResults);
+  const overallBand = overallBandFromSections(
+    attempt.sectionResults,
+    requiredSectionsFor({ writingSectionCount: attempt.fullMockTest._count.writingSections, speakingSectionCount: attempt.fullMockTest._count.speakingSections })
+  );
 
-  const known = Object.values(sections).filter((s) => s.band != null) as { label: string; band: number }[];
+  const known = Object.values(sections).filter((s) => s.included && s.band != null) as { label: string; band: number }[];
   const sorted = [...known].sort((a, b) => b.band - a.band);
   const strongest = sorted[0];
   const weakest = sorted[sorted.length - 1];

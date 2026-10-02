@@ -39,9 +39,15 @@ export function SummaryCompletionAnswer({
   options,
   value,
   onChange,
+  startNumber,
 }: QuestionAnswerProps<Options, Record<string, string>>) {
   const answers = value ?? {};
   const parts = splitIntoParts(options.text);
+  // The Nth distinct blank in the text is question startNumber + N — by position, so it holds whether the text's `{{n}}` markers are the paper's own numbers (imports) or restart at 1 (hand-written).
+  const blankOrder = new Map<string, number>();
+  for (const part of parts) {
+    if (typeof part !== "string" && !blankOrder.has(part.blank)) blankOrder.set(part.blank, blankOrder.size);
+  }
   const [armedWord, setArmedWord] = useState<string | null>(null);
 
   function placeInBlank(blankId: string, word: string) {
@@ -52,22 +58,23 @@ export function SummaryCompletionAnswer({
   return (
     <div className="space-y-4">
       <p className="font-display text-[15.5px] leading-[2]">
-        {parts.map((part, index) =>
-          typeof part === "string" ? (
-            <span key={index}>{part}</span>
-          ) : (
+        {parts.map((part, index) => {
+          if (typeof part === "string") return <span key={index}>{part}</span>;
+          const number = startNumber != null ? startNumber + (blankOrder.get(part.blank) ?? 0) : null;
+          return (
             <DroppableBlank key={index} onPlace={(word) => placeInBlank(part.blank, word)} armedWord={armedWord}>
               <Input
                 id={`${questionId}-blank-${part.blank}`}
                 value={answers[part.blank] ?? ""}
                 onChange={(event) => onChange({ ...answers, [part.blank]: event.target.value })}
-                placeholder="…"
-                aria-label={`Blank ${part.blank}`}
+                placeholder={number != null ? String(number) : "…"}
+                data-question-number={number ?? undefined}
+                aria-label={number != null ? `Question ${number}` : `Blank ${part.blank}`}
                 className="mx-1 inline-block h-8 w-32 px-2 align-baseline"
               />
             </DroppableBlank>
-          )
-        )}
+          );
+        })}
       </p>
 
       {options.wordBank && options.wordBank.length > 0 && (

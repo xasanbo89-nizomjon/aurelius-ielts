@@ -96,7 +96,7 @@ export async function resolveNextFullMockStep(attemptId: string, studentId: stri
   // --- LISTENING -----------------------------------------------------------
   const listeningLink = attempt.sectionResults.find((r) => r.section === "LISTENING" && r.result);
   if (!listeningLink) {
-    const result = await getOrCreateAttempt(studentId, listeningMockTestId);
+    const result = await getOrCreateAttempt(studentId, listeningMockTestId, { viaFullMock: true });
     if (!result) return { kind: "error", message: "The linked listening test is no longer available." };
     await prisma.fullMockSectionResult.create({ data: { attemptId, section: "LISTENING", resultId: result.id } });
     return { kind: "exam", resultId: result.id };
@@ -108,7 +108,7 @@ export async function resolveNextFullMockStep(attemptId: string, studentId: stri
   // --- READING ---------------------------------------------------------
   const readingLink = attempt.sectionResults.find((r) => r.section === "READING" && r.result);
   if (!readingLink) {
-    const result = await getOrCreateAttempt(studentId, readingMockTestId);
+    const result = await getOrCreateAttempt(studentId, readingMockTestId, { viaFullMock: true });
     if (!result) return { kind: "error", message: "The linked reading test is no longer available." };
     await prisma.fullMockSectionResult.create({ data: { attemptId, section: "READING", resultId: result.id } });
     return { kind: "exam", resultId: result.id };
@@ -207,14 +207,14 @@ export async function getFullMockProgressSummary(attemptId: string, studentId: s
   let estimatedMinutesRemaining = 0;
   if (!listeningDone) estimatedMinutesRemaining += listeningTest?.durationMinutes ?? 30;
   if (!readingDone) estimatedMinutesRemaining += readingTest?.durationMinutes ?? 60;
-  if (!writingDone) estimatedMinutesRemaining += FULL_MOCK_WRITING_MINUTES;
-  if (!speakingDone) estimatedMinutesRemaining += FULL_MOCK_SPEAKING_MINUTES;
+  if (attempt.fullMockTest.writingSections.length > 0 && !writingDone) estimatedMinutesRemaining += FULL_MOCK_WRITING_MINUTES;
+  if (attempt.fullMockTest.speakingSections.length > 0 && !speakingDone) estimatedMinutesRemaining += FULL_MOCK_SPEAKING_MINUTES;
 
   const sections: FullMockSectionProgress[] = [
     { label: "Listening", done: listeningDone },
     { label: "Reading", done: readingDone },
-    { label: "Writing", done: writingDone },
-    { label: "Speaking", done: speakingDone },
+    ...(attempt.fullMockTest.writingSections.length > 0 ? [{ label: "Writing", done: writingDone }] : []),
+    ...(attempt.fullMockTest.speakingSections.length > 0 ? [{ label: "Speaking", done: speakingDone }] : []),
   ];
 
   return {

@@ -149,12 +149,22 @@ export async function unpublishFullMockTestAction(id: string): Promise<ActionRes
   }
 }
 
-export async function deleteFullMockTestAction(id: string): Promise<ActionResult> {
+export type DeleteFullMockResult = { success: true; warning?: string } | { success: false; error: string };
+
+export async function deleteFullMockTestAction(id: string, options: { deleteAttempts?: boolean } = {}): Promise<DeleteFullMockResult> {
   try {
     const { profile } = await requireTeacherProfile();
-    await fullMockTests.deleteFullMockTest(id, profile.id);
+    const outcome = await fullMockTests.deleteFullMockTest(id, profile.id, { deleteAttempts: options.deleteAttempts === true });
     revalidatePath("/teacher/tests");
-    return { success: true };
+    revalidatePath("/teacher/mock-results");
+    revalidatePath("/teacher/tests/import");
+    return {
+      success: true,
+      warning:
+        outcome.failedFiles.length > 0
+          ? `The mock was deleted, but ${outcome.failedFiles.length} stored file${outcome.failedFiles.length === 1 ? "" : "s"} could not be removed and may need manual cleanup.`
+          : undefined,
+    };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not delete the full mock test.") };
   }

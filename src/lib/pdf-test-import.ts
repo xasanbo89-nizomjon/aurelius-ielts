@@ -4,9 +4,12 @@ import type { MockTestCategory, Prisma, QuestionType, TestType } from "@prisma/c
 import { prisma } from "@/lib/prisma";
 import { downloadFromSupabase } from "@/lib/uploads/supabase";
 import { TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
-import { extractPdfText } from "@/lib/pdf-text-extraction";
+import { deleteBucketObjects } from "@/lib/uploads/storage-cleanup";
+import { extractPdfText, PdfTextExtractionError } from "@/lib/pdf-text-extraction";
+import { AIServiceUnavailableError } from "@/lib/ai/errors";
 import { extractTestStructureFromPdfText } from "@/lib/ai/services/pdf-test-import";
 import * as tm from "@/lib/exam/test-management";
+import { totalQuestionNumbers } from "@/lib/exam/question-numbering";
 import {
   buildQuestionPayloadsFromGroup,
   importedQuestionGroupJsonSchema,
@@ -39,6 +42,21 @@ export class ImportValidationError extends Error {
   }
 }
 
+/** What a teacher is told when analysing a PDF fails — one plain sentence about what happened and what to do, never a raw library or API message. Nothing is saved on any of these paths (the import stays FAILED and no test is created). */
+export function describeAnalysisFailure(error: unknown): string {
+  if (error instanceof PdfTextExtractionError) return error.message;
+  if (error instanceof AIServiceUnavailableError) {
+    return /only extracted|passage\/section headers/i.test(error.message)
+      ? `The PDF's parts weren't all read correctly (${error.message.replace(/^Detected /, "found ")}). Analyze it again.`
+      : "The AI service didn't finish reading this PDF. Nothing was saved — try analyzing it again in a minute.";
+  }
+  const message = error instanceof Error ? error.message : "";
+  if (/Could not download the file from storage/i.test(message)) return "The uploaded PDF could not be found in storage. Upload it again.";
+  if (/OPENAI_API_KEY/i.test(message)) return "The AI service isn't configured, so this PDF can't be read yet. Ask an administrator to set it up.";
+  if (/timed? ?out|timeout/i.test(message)) return "Reading this PDF took too long. Try again, or upload fewer pages at a time.";
+  return "This PDF was read but its questions couldn't be understood. Try analyzing it again, or use a cleaner copy of the file.";
+}
+
 /** The one place a stored import's rows are turned into a validation — used by the review page (to show it) and confirmImport (to enforce it), so what the teacher sees is exactly what is checked. */
 export function validateImportedTestRows(importedTest: {
   type: TestType;
@@ -58,7 +76,7 @@ export function validateImportedTestRows(importedTest: {
       })),
     })),
     importedTest.answers.map((answer) => answer.questionNumber),
-    { sectionLabel: importedTest.type === "LISTENING" ? "Section" : "Passage" }
+    { sectionLabel: importedTest.type === "LISTENING" ? "Section" : "Passage", listeningStructure: importedTest.type === "LISTENING" }
   );
 }
 
@@ -176,13 +194,14 @@ export async function analyzeImportedTest(importedTestId: string, teacherId: str
 
   try {
     const buffer = await downloadFromSupabase(TEST_IMPORT_PDF_BUCKET, row.pdfPath);
-    const { text } = await extractPdfText(buffer);
+    const { text, pageCount, ocrPageCount } = await extractPdfText(buffer);
+    if (ocrPageCount > 0) console.log(`[pdf-test-import] OCR read ${ocrPageCount} of ${pageCount} page(s) (no text layer)`);
     const extraction = await extractTestStructureFromPdfText(row.type as "READING" | "LISTENING", text);
     await persistExtraction(row.id, extraction, text);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not analyze this PDF.";
+    const message = describeAnalysisFailure(error);
     await prisma.importedTest.update({ where: { id: row.id }, data: { status: "FAILED", errorMessage: message.slice(0, 1000) } });
-    throw error;
+    throw new Error(message, { cause: error });
   }
 
   return prisma.importedTest.findUniqueOrThrow({ where: { id: row.id } });
@@ -205,6 +224,7 @@ export async function listImportedTestsForTeacher(teacherId: string) {
       errorMessage: true,
       resultMockTestId: true,
       createdAt: true,
+      resultMockTest: { select: { title: true, _count: { select: { results: true } }, packageFullMockTest: { select: { title: true } } } },
     },
   });
 }
@@ -306,10 +326,41 @@ export async function deleteImportedAnswer(importedTestId: string, teacherId: st
     .catch(() => undefined);
 }
 
-export async function deleteImportedTest(importedTestId: string, teacherId: string) {
-  await assertOwnsImportedTest(importedTestId, teacherId);
+export type DeleteImportedTestOutcome = { deletedTestId: string | null; removedFiles: number; failedFiles: string[] };
+
+/**
+ * Phase B — discards a PDF import: its staged passages / question blocks /
+ * answers (they cascade), AND the uploaded source PDF in Storage, which used to
+ * be left behind for ever. An import that was already confirmed has created a
+ * real test; that test is left alone unless the teacher asks for it to go too
+ * (`alsoDeleteTest`), in which case it goes through the normal test delete —
+ * with all its guards (students' attempts, Full Mock membership) — BEFORE
+ * anything else is touched, so a refusal leaves everything as it was.
+ */
+export async function deleteImportedTest(
+  importedTestId: string,
+  teacherId: string,
+  options: { alsoDeleteTest?: boolean; deleteAttempts?: boolean } = {}
+): Promise<DeleteImportedTestOutcome> {
+  const row = await assertOwnsImportedTest(importedTestId, teacherId);
+
+  let removedFiles = 0;
+  let failedFiles: string[] = [];
+  let deletedTestId: string | null = null;
+
+  if (options.alsoDeleteTest && row.resultMockTestId) {
+    // Deleting the test also deletes this import record (see tm.deleteTest), so there is nothing left to do for the row itself.
+    const outcome = await tm.deleteTest(row.resultMockTestId, teacherId, { deleteResults: options.deleteAttempts === true });
+    removedFiles += outcome.removedFiles;
+    failedFiles = outcome.failedFiles;
+    deletedTestId = row.resultMockTestId;
+    return { deletedTestId, removedFiles, failedFiles };
+  }
+
   // Cascades passages/groups/answers (ImportedPassage/ImportedQuestionGroup/ImportedAnswer all onDelete: Cascade off ImportedTest). The real MockTest, if already imported, is untouched (resultMockTestId's FK is onDelete: SetNull on the MockTest side, not the other way).
   await prisma.importedTest.delete({ where: { id: importedTestId } });
+  const pdf = await deleteBucketObjects(TEST_IMPORT_PDF_BUCKET, [row.pdfPath]);
+  return { deletedTestId, removedFiles: pdf.removed, failedFiles: pdf.failed };
 }
 
 // ---------------------------------------------------------------------------
@@ -420,6 +471,14 @@ export async function confirmImport(
     }
 
     plan.push({ title: parsedPassage.title, content: parsedPassage.content, groups });
+  }
+
+  // Phase A — the rows about to be written must cover EXACTLY the question numbers the review screen promised (a matching / summary row covers several), checked before anything is created. This is the invariant that keeps what the teacher imports (40) identical to what the student is shown (40) — a mismatch aborts the import instead of shipping a short test.
+  const plannedNumbers = totalQuestionNumbers(plan.flatMap((passage) => passage.groups.flatMap((group) => group.questions)));
+  if (plannedNumbers !== validation.totalQuestions) {
+    throw new Error(
+      `Import aborted: the review shows ${validation.totalQuestions} questions but the converted test would contain ${plannedNumbers}. Nothing was imported — please re-analyze the PDF.`
+    );
   }
 
   const mockTest = await tm.createTest(teacherId, parsedTest);

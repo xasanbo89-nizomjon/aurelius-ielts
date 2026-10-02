@@ -3,7 +3,7 @@ import type { MockTestCategory, MockTestDifficulty } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { hasActiveAccess } from "@/lib/subscription";
-import { overallBandFromSections } from "@/lib/full-mock-band-composition";
+import { overallBandFromSections, requiredSectionsFor } from "@/lib/full-mock-band-composition";
 import { FULL_MOCK_SPEAKING_MINUTES, FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
 
 export type FullMockCardData = {
@@ -66,7 +66,7 @@ export async function getStudentFullMockDashboard(studentId: string): Promise<Fu
         fullMockTestId: true,
         status: true,
         completedAt: true,
-        fullMockTest: { select: { title: true } },
+        fullMockTest: { select: { title: true, _count: { select: { writingSections: true, speakingSections: true } } } },
         sectionResults: {
           select: {
             section: true,
@@ -116,7 +116,10 @@ export async function getStudentFullMockDashboard(studentId: string): Promise<Fu
       },
       locked,
       latestAttemptId: latest?.id ?? null,
-      latestOverallBand: latest?.status === "COMPLETED" ? overallBandFromSections(latest.sectionResults) : null,
+      latestOverallBand:
+        latest?.status === "COMPLETED"
+          ? overallBandFromSections(latest.sectionResults, requiredSectionsFor({ writingSectionCount: test.writingSections.length, speakingSectionCount: test.speakingSections.length }))
+          : null,
       latestCompletedAt: latest?.status === "COMPLETED" ? latest.completedAt : null,
     };
 
@@ -128,7 +131,11 @@ export async function getStudentFullMockDashboard(studentId: string): Promise<Fu
 
   const history: FullMockHistoryPoint[] = myAttempts
     .filter((a) => a.status === "COMPLETED" && a.completedAt)
-    .map((a) => ({ attemptId: a.id, testTitle: a.fullMockTest.title, completedAt: a.completedAt as Date, overallBand: overallBandFromSections(a.sectionResults) }))
+    .map((a) => ({ attemptId: a.id, testTitle: a.fullMockTest.title, completedAt: a.completedAt as Date, overallBand: overallBandFromSections(
+        a.sectionResults,
+        requiredSectionsFor({ writingSectionCount: a.fullMockTest._count.writingSections, speakingSectionCount: a.fullMockTest._count.speakingSections })
+      ),
+    }))
     .sort((a, b) => a.completedAt.getTime() - b.completedAt.getTime());
 
   const bandedHistory = history.filter((h): h is FullMockHistoryPoint & { overallBand: number } => h.overallBand != null);

@@ -57,6 +57,8 @@ export default async function MockAccessCodesPage({ params }: { params: Promise<
           assignedStudentName: c.assignedStudent ? c.assignedStudent.user.name ?? c.assignedStudent.user.email : null,
           redeemedByStudentName: c.redeemedByStudent ? c.redeemedByStudent.user.name ?? c.redeemedByStudent.user.email : null,
           redeemedAt: c.redeemedAt,
+          maxRedemptions: c.maxRedemptions,
+          redemptionCount: c.redemptionCount,
         }))}
       />
     </>

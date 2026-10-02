@@ -30,7 +30,7 @@ export function ReviewCenter({
   onOpenChange: (open: boolean) => void;
   questions: NavigatorQuestionState[];
   currentQuestionId: string;
-  onSelect: (questionId: string) => void;
+  onSelect: (questionId: string, number: number) => void;
   onSubmit: () => void;
 }) {
   const [filter, setFilter] = useState<FilterKey>("all");
@@ -46,8 +46,8 @@ export function ReviewCenter({
     return true;
   });
 
-  function handleSelect(questionId: string) {
-    onSelect(questionId);
+  function handleSelect(questionId: string, number: number) {
+    onSelect(questionId, number);
     onOpenChange(false);
   }
 

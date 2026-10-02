@@ -2,6 +2,7 @@ import type { QuestionType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META, QUESTION_TYPE_ORDER } from "@/lib/exam/question-types";
+import { summarizeAttemptSlots } from "@/lib/exam/question-numbering";
 
 export type WeakArea = { type: QuestionType; label: string; correct: number; total: number; accuracy: number };
 
@@ -49,32 +50,36 @@ export async function getResultInsights(resultId: string, studentId: string): Pr
       mockTest: {
         select: {
           passages: { orderBy: { orderIndex: "asc" }, select: { id: true, title: true, orderIndex: true } },
-          questions: { select: { id: true, type: true, passageId: true } },
+          questions: { orderBy: { orderIndex: "asc" }, select: { id: true, type: true, passageId: true, options: true, correctAnswer: true } },
         },
       },
-      answers: { select: { questionId: true, isCorrect: true } },
+      answers: { select: { questionId: true, isCorrect: true, response: true } },
     },
   });
   if (!result) return null;
 
-  const isCorrectByQuestion = new Map(result.answers.map((a) => [a.questionId, a.isCorrect === true]));
-  const answeredIds = new Set(result.answers.map((a) => a.questionId));
+  // Phase A — every figure below counts NUMBERED questions (a matching / summary row covers several), so "x / 40" here matches what the student saw while taking the test and what the teacher's import review showed.
+  const { rows, totals } = summarizeAttemptSlots(
+    result.mockTest.questions,
+    new Map(result.answers.map((a) => [a.questionId, a.response])),
+    new Map(result.answers.map((a) => [a.questionId, a.isCorrect]))
+  );
 
   const byType = new Map<QuestionType, { correct: number; total: number }>();
   const byPassage = new Map<string | null, { correct: number; total: number }>();
 
-  for (const question of result.mockTest.questions) {
-    const correct = isCorrectByQuestion.get(question.id) === true;
+  for (const row of rows) {
+    const correct = row.slots.filter((slot) => slot.correct).length;
 
-    const typeEntry = byType.get(question.type) ?? { correct: 0, total: 0 };
-    typeEntry.total += 1;
-    if (correct) typeEntry.correct += 1;
-    byType.set(question.type, typeEntry);
+    const typeEntry = byType.get(row.type) ?? { correct: 0, total: 0 };
+    typeEntry.total += row.span;
+    typeEntry.correct += correct;
+    byType.set(row.type, typeEntry);
 
-    const passageEntry = byPassage.get(question.passageId) ?? { correct: 0, total: 0 };
-    passageEntry.total += 1;
-    if (correct) passageEntry.correct += 1;
-    byPassage.set(question.passageId, passageEntry);
+    const passageEntry = byPassage.get(row.passageId) ?? { correct: 0, total: 0 };
+    passageEntry.total += row.span;
+    passageEntry.correct += correct;
+    byPassage.set(row.passageId, passageEntry);
   }
 
   const questionTypeBreakdown: QuestionTypeStat[] = QUESTION_TYPE_ORDER.filter((type) => byType.has(type)).map((type) => {
@@ -104,9 +109,9 @@ export async function getResultInsights(resultId: string, studentId: string): Pr
         })
       : [];
 
-  const totalQuestions = result.mockTest.questions.length;
-  const totalCorrect = [...byType.values()].reduce((sum, v) => sum + v.correct, 0);
-  const answered = answeredIds.size;
+  const totalQuestions = totals.total;
+  const totalCorrect = totals.correct;
+  const answered = totals.answered;
 
   const accuracy: AccuracyStats = {
     accuracyPercent: totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : null,

@@ -42,7 +42,7 @@ export async function getRecommendationsForStudent(studentId: string, teacherId:
     prisma.result.findMany({ where: { studentId }, select: { mockTestId: true }, distinct: ["mockTestId"] }),
     prisma.readingProgress.findMany({ where: { studentId }, select: { articleId: true } }),
     prisma.mockTest.findMany({
-      where: { type: { in: ["READING", "LISTENING"] }, isPublished: true, isArchived: false },
+      where: { type: { in: ["READING", "LISTENING"] }, isPublished: true, isArchived: false, packageFullMockTestId: null },
       select: { id: true, title: true, type: true, category: true },
     }),
     teacherId

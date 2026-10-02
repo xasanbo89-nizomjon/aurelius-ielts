@@ -20,6 +20,21 @@ export type FullMockSectionResultBand = {
 };
 
 const SECTIONS = ["LISTENING", "READING", "WRITING", "SPEAKING"] as const;
+export type FullMockSectionKey = (typeof SECTIONS)[number];
+
+/**
+ * Phase A — which skills a given Full Mock actually tests. Listening and
+ * Reading are mandatory for every mock; Writing and Speaking count only when
+ * the mock has that section. A Listening + Reading + Writing mock therefore
+ * gets an Overall Band from its three skills instead of waiting forever on a
+ * Speaking section it never had.
+ */
+export function requiredSectionsFor(test: { writingSectionCount: number; speakingSectionCount: number }): FullMockSectionKey[] {
+  const required: FullMockSectionKey[] = ["LISTENING", "READING"];
+  if (test.writingSectionCount > 0) required.push("WRITING");
+  if (test.speakingSectionCount > 0) required.push("SPEAKING");
+  return required;
+}
 
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -34,8 +49,13 @@ export function bandForSection(rows: FullMockSectionResultBand[], section: (type
   return average(bands);
 }
 
-/** Real Overall Band, only ever returned once all four skills have a real band — never averaged from partial data. */
-export function overallBandFromSections(rows: FullMockSectionResultBand[]): number | null {
-  const bands = SECTIONS.map((section) => bandForSection(rows, section));
+/**
+ * Real Overall Band, only ever returned once EVERY skill the mock includes
+ * (all four by default; pass requiredSectionsFor(test) for the mock's real
+ * composition) has a real band — never averaged from partial data.
+ */
+export function overallBandFromSections(rows: FullMockSectionResultBand[], required: readonly FullMockSectionKey[] = SECTIONS): number | null {
+  if (required.length === 0) return null;
+  const bands = required.map((section) => bandForSection(rows, section));
   return bands.every((b): b is number => b != null) ? roundToIeltsBand(average(bands as number[])!) : null;
 }

@@ -12,13 +12,17 @@ import { Badge } from "@/components/ui/badge";
 export function WrongAnswerCard({
   resultId,
   questionId,
-  index,
+  label,
+  detail,
   prompt,
   answered,
 }: {
   resultId: string;
   questionId: string;
-  index: number;
+  /** "Question 7" / "Questions 22–26" — a grouped row covers several numbered questions. */
+  label: string;
+  /** e.g. "3/5 correct" for a grouped row that was only partly right. */
+  detail?: string;
   prompt: string;
   answered: boolean;
 }) {
@@ -45,7 +49,8 @@ export function WrongAnswerCard({
           <XCircle className="text-destructive mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-center gap-2">
-              <span className="text-muted-foreground text-xs font-medium">Question {index}</span>
+              <span className="text-muted-foreground text-xs font-medium">{label}</span>
+              {detail && <Badge variant="secondary">{detail}</Badge>}
               {!answered && <Badge variant="outline">Skipped</Badge>}
             </div>
             <p className="text-sm">{prompt}</p>

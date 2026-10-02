@@ -18,7 +18,7 @@ import {
 } from "@/actions/exam.actions";
 import { toggleQuestionBookmarkAction } from "@/actions/bookmarks.actions";
 import { cn } from "@/lib/utils";
-import { isResponseAnswered } from "@/lib/exam/grading";
+import { formatNumberRange, numberQuestions, slotAnswered, summarizeSlotAnswer } from "@/lib/exam/question-numbering";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -200,32 +200,41 @@ export function ExamRunner({
     [sortedQuestions, currentPassage]
   );
 
+  // Phase A — a Question ROW is not always one numbered question (a matching task covering 22–26 is one row, five numbers), so everything the student sees — the navigator, the "x of 40", the answered tally — counts NUMBERS, via the same helper the importer/teacher side uses. Counting rows here is what made a 40-question test show as 26.
+  const numberedQuestions = useMemo(() => numberQuestions(sortedQuestions), [sortedQuestions]);
+  const numberedById = useMemo(() => new Map(numberedQuestions.map((question) => [question.id, question])), [numberedQuestions]);
+  const totalQuestionCount = numberedQuestions.length > 0 ? numberedQuestions[numberedQuestions.length - 1].endNumber : 0;
+
   const navigatorItems: NavigatorQuestionState[] = useMemo(
     () =>
-      sortedQuestions.map((question, index) => ({
-        id: question.id,
-        number: index + 1,
-        answered: isResponseAnswered(answers[question.id]),
-        flagged: flags.has(question.id),
-      })),
-    [sortedQuestions, answers, flags]
+      numberedQuestions.flatMap((question) =>
+        slotAnswered(question, answers[question.id]).map((answered, slotIndex) => ({
+          id: `${question.id}:${slotIndex}`,
+          questionId: question.id,
+          number: question.startNumber + slotIndex,
+          answered,
+          flagged: flags.has(question.id),
+        }))
+      ),
+    [numberedQuestions, answers, flags]
   );
 
   const answerSummaryQuestions: AnswerSummaryQuestion[] = useMemo(
     () =>
-      sortedQuestions.map((question, index) => ({
-        id: question.id,
-        number: index + 1,
-        type: question.type,
-        prompt: question.prompt,
-        options: question.options,
-        value: answers[question.id],
-      })),
-    [sortedQuestions, answers]
+      numberedQuestions.flatMap((question) =>
+        question.slotKeys.map((_, slotIndex) => ({
+          id: `${question.id}:${slotIndex}`,
+          questionId: question.id,
+          number: question.startNumber + slotIndex,
+          summary: summarizeSlotAnswer(question, answers[question.id], slotIndex),
+        }))
+      ),
+    [numberedQuestions, answers]
   );
 
   const answeredCount = navigatorItems.filter((item) => item.answered).length;
-  const completionPercent = sortedQuestions.length > 0 ? Math.round((answeredCount / sortedQuestions.length) * 100) : 0;
+  const flaggedCount = navigatorItems.filter((item) => item.flagged).length;
+  const completionPercent = totalQuestionCount > 0 ? Math.round((answeredCount / totalQuestionCount) * 100) : 0;
 
   // Phase 41 — Part 3's real current-question tracking, self-healing if
   // activeQuestionId ever references a question outside the current data
@@ -233,7 +242,8 @@ export function ExamRunner({
   // current section's first question.
   const effectiveActiveQuestionId =
     activeQuestionId && sortedQuestions.some((q) => q.id === activeQuestionId) ? activeQuestionId : (currentQuestions[0]?.id ?? "");
-  const activeQuestionNumber = sortedQuestions.findIndex((q) => q.id === effectiveActiveQuestionId) + 1;
+  const activeQuestion = numberedQuestions.find((q) => q.id === effectiveActiveQuestionId);
+  const activeQuestionLabel = activeQuestion ? formatNumberRange(activeQuestion.startNumber, activeQuestion.endNumber) : "–";
   const activeSectionLabel = testType === "LISTENING" ? currentPassage?.title || `Part ${sectionIndex + 1}` : `Passage ${sectionIndex + 1}`;
   // Phase 48 — the CBT passage panel's sticky-header "section information", omitted for single-passage Reading tests (nothing to disambiguate).
   const readingSectionLabel = sortedPassages.length > 1 ? `Passage ${sectionIndex + 1} of ${sortedPassages.length}` : undefined;
@@ -243,16 +253,17 @@ export function ExamRunner({
   const listeningParts: ListeningPart[] = useMemo(
     () =>
       sortedPassages.map((passage, index) => {
-        const partQuestions = sortedQuestions.filter((q) => q.passageId === passage.id);
+        const partQuestionIds = new Set(sortedQuestions.filter((q) => q.passageId === passage.id).map((q) => q.id));
+        const partItems = navigatorItems.filter((item) => partQuestionIds.has(item.questionId));
         return {
           id: passage.id,
           index,
           title: passage.title || `Part ${index + 1}`,
-          questionCount: partQuestions.length,
-          answeredCount: partQuestions.filter((q) => isResponseAnswered(answers[q.id])).length,
+          questionCount: partItems.length,
+          answeredCount: partItems.filter((item) => item.answered).length,
         };
       }),
-    [sortedPassages, sortedQuestions, answers]
+    [sortedPassages, sortedQuestions, navigatorItems]
   );
 
   const initialRemainingSeconds = useMemo(() => {
@@ -298,11 +309,12 @@ export function ExamRunner({
   }
 
   /** Finds the first real focusable answer control inside a question's container — works generically across every question type (text inputs, selects, radios) without type-specific logic. */
-  function focusQuestionInput(questionId: string) {
+  function focusQuestionInput(questionId: string, number?: number) {
     const container = document.getElementById(`question-${questionId}`);
-    const control = container?.querySelector<HTMLElement>(
-      'input:not([type="hidden"]), textarea, [role="combobox"], [role="radio"]'
-    );
+    // A matching / summary row covers several numbers — jump to that number's own control when one was asked for, else the row's first.
+    const control =
+      (number != null ? container?.querySelector<HTMLElement>(`[data-question-number="${number}"]`) : null) ??
+      container?.querySelector<HTMLElement>('input:not([type="hidden"]), textarea, [role="combobox"], [role="radio"]');
     control?.focus();
   }
 
@@ -314,7 +326,7 @@ export function ExamRunner({
     }, 800);
   }
 
-  function goToQuestion(questionId: string) {
+  function goToQuestion(questionId: string, number?: number) {
     const question = sortedQuestions.find((q) => q.id === questionId);
     if (!question) return;
     const targetSection = sortedPassages.findIndex((p) => p.id === question.passageId);
@@ -325,7 +337,7 @@ export function ExamRunner({
     setReviewOpen(false);
     requestAnimationFrame(() => {
       document.getElementById(`question-${questionId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      focusQuestionInput(questionId);
+      focusQuestionInput(questionId, number);
     });
   }
 
@@ -442,14 +454,17 @@ export function ExamRunner({
         <p className="text-muted-foreground text-sm">No questions in this section.</p>
       ) : (
         currentQuestions.map((question) => {
-          const number = sortedQuestions.findIndex((q) => q.id === question.id) + 1;
+          const numbered = numberedById.get(question.id);
+          const startNumber = numbered?.startNumber ?? 1;
+          const grouped = (numbered?.span ?? 1) > 1;
+          const number = numbered ? formatNumberRange(numbered.startNumber, numbered.endNumber) : "";
           const flagged = flags.has(question.id);
           const bookmarked = bookmarks.has(question.id);
           return (
             <div key={question.id} id={`question-${question.id}`} className="scroll-mt-24 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm font-medium">
-                  <span className="text-muted-foreground mr-1.5">{number}.</span>
+                  <span className="text-muted-foreground mr-1.5">{grouped ? `Questions ${number}` : `${number}.`}</span>
                   {question.prompt}
                 </p>
                 <div className="flex shrink-0 items-center gap-0.5">
@@ -485,6 +500,7 @@ export function ExamRunner({
                 options={question.options}
                 value={answers[question.id]}
                 onChange={(value) => handleAnswerChange(question.id, value)}
+                startNumber={startNumber}
               />
             </div>
           );
@@ -548,13 +564,13 @@ export function ExamRunner({
       {/* Phase 41 — Part 3/12: real current-position tracking + a top progress bar, always visible regardless of skill. */}
       <div className="border-border/70 flex shrink-0 items-center gap-3 border-b px-4 py-1.5 sm:px-6">
         <span className="text-muted-foreground shrink-0 text-xs font-medium tabular-nums">
-          {activeSectionLabel} · Question {activeQuestionNumber > 0 ? activeQuestionNumber : "–"} of {sortedQuestions.length}
+          {activeSectionLabel} · Question {activeQuestionLabel} of {totalQuestionCount}
         </span>
         <div className="bg-secondary h-1.5 min-w-0 flex-1 overflow-hidden rounded-full">
           <div className="bg-success h-full rounded-full transition-all duration-500" style={{ width: `${completionPercent}%` }} />
         </div>
         <span className="text-muted-foreground hidden shrink-0 text-xs font-medium tabular-nums sm:inline">
-          {answeredCount} / {sortedQuestions.length} Answered
+          {answeredCount} / {totalQuestionCount} Answered
         </span>
       </div>
 
@@ -664,9 +680,9 @@ export function ExamRunner({
         className="bg-primary text-primary-foreground shadow-soft-lg fixed right-5 bottom-5 z-30 flex size-14 items-center justify-center rounded-full lg:hidden"
       >
         <List className="size-5" />
-        {sortedQuestions.length - answeredCount > 0 && (
+        {totalQuestionCount - answeredCount > 0 && (
           <span className="bg-accent text-accent-foreground absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full text-[10px] font-semibold">
-            {sortedQuestions.length - answeredCount}
+            {totalQuestionCount - answeredCount}
           </span>
         )}
       </button>
@@ -754,9 +770,9 @@ export function ExamRunner({
       <SubmitConfirmationDialog
         open={submitDialogOpen}
         onOpenChange={setSubmitDialogOpen}
-        totalQuestions={sortedQuestions.length}
+        totalQuestions={totalQuestionCount}
         answeredCount={answeredCount}
-        flaggedCount={flags.size}
+        flaggedCount={flaggedCount}
         submitting={submitting}
         onConfirm={handleSubmit}
         onReview={() => {

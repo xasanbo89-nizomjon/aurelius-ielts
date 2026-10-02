@@ -7,6 +7,7 @@ import { requireTeacherProfile } from "@/lib/session";
 import { getAttemptReviewForTeacher } from "@/lib/analytics/band-conversation";
 import { QUESTION_TYPE_META, QUESTION_TYPE_ORDER } from "@/lib/exam/question-types";
 import type { PartBreakdown, QuestionTypeStat } from "@/lib/exam/result-insights";
+import { summarizeAttemptSlots } from "@/lib/exam/question-numbering";
 import { Button } from "@/components/ui/button";
 import { ReviewHeader } from "@/components/exam/review/review-header";
 import { ExamReviewSplit, type ReviewQuestionData } from "@/components/exam/review/exam-review-split";
@@ -35,10 +36,16 @@ export default async function TeacherAttemptReviewPage({
     status: question.result === "unanswered" ? "skipped" : question.result,
   }));
 
-  const correctCount = questions.filter((q) => q.status === "correct").length;
-  const incorrectCount = questions.filter((q) => q.status === "incorrect").length;
-  const skippedCount = questions.filter((q) => q.status === "skipped").length;
-  const accuracyPercent = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : null;
+  // Phase A — every count is per NUMBERED question (a matching / summary row covers several), via the same helper the student's exam screen and results page use, so teacher and student always see the same "x / 40".
+  const { rows, totals } = summarizeAttemptSlots(
+    attempt.questions.map((question) => ({ ...question, id: question.questionId })),
+    new Map(attempt.questions.map((question) => [question.questionId, question.studentAnswer ?? undefined])),
+    new Map(attempt.questions.map((question) => [question.questionId, question.result === "unanswered" ? null : question.result === "correct"]))
+  );
+  const correctCount = totals.correct;
+  const incorrectCount = totals.incorrect;
+  const skippedCount = totals.skipped;
+  const accuracyPercent = totals.total > 0 ? Math.round((correctCount / totals.total) * 100) : null;
 
   // Real per-passage/per-type aggregation over this same attempt's already-
   // fetched questions — mirrors getResultInsights (src/lib/exam/result-insights.ts)
@@ -46,17 +53,17 @@ export default async function TeacherAttemptReviewPage({
   // breakdown from the real data getAttemptReviewForTeacher already returned.
   const byPassage = new Map<string | null, { correct: number; total: number }>();
   const byType = new Map<(typeof attempt.questions)[number]["type"], { correct: number; total: number }>();
-  for (const question of attempt.questions) {
-    const correct = question.result === "correct";
-    const passageEntry = byPassage.get(question.passageId) ?? { correct: 0, total: 0 };
-    passageEntry.total += 1;
-    if (correct) passageEntry.correct += 1;
-    byPassage.set(question.passageId, passageEntry);
+  for (const row of rows) {
+    const correct = row.slots.filter((slot) => slot.correct).length;
+    const passageEntry = byPassage.get(row.passageId) ?? { correct: 0, total: 0 };
+    passageEntry.total += row.span;
+    passageEntry.correct += correct;
+    byPassage.set(row.passageId, passageEntry);
 
-    const typeEntry = byType.get(question.type) ?? { correct: 0, total: 0 };
-    typeEntry.total += 1;
-    if (correct) typeEntry.correct += 1;
-    byType.set(question.type, typeEntry);
+    const typeEntry = byType.get(row.type) ?? { correct: 0, total: 0 };
+    typeEntry.total += row.span;
+    typeEntry.correct += correct;
+    byType.set(row.type, typeEntry);
   }
 
   const partBreakdown: PartBreakdown[] =

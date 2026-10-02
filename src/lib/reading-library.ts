@@ -2,6 +2,7 @@ import "server-only";
 import type { ArticleDifficulty, ArticleStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { deleteStoredFiles } from "@/lib/uploads/storage-cleanup";
 import type { CreateReadingLibraryItemInput, UpdateReadingLibraryItemInput } from "@/lib/validations/reading-library";
 
 const READING_WORDS_PER_MINUTE = 200;
@@ -71,6 +72,8 @@ export async function deleteReadingLibraryItem(itemId: string, teacherId: string
   const item = await prisma.readingLibraryItem.findFirst({ where: { id: itemId, createdById: teacherId } });
   if (!item) throw new Error("Reading library item not found.");
   await prisma.readingLibraryItem.delete({ where: { id: itemId } });
+  // Phase A — the PDF and cover live in Storage, not the database, so they must be deleted explicitly or they're orphaned.
+  await deleteStoredFiles([item.pdfPath, item.coverImagePath]);
 }
 
 export async function listReadingLibraryItemsForTeacher(teacherId: string) {

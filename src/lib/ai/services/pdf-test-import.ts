@@ -10,6 +10,7 @@ import {
   detectAnswerKeyStart,
   splitSegmentByQuestionGroups,
   inferQuestionTypeFromInstructions,
+  planListeningSegments,
   type DetectedQuestionGroupMarker,
   type InferredQuestionType,
 } from "@/lib/pdf-text-extraction";
@@ -20,6 +21,7 @@ import {
   buildPassageBodyExtractionPrompt,
   buildQuestionGroupExtractionPrompt,
   buildMissingQuestionsExtractionPrompt,
+  buildMissingAnswersExtractionPrompt,
   questionNumberRange,
   pdfTestExtractionResponseSchema,
   extractedPassageSchema,
@@ -27,11 +29,13 @@ import {
   titleAndAnswersResponseSchema,
   passageBodyResponseSchema,
   missingQuestionsResponseSchema,
+  missingAnswersResponseSchema,
   PDF_TEST_EXTRACTION_JSON_SCHEMA,
   SINGLE_PASSAGE_EXTRACTION_JSON_SCHEMA,
   TITLE_AND_ANSWERS_JSON_SCHEMA,
   PASSAGE_BODY_JSON_SCHEMA,
   MISSING_QUESTIONS_JSON_SCHEMA,
+  MISSING_ANSWERS_JSON_SCHEMA,
   questionGroupJsonSchema,
   type PdfTestExtractionResponse,
   type ExtractedPassage,
@@ -64,6 +68,8 @@ const MAX_CONCURRENT_AI_CALLS = 6;
 const MAX_AI_ATTEMPTS = 3;
 /** A Reading passage whose pre-question text is shorter than this is probably laid out with its questions first — hand the model the whole segment (told to return only the passage text) instead. */
 const MIN_BODY_CHARS = 200;
+/** A section whose text (after its heading) is shorter than this has no questions to extract. */
+const MIN_SECTION_TEXT_CHARS = 60;
 const NO_TRANSCRIPT_NOTE = "No transcript included in this PDF — audio must be added separately.";
 
 /**
@@ -348,9 +354,16 @@ export function createPdfTestExtractor(complete: CompletionFn) {
     segmentText: string,
     answerKeyRelative: number | null
   ): Promise<ExtractedPassage> {
-    const cutoff = answerKeyRelative != null && answerKeyRelative >= 0 && answerKeyRelative < segmentText.length ? answerKeyRelative : segmentText.length;
+    // A segment that starts after the answer key (a negative offset) has nothing usable in it; one that contains the key stops there.
+    const cutoff = answerKeyRelative != null && answerKeyRelative < segmentText.length ? Math.max(0, answerKeyRelative) : segmentText.length;
     const usableText = segmentText.slice(0, cutoff);
     const markers = detectQuestionGroupMarkers(usableText);
+
+    // Nothing but a heading (or nothing at all): there is nothing to read, and asking the model anyway is how questions get invented. The section stays empty and the completeness gate reports it.
+    if (usableText.replace(/\s+/g, " ").trim().length < MIN_SECTION_TEXT_CHARS) {
+      console.log(`[pdf-test-import] ${label}: no text to read — left empty`);
+      return { title: tidyLabel(label), content: "", questionGroups: [] };
+    }
 
     console.log(`[pdf-test-import] ${label}: detectedQuestionBlocks=${markers.length}`, markers.map((m) => m.label));
 
@@ -449,40 +462,94 @@ export function createPdfTestExtractor(complete: CompletionFn) {
     }
   }
 
+  /**
+   * The questions are known (extracted) but the one-shot answer extraction
+   * dropped some of their answers: ask again, by number, from just the
+   * answer-key text. Only numbers that are really missing are accepted, an
+   * answer is kept only if it appears in that text, and an answer already
+   * found is never overwritten.
+   */
+  async function recoverMissingAnswers(
+    testType: "READING" | "LISTENING",
+    passages: ExtractedPassage[],
+    answers: { number: number; answer: string }[],
+    keyText: string
+  ): Promise<{ number: number; answer: string }[]> {
+    const questionNumbers = new Set(validateImportedTest(toValidationPassages(passages), []).passages.flatMap((p) => p.groups.flatMap((g) => g.extractedNumbers)));
+    let result = [...answers];
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const have = new Set(result.map((a) => a.number));
+      const missing = [...questionNumbers].filter((n) => !have.has(n)).sort((a, b) => a - b);
+      if (missing.length === 0) return result;
+
+      console.log(`[pdf-test-import] answer pass ${attempt + 1}: asking the answer key for ${formatNumberRanges(missing)}`);
+      const { system, user } = buildMissingAnswersExtractionPrompt({ testType, missingNumbers: missing, keyText });
+      try {
+        const response = await call({ system, user, schemaName: "pdf_test_import_missing_answers", jsonSchema: MISSING_ANSWERS_JSON_SCHEMA, responseSchema: missingAnswersResponseSchema, temperature: 0, timeoutMs: BLOCK_TIMEOUT_MS });
+        const wanted = new Set(missing);
+        const squash = (value: string) => value.toLowerCase().replace(/\s+/g, " ");
+        const haystack = squash(keyText);
+        for (const entry of response.answers) {
+          const answer = entry.answer.trim();
+          if (!wanted.has(entry.number) || answer.length === 0) continue;
+          if (!haystack.includes(squash(answer))) continue; // not actually printed in the key — never accept an invented answer
+          if (!result.some((a) => a.number === entry.number)) result = [...result, { number: entry.number, answer }];
+        }
+      } catch (error) {
+        console.log(`[pdf-test-import] answer pass failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    return result;
+  }
+
   async function extract(testType: "READING" | "LISTENING", pdfText: string): Promise<PdfTestExtractionResponse> {
     const clampedText = pdfText.length > MAX_PDF_TEXT_CHARS ? pdfText.slice(0, MAX_PDF_TEXT_CHARS) : pdfText;
-    const detectedMarkers = detectSectionMarkers(clampedText, testType);
+    let detectedMarkers: { label: string; index: number; number: number }[] = detectSectionMarkers(clampedText, testType);
+
+    // Phase B — a Listening paper is four parts of ten questions; when its printed part headings don't agree with its question numbers (a missing "PART 2", pages out of order or repeated — common in scans), rebuild the parts from the question ranges instead of cutting at the wrong headings.
+    const listeningPlan = testType === "LISTENING" ? planListeningSegments(clampedText) : null;
+    const rebuilt = listeningPlan?.strategy === "question-ranges" ? listeningPlan.sections : null;
+    if (rebuilt) {
+      detectedMarkers = rebuilt.map((section, i) => ({ label: section.label, index: i, number: i + 1 }));
+      listeningPlan?.notes.forEach((note) => console.log(`[pdf-test-import] ${note}`));
+    }
 
     console.log(`[pdf-test-import] detectedPassages=${detectedMarkers.length}`, detectedMarkers.map((m) => m.label));
 
     let result: PdfTestExtractionResponse;
 
-    if (detectedMarkers.length === 0 && detectQuestionGroupMarkers(clampedText).length === 0) {
+    if (!rebuilt && detectedMarkers.length === 0 && detectQuestionGroupMarkers(clampedText).length === 0) {
       // Neither passage headings nor question-block headings are recognisable: the model reads the whole document (best effort, then validated below).
       result = await extractWholeDocument(testType, clampedText);
     } else {
       const sectionName = testType === "READING" ? "Passage" : "Section";
-      const segmentTexts = detectedMarkers.length > 0 ? splitTextByMarkers(clampedText, detectedMarkers) : [clampedText];
-      const segmentStarts = detectedMarkers.length > 0 ? detectedMarkers.map((m) => m.index) : [0];
+      const segmentTexts = rebuilt ? rebuilt.map((section) => section.text) : detectedMarkers.length > 0 ? splitTextByMarkers(clampedText, detectedMarkers) : [clampedText];
+      const segmentStarts = rebuilt ? rebuilt.map(() => 0) : detectedMarkers.length > 0 ? detectedMarkers.map((m) => m.index) : [0];
       const labels = detectedMarkers.length > 0 ? detectedMarkers.map((m, i) => tidyLabel(m.label) || `${sectionName} ${i + 1}`) : [`${sectionName} 1`];
+      // Rebuilt sections never include the answer key (it was cut off before they were assembled), so they have no key position of their own.
       const answerKeyAbsolute = detectAnswerKeyStart(clampedText);
+      const keyRelativeTo = (i: number) => (rebuilt ? null : answerKeyAbsolute != null ? answerKeyAbsolute - segmentStarts[i] : null);
 
       const [titleAndAnswers, passages] = await Promise.all([
         extractTitleAndAnswers(testType, clampedText),
-        Promise.all(segmentTexts.map((text, i) => buildPassage(testType, labels[i], text, answerKeyAbsolute != null ? answerKeyAbsolute - segmentStarts[i] : null))),
+        Promise.all(segmentTexts.map((text, i) => buildPassage(testType, labels[i], text, keyRelativeTo(i)))),
       ]);
 
       await recoverMissingQuestions(
         testType,
         passages,
-        segmentTexts.map((text, i) => ({
-          label: labels[i],
-          text: answerKeyAbsolute != null && answerKeyAbsolute - segmentStarts[i] >= 0 && answerKeyAbsolute - segmentStarts[i] < text.length ? text.slice(0, answerKeyAbsolute - segmentStarts[i]) : text,
-        })),
+        segmentTexts.map((text, i) => {
+          const key = keyRelativeTo(i);
+          return { label: labels[i], text: key != null && key >= 0 && key < text.length ? text.slice(0, key) : text };
+        }),
         titleAndAnswers.answers.map((a) => a.number)
       );
 
-      result = { title: titleAndAnswers.title, answers: titleAndAnswers.answers, passages };
+      const keyText = answerKeyAbsolute != null ? clampedText.slice(answerKeyAbsolute) : clampedText;
+      const answers = await recoverMissingAnswers(testType, passages, titleAndAnswers.answers, keyText);
+
+      result = { title: titleAndAnswers.title, answers, passages };
     }
 
     console.log(`[pdf-test-import] extractedPassages=${result.passages.length}`);

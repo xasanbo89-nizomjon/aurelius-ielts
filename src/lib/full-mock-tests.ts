@@ -2,6 +2,10 @@ import "server-only";
 import type { MockTestCategory, MockTestDifficulty, WritingTaskCategory, WritingTaskNumber } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { getQuestionNumberCounts } from "@/lib/exam/question-counts";
+import { collectTestDependencies, deleteStoredFilesIfUnreferenced } from "@/lib/exam/test-management";
+import { deleteBucketObjects } from "@/lib/uploads/storage-cleanup";
+import { TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
 import { createWritingTask, setWritingTaskStatus } from "@/lib/writing-tasks";
 import { createSpeakingTask, setSpeakingTaskStatus } from "@/lib/speaking";
 import { FULL_MOCK_SPEAKING_MINUTES, FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
@@ -68,13 +72,89 @@ export async function updateFullMockTestBasics(id: string, teacherId: string, in
   });
 }
 
-export async function deleteFullMockTest(id: string, teacherId: string): Promise<void> {
+export type FullMockDeletionImpact = {
+  attempts: number;
+  accessCodes: number;
+  /** Reading / Listening tests built for this mock (deleted with it). Tests merely linked in from elsewhere are not listed — they're kept. */
+  ownedTests: { id: string; title: string; type: string }[];
+  writingTasks: number;
+  speakingTasks: number;
+};
+
+/** What deleting this Full Mock would take with it — shown in the confirmation dialog and checked by deleteFullMockTest itself. */
+export async function getFullMockDeletionImpact(id: string, teacherId: string): Promise<FullMockDeletionImpact> {
   await assertOwnsFullMockTest(id, teacherId);
-  const attemptCount = await prisma.fullMockAttempt.count({ where: { fullMockTestId: id } });
-  if (attemptCount > 0) {
-    throw new Error("This full mock test has real student attempts and can't be deleted — archive it instead.");
+  const [attempts, accessCodes, ownedTests, writingTasks, speakingTasks] = await Promise.all([
+    prisma.fullMockAttempt.count({ where: { fullMockTestId: id } }),
+    prisma.mockAccessCode.count({ where: { fullMockTestId: id } }),
+    prisma.mockTest.findMany({ where: { packageFullMockTestId: id }, select: { id: true, title: true, type: true } }),
+    prisma.fullMockWritingSection.count({ where: { fullMockTestId: id } }),
+    prisma.fullMockSpeakingSection.count({ where: { fullMockTestId: id } }),
+  ]);
+  return { attempts, accessCodes, ownedTests, writingTasks, speakingTasks };
+}
+
+export type DeleteFullMockOutcome = { deletedAttempts: number; deletedTests: number; removedFiles: number; failedFiles: string[] };
+
+/**
+ * Phase B — deletes a Full Mock together with EVERYTHING that exists only
+ * because of it, in one database transaction so it is all-or-nothing:
+ *  - the mock, its section links, access codes + redemptions, attempts and
+ *    their section results (cascade);
+ *  - the Reading / Listening tests built for it (package-owned), with their
+ *    passages, questions, answer key and students' results — and the PDF
+ *    import records they came from;
+ *  - its Writing and Speaking tasks (they belong to exactly one mock), the
+ *    students' submissions against them, and the Media Library usage rows.
+ * Afterwards the uploaded files go too: the listening recording, attachment
+ * images, covers, and the source PDFs.
+ * A mock students have already sat is only deleted when the caller confirms
+ * that their attempts and scores go with it (`deleteAttempts`).
+ */
+export async function deleteFullMockTest(id: string, teacherId: string, options: { deleteAttempts?: boolean } = {}): Promise<DeleteFullMockOutcome> {
+  const mock = await assertOwnsFullMockTest(id, teacherId);
+  const impact = await getFullMockDeletionImpact(id, teacherId);
+
+  if (impact.attempts > 0 && !options.deleteAttempts) {
+    throw new Error(
+      `This full mock has ${impact.attempts} student attempt${impact.attempts === 1 ? "" : "s"}. Confirm that you want to delete them too, or archive the mock instead.`
+    );
   }
-  await prisma.fullMockTest.delete({ where: { id } });
+
+  const ownedTestIds = impact.ownedTests.map((test) => test.id);
+  const [writingSections, speakingSections, deps] = await Promise.all([
+    prisma.fullMockWritingSection.findMany({ where: { fullMockTestId: id }, select: { writingTaskId: true, writingTask: { select: { coverImagePath: true } } } }),
+    prisma.fullMockSpeakingSection.findMany({ where: { fullMockTestId: id }, select: { speakingTaskId: true, speakingTask: { select: { coverImagePath: true } } } }),
+    collectTestDependencies(ownedTestIds),
+  ]);
+  const writingTaskIds = writingSections.map((section) => section.writingTaskId);
+  const speakingTaskIds = speakingSections.map((section) => section.speakingTaskId);
+
+  await prisma.$transaction([
+    prisma.mediaUsage.deleteMany({ where: { context: "PASSAGE_ATTACHMENT", referenceId: { in: deps.attachmentIds } } }),
+    prisma.mediaUsage.deleteMany({ where: { context: "WRITING_TASK_VISUAL", referenceId: { in: writingTaskIds } } }),
+    prisma.importedTest.deleteMany({ where: { id: { in: deps.importIds } } }),
+    // Students' work on this mock's own tasks exists only because of the mock (a task belongs to exactly one mock).
+    prisma.writingSubmission.deleteMany({ where: { taskId: { in: writingTaskIds } } }),
+    prisma.speakingSubmission.deleteMany({ where: { taskId: { in: speakingTaskIds } } }),
+    // The owned tests go BEFORE the mock row so their package link never has to be nulled out and left behind as a visible standalone test.
+    prisma.mockTest.deleteMany({ where: { packageFullMockTestId: id } }),
+    prisma.fullMockTest.delete({ where: { id } }),
+    prisma.writingTask.deleteMany({ where: { id: { in: writingTaskIds } } }),
+    prisma.speakingTask.deleteMany({ where: { id: { in: speakingTaskIds } } }),
+  ]);
+
+  const [files, pdfs] = await Promise.all([
+    deleteStoredFilesIfUnreferenced([
+      mock.coverImagePath,
+      ...deps.fileRefs,
+      ...writingSections.map((section) => section.writingTask.coverImagePath),
+      ...speakingSections.map((section) => section.speakingTask.coverImagePath),
+    ]),
+    deleteBucketObjects(TEST_IMPORT_PDF_BUCKET, deps.importPdfPaths),
+  ]);
+
+  return { deletedAttempts: impact.attempts, deletedTests: ownedTestIds.length, removedFiles: files.removed + pdfs.removed, failedFiles: [...files.failed, ...pdfs.failed] };
 }
 
 /** Phase 47 — completes the DRAFT/PUBLISHED/ARCHIVED lifecycle the enum already declared; archiving a published test keeps its real attempts/results intact but pulls it out of the student-facing listing (getPublishedFullMockTests only ever selects status: "PUBLISHED"). */
@@ -104,6 +184,9 @@ export async function unarchiveFullMockTest(id: string, teacherId: string): Prom
 export async function duplicateFullMockTest(id: string, teacherId: string) {
   const source = await getFullMockTestForEdit(id, teacherId);
   if (!source) throw new Error("Full mock test not found.");
+  if ([...source.readingSections, ...source.listeningSections].some((section) => section.mockTest.packageFullMockTestId)) {
+    throw new Error("This mock owns its Listening and Reading tests (it was built from files), so it can't be duplicated. Build a new one from the files instead.");
+  }
 
   const clone = await prisma.fullMockTest.create({
     data: {
@@ -176,11 +259,13 @@ export async function listPickableTestsForFullMock(
   type: "READING" | "LISTENING"
 ): Promise<PickableMockTest[]> {
   const tests = await prisma.mockTest.findMany({
-    where: { createdById: teacherId, type, isPublished: true, isArchived: false },
+    // A test that belongs to another Full Mock package isn't offered here — it can only ever be part of its own package.
+    where: { createdById: teacherId, type, isPublished: true, isArchived: false, packageFullMockTestId: null },
     orderBy: { createdAt: "desc" },
-    select: { id: true, title: true, durationMinutes: true, _count: { select: { questions: true } } },
+    select: { id: true, title: true, durationMinutes: true },
   });
-  return tests.map((t) => ({ id: t.id, title: t.title, durationMinutes: t.durationMinutes, questionCount: t._count.questions }));
+  const counts = await getQuestionNumberCounts(tests.map((t) => t.id));
+  return tests.map((t) => ({ id: t.id, title: t.title, durationMinutes: t.durationMinutes, questionCount: counts.get(t.id) ?? 0 }));
 }
 
 async function setFullMockSkillTest(
@@ -196,6 +281,9 @@ async function setFullMockSkillTest(
       where: { id: mockTestId, createdById: teacherId, type: skill, isPublished: true, isArchived: false },
     });
     if (!test) throw new Error(`That ${skill.toLowerCase()} test isn't available.`);
+    if (test.packageFullMockTestId && test.packageFullMockTestId !== fullMockTestId) {
+      throw new Error(`That ${skill.toLowerCase()} test belongs to another Full Mock package and can't be used here.`);
+    }
   }
 
   if (skill === "READING") {
@@ -347,12 +435,25 @@ export type FullMockCompleteness = {
   hasPart1: boolean;
   hasPart2: boolean;
   hasPart3: boolean;
+  /** Phase B — every Listening section has its recording (a Listening mock without audio is silent for the student). True when the mock has no Listening section yet (that's reported by hasListening). */
+  listeningAudioReady: boolean;
+  /** Phase B — titles of linked tests that belong to a DIFFERENT Full Mock package. Listening, Reading and Writing of one mock must all come from the same package. */
+  foreignPackageTests: string[];
+  /** Phase B — titles of linked Reading/Listening tests that are not published (a student could not start them). */
+  unpublishedTests: string[];
+  /** Phase A — Speaking is optional (a Listening + Reading + Writing mock is a valid Full Mock). When ANY speaking task exists the mock must have all three parts, so a half-built Speaking section can't go live. */
+  hasSpeaking: boolean;
   isComplete: boolean;
 };
 
+type SectionTestInfo = {
+  mockTest: { title: string; isPublished: boolean; packageFullMockTestId: string | null; passages: { audioPath: string | null; audioUrl: string | null }[] };
+};
+
 function computeCompleteness(test: {
-  readingSections: unknown[];
-  listeningSections: unknown[];
+  id: string;
+  readingSections: SectionTestInfo[];
+  listeningSections: SectionTestInfo[];
   writingSections: { writingTask: { taskNumber: WritingTaskNumber } }[];
   speakingSections: { speakingTask: { part: number } }[];
 }): FullMockCompleteness {
@@ -364,6 +465,16 @@ function computeCompleteness(test: {
   const hasPart2 = test.speakingSections.some((s) => s.speakingTask.part === 2);
   const hasPart3 = test.speakingSections.some((s) => s.speakingTask.part === 3);
 
+  const hasSpeaking = test.speakingSections.length > 0;
+  const speakingOk = !hasSpeaking || (hasPart1 && hasPart2 && hasPart3);
+
+  const listeningAudioReady = test.listeningSections.every(
+    (section) => section.mockTest.passages.length > 0 && section.mockTest.passages.every((passage) => Boolean(passage.audioPath || passage.audioUrl))
+  );
+  const linked = [...test.readingSections, ...test.listeningSections];
+  const foreignPackageTests = linked.filter((s) => s.mockTest.packageFullMockTestId && s.mockTest.packageFullMockTestId !== test.id).map((s) => s.mockTest.title);
+  const unpublishedTests = linked.filter((s) => !s.mockTest.isPublished).map((s) => s.mockTest.title);
+
   return {
     hasReading,
     hasListening,
@@ -372,7 +483,12 @@ function computeCompleteness(test: {
     hasPart1,
     hasPart2,
     hasPart3,
-    isComplete: hasReading && hasListening && hasTask1 && hasTask2 && hasPart1 && hasPart2 && hasPart3,
+    hasSpeaking,
+    listeningAudioReady,
+    foreignPackageTests,
+    unpublishedTests,
+    isComplete:
+      hasReading && hasListening && hasTask1 && hasTask2 && speakingOk && listeningAudioReady && foreignPackageTests.length === 0 && unpublishedTests.length === 0,
   };
 }
 
@@ -382,7 +498,15 @@ export async function publishFullMockTest(id: string, teacherId: string): Promis
 
   const completeness = computeCompleteness(test);
   if (!completeness.isComplete) {
-    throw new Error("Every section (Reading, Listening, Writing Task 1 & 2, Speaking Parts 1–3) must be filled in before publishing.");
+    const missing: string[] = [];
+    if (!completeness.hasListening) missing.push("a Listening test");
+    if (!completeness.hasReading) missing.push("a Reading test");
+    if (!completeness.hasTask1 || !completeness.hasTask2) missing.push("Writing Task 1 and Task 2");
+    if (completeness.hasSpeaking && !(completeness.hasPart1 && completeness.hasPart2 && completeness.hasPart3)) missing.push("all three Speaking parts");
+    if (completeness.hasListening && !completeness.listeningAudioReady) missing.push("the Listening audio on every part");
+    if (completeness.foreignPackageTests.length > 0) missing.push(`tests from this mock's own package (${completeness.foreignPackageTests.join(", ")} belongs to another mock)`);
+    if (completeness.unpublishedTests.length > 0) missing.push(`published Reading/Listening tests (${completeness.unpublishedTests.join(", ")} isn't published)`);
+    throw new Error(`This mock can't be published yet — it still needs ${missing.join("; ")}.`);
   }
 
   await Promise.all([
@@ -412,11 +536,27 @@ export async function getFullMockTestForEdit(id: string, teacherId: string) {
     include: {
       readingSections: {
         orderBy: { orderIndex: "asc" },
-        include: { mockTest: { select: { id: true, title: true, durationMinutes: true, _count: { select: { questions: true } } } } },
+        include: { mockTest: { select: {
+            id: true,
+            title: true,
+            durationMinutes: true,
+            isPublished: true,
+            packageFullMockTestId: true,
+            passages: { select: { audioPath: true, audioUrl: true } },
+            _count: { select: { questions: true } },
+          }, } },
       },
       listeningSections: {
         orderBy: { orderIndex: "asc" },
-        include: { mockTest: { select: { id: true, title: true, durationMinutes: true, _count: { select: { questions: true } } } } },
+        include: { mockTest: { select: {
+            id: true,
+            title: true,
+            durationMinutes: true,
+            isPublished: true,
+            packageFullMockTestId: true,
+            passages: { select: { audioPath: true, audioUrl: true } },
+            _count: { select: { questions: true } },
+          }, } },
       },
       writingSections: { orderBy: { orderIndex: "asc" }, include: { writingTask: true } },
       speakingSections: { orderBy: { orderIndex: "asc" }, include: { speakingTask: true } },
@@ -440,7 +580,7 @@ export async function listFullMockTestsForTeacher(teacherId: string) {
       listeningSections: { select: { id: true } },
       writingSections: { select: { id: true } },
       speakingSections: { select: { id: true } },
-      _count: { select: { attempts: true } },
+      _count: { select: { attempts: true, packageTests: true } },
     },
   });
 
@@ -450,6 +590,7 @@ export async function listFullMockTestsForTeacher(teacherId: string) {
     status: test.status,
     createdAt: test.createdAt,
     attemptCount: test._count.attempts,
+    packageTestCount: test._count.packageTests,
     examNumber: test.examNumber,
     difficulty: test.difficulty,
     category: test.category,
@@ -466,8 +607,8 @@ export async function getPublishedFullMockTestDetail(id: string) {
   const test = await prisma.fullMockTest.findFirst({
     where: { id, status: "PUBLISHED" },
     include: {
-      readingSections: { include: { mockTest: { select: { id: true, title: true, durationMinutes: true, _count: { select: { questions: true } } } } } },
-      listeningSections: { include: { mockTest: { select: { id: true, title: true, durationMinutes: true, _count: { select: { questions: true } } } } } },
+      readingSections: { include: { mockTest: { select: { id: true, title: true, durationMinutes: true } } } },
+      listeningSections: { include: { mockTest: { select: { id: true, title: true, durationMinutes: true } } } },
       writingSections: { select: { id: true } },
       speakingSections: { select: { id: true } },
     },
@@ -476,8 +617,10 @@ export async function getPublishedFullMockTestDetail(id: string) {
 
   const readingMinutes = test.readingSections.reduce((sum, s) => sum + (s.mockTest.durationMinutes ?? 0), 0);
   const listeningMinutes = test.listeningSections.reduce((sum, s) => sum + (s.mockTest.durationMinutes ?? 0), 0);
-  const readingQuestionCount = test.readingSections.reduce((sum, s) => sum + s.mockTest._count.questions, 0);
-  const listeningQuestionCount = test.listeningSections.reduce((sum, s) => sum + s.mockTest._count.questions, 0);
+  // Numbered questions (a matching / summary row covers several), not database rows — see getQuestionNumberCounts.
+  const questionCounts = await getQuestionNumberCounts([...test.readingSections, ...test.listeningSections].map((s) => s.mockTest.id));
+  const readingQuestionCount = test.readingSections.reduce((sum, s) => sum + (questionCounts.get(s.mockTest.id) ?? 0), 0);
+  const listeningQuestionCount = test.listeningSections.reduce((sum, s) => sum + (questionCounts.get(s.mockTest.id) ?? 0), 0);
 
   return {
     id: test.id,
@@ -488,8 +631,11 @@ export async function getPublishedFullMockTestDetail(id: string) {
     category: test.category,
     estimatedBandMin: test.estimatedBandMin,
     estimatedBandMax: test.estimatedBandMax,
-    totalDurationMinutes: readingMinutes + listeningMinutes + FULL_MOCK_WRITING_MINUTES + FULL_MOCK_SPEAKING_MINUTES,
+    totalDurationMinutes:
+      readingMinutes + listeningMinutes + (test.writingSections.length > 0 ? FULL_MOCK_WRITING_MINUTES : 0) + (test.speakingSections.length > 0 ? FULL_MOCK_SPEAKING_MINUTES : 0),
     /** Phase 40 — Part 11's "Number of Questions" on the instructions screen. Reading/Listening only — Writing/Speaking are open-response, not question-counted. */
     totalQuestionCount: readingQuestionCount + listeningQuestionCount,
+    /** Phase A — a mock may omit Writing and/or Speaking; the start screen lists only what the student will actually sit. */
+    includes: { writing: test.writingSections.length > 0, speaking: test.speakingSections.length > 0 },
   };
 }

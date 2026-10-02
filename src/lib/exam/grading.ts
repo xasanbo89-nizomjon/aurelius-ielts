@@ -39,6 +39,34 @@ function textMatches(correct: unknown, given: unknown): boolean {
   return acceptable.some((candidate) => normalize(candidate) === normalizedGiven);
 }
 
+/** MATCHING and SUMMARY_COMPLETION store ONE row for what the IELTS paper numbers as several questions (one per prompt / blank). */
+export function isGroupedQuestionType(type: QuestionType): boolean {
+  return type === "MATCHING" || type === "SUMMARY_COMPLETION";
+}
+
+/**
+ * Per-numbered-question grading for the grouped types: one entry per key of
+ * the stored correct answer (a matching prompt id / a summary blank number),
+ * correct only if the student gave a non-empty answer that matches. Every
+ * other type is a single item. This is what lets a row that covers questions
+ * 22–26 award marks per question instead of all-or-nothing, so the score is
+ * always out of the same 40 the student sees.
+ */
+export function gradeItems(type: QuestionType, correctAnswer: unknown, response: unknown): { key: string | null; correct: boolean }[] {
+  if (!isGroupedQuestionType(type)) return [{ key: null, correct: isAnswerCorrect(type, correctAnswer, response) }];
+  if (!isRecord(correctAnswer)) return [];
+
+  const given = isRecord(response) ? response : {};
+  return Object.keys(correctAnswer).map((key) => {
+    const answer = given[key];
+    if (normalize(answer).length === 0) return { key, correct: false };
+    return {
+      key,
+      correct: type === "MATCHING" ? normalize(answer) === normalize(correctAnswer[key]) : textMatches(correctAnswer[key], answer),
+    };
+  });
+}
+
 /**
  * Pure, deterministic grading — no DB access. Given a question's stored
  * `correctAnswer` and a student's submitted `response` (both untyped Json),
@@ -63,18 +91,10 @@ export function isAnswerCorrect(type: QuestionType, correctAnswer: unknown, resp
         return normalize(correctAnswer) === normalize(response) && normalize(response).length > 0;
       }
 
-      case "MATCHING": {
-        if (!isRecord(correctAnswer) || !isRecord(response)) return false;
-        const keys = Object.keys(correctAnswer);
-        if (keys.length === 0) return false;
-        return keys.every((key) => normalize(response[key]) === normalize(correctAnswer[key]));
-      }
-
+      case "MATCHING":
       case "SUMMARY_COMPLETION": {
-        if (!isRecord(correctAnswer) || !isRecord(response)) return false;
-        const keys = Object.keys(correctAnswer);
-        if (keys.length === 0) return false;
-        return keys.every((key) => textMatches(correctAnswer[key], response[key]));
+        const items = gradeItems(type, correctAnswer, response);
+        return items.length > 0 && items.every((item) => item.correct);
       }
 
       case "SENTENCE_COMPLETION":
@@ -98,6 +118,21 @@ export type GradedAnswer = {
   pointsAwarded: number;
 };
 
+/**
+ * Marks for a grouped row that isn't fully right: its points split evenly
+ * across its numbered questions, rounded DOWN so a raw score is always a whole
+ * number. An imported group carries exactly one point per number, so there it
+ * is exactly "one mark per correct answer"; a hand-authored group worth fewer
+ * points than it has items keeps its old all-or-nothing behavior.
+ */
+function partialPoints(question: { type: QuestionType; correctAnswer: unknown; points: number }, response: unknown): number {
+  if (response === undefined || !isGroupedQuestionType(question.type)) return 0;
+  const items = gradeItems(question.type, question.correctAnswer, response);
+  if (items.length === 0) return 0;
+  const correct = items.filter((item) => item.correct).length;
+  return Math.floor((question.points * correct) / items.length);
+}
+
 export function gradeResponses(
   questions: { id: string; type: QuestionType; correctAnswer: unknown; points: number }[],
   responses: Map<string, unknown>
@@ -108,7 +143,7 @@ export function gradeResponses(
     return {
       questionId: question.id,
       isCorrect,
-      pointsAwarded: isCorrect ? question.points : 0,
+      pointsAwarded: isCorrect ? question.points : partialPoints(question, response),
     };
   });
 }

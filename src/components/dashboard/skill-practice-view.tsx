@@ -54,7 +54,7 @@ export async function SkillPracticeView({
                 <CardContent className="text-muted-foreground flex items-center gap-3 text-[11px] sm:gap-4 sm:text-xs">
                   <span className="flex items-center gap-1">
                     <FileQuestion className="size-3 sm:size-3.5" aria-hidden="true" />
-                    {test._count.questions} question{test._count.questions === 1 ? "" : "s"}
+                    {test.questionCount} question{test.questionCount === 1 ? "" : "s"}
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="size-3 sm:size-3.5" aria-hidden="true" />

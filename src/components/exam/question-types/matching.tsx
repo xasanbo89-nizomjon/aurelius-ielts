@@ -16,6 +16,7 @@ export function MatchingAnswer({
   options,
   value,
   onChange,
+  startNumber,
 }: QuestionAnswerProps<Options, Record<string, string>>) {
   const answers = value ?? {};
   const [armedOptionId, setArmedOptionId] = useState<string | null>(null);
@@ -25,8 +26,9 @@ export function MatchingAnswer({
   return (
     <div className="space-y-3">
       <div className="divide-border/70 border-border/70 divide-y rounded-xl border">
-        {options.prompts.map((prompt) => {
+        {options.prompts.map((prompt, index) => {
           const matchedOptionId = answers[prompt.id];
+          const number = startNumber != null ? startNumber + index : null;
           return (
             <DroppableRow
               key={prompt.id}
@@ -37,6 +39,11 @@ export function MatchingAnswer({
               }}
               className="flex items-center gap-3 px-4 py-3"
             >
+              {number != null && (
+                <span className="bg-secondary text-muted-foreground flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold tabular-nums">
+                  {number}
+                </span>
+              )}
               <span className="min-w-0 flex-1 text-sm">{prompt.text}</span>
               {matchedOptionId && (
                 <span className="text-accent bg-accent/10 hidden shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium sm:inline">
@@ -50,7 +57,8 @@ export function MatchingAnswer({
                 <SelectTrigger
                   id={`${questionId}-${prompt.id}`}
                   className="w-44 shrink-0"
-                  aria-label={`Match for ${prompt.text}`}
+                  data-question-number={number ?? undefined}
+                  aria-label={number != null ? `Question ${number}: match for ${prompt.text}` : `Match for ${prompt.text}`}
                 >
                   <SelectValue placeholder="Choose…" />
                 </SelectTrigger>

@@ -5,6 +5,7 @@ import { FileText, ImageIcon, Layers, Plus, Target, TrendingUp, Upload } from "l
 import { requireTeacherProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { listFullMockTestsForTeacher } from "@/lib/full-mock-tests";
+import { getQuestionNumberCounts } from "@/lib/exam/question-counts";
 import { getFullMockTeacherOverviewAnalytics } from "@/lib/analytics/full-mock-analytics";
 import { MOCK_TEST_DIFFICULTY_BADGE_VARIANT, MOCK_TEST_DIFFICULTY_LABELS } from "@/lib/labels";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -51,13 +52,18 @@ export default async function TeacherTestsPage({
         isPublished: true,
         isArchived: true,
         coverImagePath: true,
-        _count: { select: { questions: true, results: true } },
+        _count: { select: { results: true } },
+        fullMockReadingUses: { select: { fullMockTest: { select: { title: true } } } },
+        fullMockListeningUses: { select: { fullMockTest: { select: { title: true } } } },
+        packageFullMockTest: { select: { title: true } },
       },
     }),
     prisma.mockTest.count({ where }),
     listFullMockTestsForTeacher(profile.id),
     getFullMockTeacherOverviewAnalytics(profile.id),
   ]);
+  // Numbered questions, not rows — the same count the student sees (see getQuestionNumberCounts).
+  const questionCounts = await getQuestionNumberCounts(tests.map((t) => t.id));
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const buildHref = (p: number) => {
@@ -78,6 +84,11 @@ export default async function TeacherTestsPage({
             <Button asChild variant="outline">
               <Link href="/teacher/tests/import">
                 <Upload className="size-4" /> Import PDF Test
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/teacher/tests/full-mock/quick">
+                <Upload className="size-4" /> Build Full Mock from Files
               </Link>
             </Button>
             <Button asChild variant="outline">
@@ -150,7 +161,7 @@ export default async function TeacherTestsPage({
                       {test.category === "CAMBRIDGE" && <Badge variant="success">Cambridge</Badge>}
                     </span>
                   </TableCell>
-                  <TableCell>{test._count.questions}</TableCell>
+                  <TableCell>{questionCounts.get(test.id) ?? 0}</TableCell>
                   <TableCell>{test._count.results}</TableCell>
                   <TableCell>
                     <Badge variant={test.isArchived ? "outline" : test.isPublished ? "success" : "outline"}>
@@ -162,7 +173,9 @@ export default async function TeacherTestsPage({
                       testId={test.id}
                       isPublished={test.isPublished}
                       isArchived={test.isArchived}
-                      hasResults={test._count.results > 0}
+                      attemptCount={test._count.results}
+                      ownerMockTitle={test.packageFullMockTest?.title ?? null}
+                      usedInFullMocks={[...new Set([...test.fullMockReadingUses, ...test.fullMockListeningUses].map((use) => use.fullMockTest.title))]}
                     />
                   </TableCell>
                 </TableRow>
@@ -236,7 +249,7 @@ export default async function TeacherTestsPage({
                     <Badge variant={test.status === "PUBLISHED" ? "success" : "outline"}>
                       {test.status === "PUBLISHED" ? "Published" : test.status === "ARCHIVED" ? "Archived" : "Draft"}
                     </Badge>
-                    <FullMockTestRowActions fullMockTestId={test.id} status={test.status} hasAttempts={test.attemptCount > 0} />
+                    <FullMockTestRowActions fullMockTestId={test.id} status={test.status} attemptCount={test.attemptCount} packageTestCount={test.packageTestCount} />
                   </div>
                 </div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

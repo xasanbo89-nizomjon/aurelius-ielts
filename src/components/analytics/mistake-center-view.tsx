@@ -51,7 +51,7 @@ export function MistakeCenterView({
               key={`${mistake.resultId}-${mistake.questionId}`}
               resultId={mistake.resultId}
               questionId={mistake.questionId}
-              index={index + 1}
+              label={`Question ${index + 1}`}
               prompt={`${mistake.testTitle} — ${mistake.prompt}`}
               answered
             />
@@ -66,7 +66,7 @@ export function MistakeCenterView({
               key={`${mistake.resultId}-${mistake.questionId}`}
               resultId={mistake.resultId}
               questionId={mistake.questionId}
-              index={index + 1}
+              label={`Question ${index + 1}`}
               prompt={`${mistake.testTitle} — ${mistake.prompt}`}
               answered
             />

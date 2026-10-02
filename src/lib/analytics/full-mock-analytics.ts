@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { bandForSection, overallBandFromSections } from "@/lib/full-mock-band-composition";
+import { bandForSection, overallBandFromSections, requiredSectionsFor } from "@/lib/full-mock-band-composition";
 
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -34,8 +34,12 @@ export type FullMockAnalytics = {
  * attempts simply reports null/0, never a guess).
  */
 export async function getFullMockTestAnalytics(fullMockTestId: string, teacherId: string): Promise<FullMockAnalytics | null> {
-  const test = await prisma.fullMockTest.findFirst({ where: { id: fullMockTestId, createdById: teacherId }, select: { id: true } });
+  const test = await prisma.fullMockTest.findFirst({
+    where: { id: fullMockTestId, createdById: teacherId },
+    select: { id: true, _count: { select: { writingSections: true, speakingSections: true } } },
+  });
   if (!test) return null;
+  const required = requiredSectionsFor({ writingSectionCount: test._count.writingSections, speakingSectionCount: test._count.speakingSections });
 
   const attempts = await prisma.fullMockAttempt.findMany({
     where: { fullMockTestId },
@@ -71,7 +75,7 @@ export async function getFullMockTestAnalytics(fullMockTestId: string, teacherId
   });
 
   const perAttemptOverall = completed
-    .map((attempt) => overallBandFromSections(attempt.sectionResults))
+    .map((attempt) => overallBandFromSections(attempt.sectionResults, required))
     .filter((b): b is number => b != null);
 
   const withData = sectionAverages.filter((s) => s.averageBand != null);
@@ -112,6 +116,7 @@ export async function getFullMockTeacherOverviewAnalytics(teacherId: string): Pr
     select: {
       id: true,
       title: true,
+      _count: { select: { writingSections: true, speakingSections: true } },
       attempts: {
         select: {
           status: true,
@@ -141,7 +146,8 @@ export async function getFullMockTeacherOverviewAnalytics(teacherId: string): Pr
     const completed = test.attempts.filter((a) => a.status === "COMPLETED");
     totalCompleted += completed.length;
 
-    const testOverallBands = completed.map((a) => overallBandFromSections(a.sectionResults)).filter((b): b is number => b != null);
+    const required = requiredSectionsFor({ writingSectionCount: test._count.writingSections, speakingSectionCount: test._count.speakingSections });
+    const testOverallBands = completed.map((a) => overallBandFromSections(a.sectionResults, required)).filter((b): b is number => b != null);
     allOverallBands.push(...testOverallBands);
     const testAverageBand = average(testOverallBands);
 

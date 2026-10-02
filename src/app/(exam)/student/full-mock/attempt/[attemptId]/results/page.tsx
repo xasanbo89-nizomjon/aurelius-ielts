@@ -21,7 +21,7 @@ export default async function FullMockResultsPage({
   const results = await getFullMockAttemptResults(attemptId, profile.id);
   if (!results) notFound();
 
-  const sectionList = Object.values(results.sections);
+  const sectionList = Object.values(results.sections).filter((section) => section.included);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-12 sm:py-16">
@@ -43,13 +43,13 @@ export default async function FullMockResultsPage({
             )}
             {results.overallBand == null && (
               <p className="text-muted-foreground max-w-sm text-xs">
-                Shown once every section has a real band score — check back once Writing/Speaking finish grading.
+                Shown once every section has a real band score — check back once your Writing {Object.values(results.sections).some((s) => s.included && s.label === "Speaking") ? "and Speaking " : ""}finish{Object.values(results.sections).some((s) => s.included && s.label === "Speaking") ? "" : "es"} grading.
               </p>
             )}
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className={`grid grid-cols-2 gap-3 ${sectionList.length > 3 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
           {sectionList.map((section) => (
             <Card key={section.label} className="py-4">
               <CardContent className="space-y-1 text-center">

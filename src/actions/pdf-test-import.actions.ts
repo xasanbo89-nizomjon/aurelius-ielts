@@ -150,12 +150,27 @@ export async function deleteImportedAnswerAction(importedTestId: string, questio
   }
 }
 
-export async function deleteImportedTestAction(importedTestId: string): Promise<ActionResult> {
+export type DeleteImportResult = { success: true; warning?: string } | { success: false; error: string };
+
+export async function deleteImportedTestAction(
+  importedTestId: string,
+  options: { alsoDeleteTest?: boolean; deleteAttempts?: boolean } = {}
+): Promise<DeleteImportResult> {
   try {
     const { profile } = await requireTeacherProfile();
-    await pdfImport.deleteImportedTest(importedTestId, profile.id);
+    const outcome = await pdfImport.deleteImportedTest(importedTestId, profile.id, {
+      alsoDeleteTest: options.alsoDeleteTest === true,
+      deleteAttempts: options.deleteAttempts === true,
+    });
     revalidatePath("/teacher/tests/import");
-    return { success: true };
+    revalidatePath("/teacher/tests");
+    return {
+      success: true,
+      warning:
+        outcome.failedFiles.length > 0
+          ? `Deleted, but ${outcome.failedFiles.length} stored file${outcome.failedFiles.length === 1 ? "" : "s"} could not be removed and may need manual cleanup.`
+          : undefined,
+    };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not delete this import.") };
   }

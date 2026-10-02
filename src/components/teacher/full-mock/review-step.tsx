@@ -64,11 +64,22 @@ export function ReviewStep({
           <div className="space-y-1.5">
             <ChecklistRow done={completeness.hasReading} label="Reading section selected" />
             <ChecklistRow done={completeness.hasListening} label="Listening section selected" />
+            {completeness.hasListening && <ChecklistRow done={completeness.listeningAudioReady} label="Listening audio uploaded for every part" />}
+            {(completeness.hasReading || completeness.hasListening) && (
+              <ChecklistRow done={completeness.unpublishedTests.length === 0} label="Reading and Listening tests are published" />
+            )}
+            {completeness.foreignPackageTests.length > 0 && <ChecklistRow done={false} label="All sections come from this mock's own package" />}
             <ChecklistRow done={completeness.hasTask1} label="Writing Task 1 added" />
             <ChecklistRow done={completeness.hasTask2} label="Writing Task 2 added" />
-            <ChecklistRow done={completeness.hasPart1} label="Speaking Part 1 question added" />
-            <ChecklistRow done={completeness.hasPart2} label="Speaking Part 2 cue card added" />
-            <ChecklistRow done={completeness.hasPart3} label="Speaking Part 3 question added" />
+            {completeness.hasSpeaking ? (
+              <>
+                <ChecklistRow done={completeness.hasPart1} label="Speaking Part 1 question added" />
+                <ChecklistRow done={completeness.hasPart2} label="Speaking Part 2 cue card added" />
+                <ChecklistRow done={completeness.hasPart3} label="Speaking Part 3 question added" />
+              </>
+            ) : (
+              <p className="text-muted-foreground text-xs">Speaking isn&apos;t included (optional) — this mock is Listening + Reading + Writing.</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -92,7 +103,7 @@ export function ReviewStep({
         </Button>
       </div>
       {!completeness.isComplete && (
-        <p className="text-muted-foreground text-xs">Complete every section above before publishing.</p>
+        <p className="text-muted-foreground text-xs">Complete every item above before publishing.</p>
       )}
     </div>
   );

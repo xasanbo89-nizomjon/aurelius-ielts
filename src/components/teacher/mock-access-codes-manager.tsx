@@ -11,6 +11,7 @@ import {
   deleteMockAccessCodeAction,
   setMockAccessCodeActiveAction,
   updateMockAccessCodeExpiryAction,
+  updateMockAccessCodeMaxRedemptionsAction,
 } from "@/actions/mock-access-codes.actions";
 import type { StudentOption } from "@/lib/teacher-students";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,22 @@ export type MockAccessCodeRow = {
   assignedStudentName: string | null;
   redeemedByStudentName: string | null;
   redeemedAt: Date | null;
+  /** How many different students may redeem the code — null = unlimited. */
+  maxRedemptions: number | null;
+  redemptionCount: number;
 };
+
+/** "" / "unlimited" = no cap; otherwise a whole number >= 1. Returns undefined for input that isn't valid. */
+function parseUsesInput(value: string): number | null | undefined {
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === "" || trimmed === "unlimited") return null;
+  const n = Number(trimmed);
+  return Number.isInteger(n) && n >= 1 && n <= 10_000 ? n : undefined;
+}
+
+function usesLabel(row: MockAccessCodeRow): string {
+  return row.maxRedemptions === null ? `${row.redemptionCount} / ∞` : `${row.redemptionCount} / ${row.maxRedemptions}`;
+}
 
 function toDateInputValue(date: Date | null): string {
   if (!date) return "";
@@ -59,11 +75,12 @@ type DerivedStatus = "active" | "inactive" | "expired" | "used";
 function deriveStatus(row: MockAccessCodeRow): DerivedStatus {
   if (!row.isActive) return "inactive";
   if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return "expired";
-  if (row.redeemedByStudentName) return "used";
+  const usedUp = row.maxRedemptions !== null && row.redemptionCount >= row.maxRedemptions;
+  if (usedUp || (row.maxRedemptions === 1 && row.redeemedByStudentName)) return "used";
   return "active";
 }
 
-const STATUS_LABEL: Record<DerivedStatus, string> = { active: "Active", inactive: "Deactivated", expired: "Expired", used: "Redeemed" };
+const STATUS_LABEL: Record<DerivedStatus, string> = { active: "Active", inactive: "Deactivated", expired: "Expired", used: "Used up" };
 const STATUS_VARIANT: Record<DerivedStatus, "success" | "outline" | "destructive" | "accent"> = {
   active: "success",
   inactive: "outline",
@@ -84,16 +101,27 @@ function GenerateCodesCard({ fullMockTestId, students }: { fullMockTestId: strin
   const [assignedStudentId, setAssignedStudentId] = useState("any");
   const [bulkCount, setBulkCount] = useState("10");
   const [expiresAt, setExpiresAt] = useState("");
+  const [uses, setUses] = useState("1");
   const [pending, startTransition] = useTransition();
   const [bulkResult, setBulkResult] = useState<string[] | null>(null);
 
+  // A code pre-assigned to one student is always single-student; the control only applies to unassigned (shared / bulk) codes.
+  const usesApplies = mode === "bulk" || assignedStudentId === "any";
+
   function generate() {
+    const maxRedemptions = usesApplies ? parseUsesInput(uses) : 1;
+    if (maxRedemptions === undefined) {
+      toast.error('Uses must be a whole number of at least 1, or "unlimited".');
+      return;
+    }
+
     startTransition(async () => {
       const expiry = parseDateInput(expiresAt);
       if (mode === "single") {
         const result = await createMockAccessCodeAction(fullMockTestId, {
           assignedStudentId: assignedStudentId === "any" ? undefined : assignedStudentId,
           expiresAt: expiry ?? undefined,
+          maxRedemptions,
         });
         if (!result.success) {
           toast.error(result.error);
@@ -103,7 +131,7 @@ function GenerateCodesCard({ fullMockTestId, students }: { fullMockTestId: strin
         router.refresh();
       } else {
         const count = Number(bulkCount) || 0;
-        const result = await createBulkMockAccessCodesAction(fullMockTestId, { count, expiresAt: expiry ?? undefined });
+        const result = await createBulkMockAccessCodesAction(fullMockTestId, { count, expiresAt: expiry ?? undefined, maxRedemptions });
         if (!result.success) {
           toast.error(result.error);
           return;
@@ -126,7 +154,7 @@ function GenerateCodesCard({ fullMockTestId, students }: { fullMockTestId: strin
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           {mode === "single" ? (
             <div className="space-y-1.5">
               <Label className="text-xs">Assign to student (optional)</Label>
@@ -152,6 +180,20 @@ function GenerateCodesCard({ fullMockTestId, students }: { fullMockTestId: strin
           )}
 
           <div className="space-y-1.5">
+            <Label className="text-xs">Students who can use it</Label>
+            <Input
+              value={usesApplies ? uses : "1"}
+              onChange={(event) => setUses(event.target.value)}
+              disabled={!usesApplies}
+              placeholder="1, 30 or unlimited"
+              aria-describedby="uses-help"
+            />
+            <p id="uses-help" className="text-muted-foreground text-[11px]">
+              {usesApplies ? "1 = one student (default). A bigger number or “unlimited” makes a shared class code." : "A code assigned to a student is for that student only."}
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
             <Label className="text-xs">Expires (optional)</Label>
             <Input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
           </div>
@@ -169,7 +211,7 @@ function GenerateCodesCard({ fullMockTestId, students }: { fullMockTestId: strin
         <DialogContent className="max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{bulkResult?.length} codes generated</DialogTitle>
-            <DialogDescription>Hand these out — each is claimed by whichever student enters it first.</DialogDescription>
+            <DialogDescription>Hand these out — each code can be used by the number of students you set (one student by default).</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-2 font-mono text-sm">
             {bulkResult?.map((code) => (
@@ -222,6 +264,38 @@ function ExpiryEditor({ fullMockTestId, row }: { fullMockTestId: string; row: Mo
     <div className="flex items-center gap-1">
       <Input type="date" value={value} onChange={(event) => setValue(event.target.value)} className="h-8 w-36 text-xs" />
       <Button size="sm" variant="ghost" className="h-8" onClick={save} disabled={pending}>
+        {pending ? <Loader2 className="size-3.5 animate-spin" /> : "Save"}
+      </Button>
+    </div>
+  );
+}
+
+function UsesEditor({ fullMockTestId, row }: { fullMockTestId: string; row: MockAccessCodeRow }) {
+  const [value, setValue] = useState(row.maxRedemptions === null ? "unlimited" : String(row.maxRedemptions));
+  const [pending, startTransition] = useTransition();
+  const locked = row.assignedStudentName != null;
+
+  function save() {
+    const parsed = parseUsesInput(value);
+    if (parsed === undefined) {
+      toast.error('Uses must be a whole number of at least 1, or "unlimited".');
+      return;
+    }
+    startTransition(async () => {
+      const result = await updateMockAccessCodeMaxRedemptionsAction(row.id, fullMockTestId, { maxRedemptions: parsed });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Updated.");
+    });
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-muted-foreground w-12 shrink-0 text-xs tabular-nums">{usesLabel(row)}</span>
+      <Input value={value} onChange={(event) => setValue(event.target.value)} disabled={locked} className="h-8 w-24 text-xs" aria-label={`Students who can use ${row.code}`} />
+      <Button size="sm" variant="ghost" className="h-8" onClick={save} disabled={pending || locked}>
         {pending ? <Loader2 className="size-3.5 animate-spin" /> : "Save"}
       </Button>
     </div>
@@ -292,6 +366,7 @@ export function MockAccessCodesManager({
               <TableHead>Code</TableHead>
               <TableHead>Assigned to</TableHead>
               <TableHead>Redeemed by</TableHead>
+              <TableHead>Uses</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Expires</TableHead>
               <TableHead className="w-24" />
@@ -308,7 +383,12 @@ export function MockAccessCodesManager({
                     </button>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">{row.assignedStudentName ?? "Any student"}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">{row.redeemedByStudentName ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {row.redeemedByStudentName ? (row.redemptionCount > 1 ? `${row.redeemedByStudentName} +${row.redemptionCount - 1}` : row.redeemedByStudentName) : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <UsesEditor fullMockTestId={fullMockTestId} row={row} />
+                  </TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[status]}>{STATUS_LABEL[status]}</Badge>
                   </TableCell>

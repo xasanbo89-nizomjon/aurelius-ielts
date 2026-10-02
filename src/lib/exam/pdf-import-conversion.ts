@@ -58,6 +58,44 @@ function resolveWordBankAnswer(raw: string, wordBank: string[]): string {
   return trimmed;
 }
 
+/** What a printed blank looks like next to its number: a dot leader ("......", ". . . ."), an ellipsis, underscores or dashes. */
+const BLANK_LEADER = String.raw`\.(?:[ \t]?\.)+|…+|_{2,}|-{3,}`;
+
+const blankMarker = (n: number) => `{{${n}}}`;
+const hasBlankMarker = (text: string, n: number) => text.includes(blankMarker(n));
+
+/**
+ * Phase A — the student's summary widget turns `{{n}}` markers into answer
+ * boxes; text without them renders as a plain paragraph with NOTHING to type
+ * into. A PDF prints blank n as "37 .......", "(37) ......", "[37]" or
+ * "...... 37" (and the AI copies whichever it saw), so this deterministic
+ * last step rewrites each of those into the marker for every number in the
+ * block's range. A number already marked is left alone, so it's idempotent.
+ */
+export function insertSummaryBlankMarkers(text: string, startNumber: number, endNumber: number): string {
+  let result = text;
+  for (let n = startNumber; n <= endNumber; n++) {
+    if (hasBlankMarker(result, n)) continue;
+    const patterns = [
+      new RegExp(String.raw`\[\s*${n}\s*\](?:\s*(?:${BLANK_LEADER}))?`),
+      new RegExp(String.raw`\(\s*${n}\s*\)(?:\s*(?:${BLANK_LEADER}))?`),
+      new RegExp(String.raw`(?<![\d{])${n}(?!\d)\s*(?:${BLANK_LEADER})`),
+      new RegExp(String.raw`(?:${BLANK_LEADER})\s*(?<![\d{])${n}(?!\d)`),
+    ];
+    const pattern = patterns.find((candidate) => candidate.test(result));
+    if (pattern) result = result.replace(pattern, blankMarker(n));
+  }
+  return result;
+}
+
+/** The numbers in a summary block's range that still have no `{{n}}` marker after normalisation — each one is a question the student could not answer. */
+export function missingSummaryBlankNumbers(text: string, startNumber: number, endNumber: number): number[] {
+  const normalized = insertSummaryBlankMarkers(text, startNumber, endNumber);
+  const missing: number[] = [];
+  for (let n = startNumber; n <= endNumber; n++) if (!hasBlankMarker(normalized, n)) missing.push(n);
+  return missing;
+}
+
 function normalizeTrueFalseNotGiven(raw: string): "TRUE" | "FALSE" | "NOT_GIVEN" | null {
   const v = raw.trim().toUpperCase().replace(/\s+/g, "_");
   if (["TRUE", "T", "YES"].includes(v)) return "TRUE";
@@ -95,7 +133,12 @@ export function buildQuestionPayloadsFromGroup(
       {
         type,
         prompt: group.instructions,
-        options: { text: json.summaryText ?? "", blankCount: groupSize, wordBank: json.wordBank, maxWords: json.maxWords ?? undefined },
+        options: {
+          text: insertSummaryBlankMarkers(json.summaryText ?? "", group.startNumber, group.endNumber),
+          blankCount: groupSize,
+          wordBank: json.wordBank,
+          maxWords: json.maxWords ?? undefined,
+        },
         correctAnswer,
         points: Math.min(20, groupSize),
         sourceNumbers: rangeArray(group.startNumber, group.endNumber),

@@ -11,4 +11,6 @@ export type QuestionAnswerProps<TOptions, TValue> = {
   options: TOptions;
   value: TValue | undefined;
   onChange: (value: TValue) => void;
+  /** The IELTS question number of this row's first item — only the grouped types (matching / summary) cover several numbers and use it to number their rows / blanks. */
+  startNumber?: number;
 };

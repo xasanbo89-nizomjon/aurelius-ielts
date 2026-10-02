@@ -3,7 +3,8 @@
 import { cn } from "@/lib/utils";
 
 export type ReviewQuestionStatus = "correct" | "incorrect" | "skipped";
-export type ReviewNavigatorItem = { id: string; number: number; status: ReviewQuestionStatus };
+/** One per NUMBERED question — `id` is unique per number, `questionId` is the (possibly shared) row it belongs to. */
+export type ReviewNavigatorItem = { id: string; questionId: string; number: number; status: ReviewQuestionStatus };
 
 /**
  * Phase 46 — the review-mode navigator, deliberately a SEPARATE color
@@ -29,12 +30,12 @@ export function ReviewQuestionNavigator({
     <nav aria-label="Review question navigator" className="space-y-3">
       <div className="grid grid-cols-5 gap-2 sm:grid-cols-6 lg:grid-cols-5">
         {questions.map((question) => {
-          const isCurrent = question.id === currentQuestionId;
+          const isCurrent = question.questionId === currentQuestionId;
           return (
             <button
               key={question.id}
               type="button"
-              onClick={() => onSelect(question.id)}
+              onClick={() => onSelect(question.questionId)}
               aria-current={isCurrent ? "true" : undefined}
               aria-label={`Question ${question.number}, ${question.status}${isCurrent ? ", currently open" : ""}`}
               className={cn(

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { ArrowDown, ArrowUp, FileQuestion, Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
+import { numberQuestions } from "@/lib/exam/question-numbering";
 import {
   deleteQuestionAction,
   deleteQuestionGroupAction,
@@ -51,6 +52,11 @@ export function QuestionsManager({
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<ExistingQuestionGroup | null>(null);
 
   const [pending, startTransition] = useTransition();
+
+  // Phase A — the teacher sees the same running question numbers (and counts) the student does: a matching / summary row covers several numbers, so a "3-row" group can really be questions 14–26. `questions` arrives in test order (orderIndex ascending), which is the order numbering must follow.
+  const numberById = useMemo(() => new Map(numberQuestions(questions).map((q) => [q.id, q])), [questions]);
+  const spanOf = (items: ExistingQuestion[]) => items.reduce((sum, q) => sum + (numberById.get(q.id)?.span ?? 1), 0);
+  const totalQuestionCount = spanOf(questions);
 
   function openCreate(passageId?: string, questionGroupId?: string) {
     setEditingQuestion(undefined);
@@ -113,7 +119,14 @@ export function QuestionsManager({
   return (
     <section className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="font-display text-xl font-medium tracking-tight">Questions</h2>
+        <h2 className="font-display flex items-center gap-2 text-xl font-medium tracking-tight">
+          Questions
+          {questions.length > 0 && (
+            <Badge variant="secondary" className="text-xs font-normal">
+              {totalQuestionCount} total
+            </Badge>
+          )}
+        </h2>
         <Button size="sm" onClick={() => openCreate(passages[0]?.id)} disabled={passages.length === 0}>
           <Plus className="size-4" /> Add question
         </Button>
@@ -143,7 +156,12 @@ export function QuestionsManager({
             return (
               <div key={passage.id} className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-muted-foreground text-sm font-medium">{passage.title}</h3>
+                  <h3 className="text-muted-foreground flex items-center gap-2 text-sm font-medium">
+                    {passage.title}
+                    <Badge variant="outline" className="text-[11px] font-normal">
+                      {spanOf(passageQuestions)} question{spanOf(passageQuestions) === 1 ? "" : "s"}
+                    </Badge>
+                  </h3>
                   <Button size="sm" variant="outline" onClick={() => openGroupCreate(passage.id)}>
                     <Layers className="size-3.5" /> Add group
                   </Button>
@@ -161,7 +179,7 @@ export function QuestionsManager({
                               <span className="text-muted-foreground font-normal">— {group.title}</span>
                             )}
                             <Badge variant="outline" className="text-[11px] font-normal">
-                              {items.length}
+                              {spanOf(items)}
                             </Badge>
                           </span>
                         </AccordionTrigger>
@@ -225,7 +243,7 @@ export function QuestionsManager({
                               </Button>
                             </div>
 
-                            <QuestionList items={items} onEdit={openEdit} onDelete={setDeleteTarget} onMove={move} pending={pending} />
+                            <QuestionList numberById={numberById} items={items} onEdit={openEdit} onDelete={setDeleteTarget} onMove={move} pending={pending} />
                           </div>
                         </AccordionContent>
                       </AccordionItem>
@@ -238,12 +256,12 @@ export function QuestionsManager({
                         <span className="flex items-center gap-2 text-sm font-medium">
                           Ungrouped Questions
                           <Badge variant="outline" className="text-[11px] font-normal">
-                            {ungrouped.length}
+                            {spanOf(ungrouped)}
                           </Badge>
                         </span>
                       </AccordionTrigger>
                       <AccordionContent>
-                        <QuestionList items={ungrouped} onEdit={openEdit} onDelete={setDeleteTarget} onMove={move} pending={pending} />
+                        <QuestionList numberById={numberById} items={ungrouped} onEdit={openEdit} onDelete={setDeleteTarget} onMove={move} pending={pending} />
                       </AccordionContent>
                     </AccordionItem>
                   )}
@@ -258,7 +276,7 @@ export function QuestionsManager({
             return (
               <div className="space-y-2.5">
                 <h3 className="text-muted-foreground text-sm font-medium">Unassigned</h3>
-                <QuestionList items={unassigned} onEdit={openEdit} onDelete={setDeleteTarget} onMove={move} pending={pending} />
+                <QuestionList numberById={numberById} items={unassigned} onEdit={openEdit} onDelete={setDeleteTarget} onMove={move} pending={pending} />
               </div>
             );
           })()}
@@ -323,12 +341,14 @@ export function QuestionsManager({
 }
 
 function QuestionList({
+  numberById,
   items,
   onEdit,
   onDelete,
   onMove,
   pending,
 }: {
+  numberById: Map<string, { startNumber: number; endNumber: number }>;
   items: ExistingQuestion[];
   onEdit: (question: ExistingQuestion) => void;
   onDelete: (question: ExistingQuestion) => void;
@@ -341,11 +361,18 @@ function QuestionList({
 
   return (
     <div className="space-y-2">
-      {items.map((question) => (
+      {items.map((question) => {
+        const numbering = numberById.get(question.id);
+        return (
         <Card key={question.id} className="py-3">
           <CardContent className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center gap-2">
+                {numbering && (
+                  <span className="text-muted-foreground text-xs font-medium tabular-nums">
+                    {numbering.startNumber === numbering.endNumber ? `Q${numbering.startNumber}` : `Q${numbering.startNumber}–${numbering.endNumber}`}
+                  </span>
+                )}
                 <Badge variant="outline">{QUESTION_TYPE_META[question.type].label}</Badge>
                 <span className="text-muted-foreground text-xs">
                   {question.points} pt{question.points === 1 ? "" : "s"}
@@ -387,7 +414,8 @@ function QuestionList({
             </div>
           </CardContent>
         </Card>
-      ))}
+        );
+      })}
     </div>
   );
 }

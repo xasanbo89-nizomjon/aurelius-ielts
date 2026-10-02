@@ -27,12 +27,15 @@ export function QuestionRenderer({
   options,
   value,
   onChange,
+  startNumber,
 }: {
   questionId: string;
   type: QuestionType;
   options: unknown;
   value: unknown;
   onChange: (value: unknown) => void;
+  /** First IELTS question number this row covers — only matching / summary rows use it, to number their individual items. */
+  startNumber?: number;
 }) {
   switch (type) {
     case "MULTIPLE_CHOICE":
@@ -62,6 +65,7 @@ export function QuestionRenderer({
           options={matchingOptionsSchema.parse(options)}
           value={value as Record<string, string> | undefined}
           onChange={onChange}
+          startNumber={startNumber}
         />
       );
 
@@ -72,6 +76,7 @@ export function QuestionRenderer({
           options={summaryCompletionOptionsSchema.parse(options)}
           value={value as Record<string, string> | undefined}
           onChange={onChange}
+          startNumber={startNumber}
         />
       );
 

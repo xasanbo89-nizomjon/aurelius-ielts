@@ -118,6 +118,39 @@ export async function uploadToSupabase(
 }
 
 /**
+ * Phase A — deletes objects from a bucket. Supabase reports no error for a
+ * path that doesn't exist, so a repeat call (or an already-missing file) is
+ * harmless; only a real failure (auth, network) throws.
+ */
+export async function removeFromSupabase(bucket: string, objectPaths: string[]): Promise<void> {
+  if (objectPaths.length === 0) return;
+  const client = getSupabaseAdmin();
+
+  const { error } = await client.storage.from(bucket).remove(objectPaths);
+  if (error) {
+    throw new Error(`Could not delete from storage (${bucket}): ${error.message}`);
+  }
+}
+
+export type StoredObjectInfo = { name: string; createdAt: Date | null };
+
+/** Phase B — the objects directly inside one folder of a bucket (the app keys every upload as <teacherId>/<uuid>.<ext>). */
+export async function listBucketFolder(bucket: string, folder: string): Promise<StoredObjectInfo[]> {
+  const client = getSupabaseAdmin();
+  const found: StoredObjectInfo[] = [];
+
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await client.storage.from(bucket).list(folder, { limit: 1000, offset });
+    if (error) throw new Error(`Could not list storage (${bucket}): ${error.message}`);
+    if (!data || data.length === 0) break;
+    // Sub-folders come back as entries without metadata; only files are objects.
+    for (const entry of data) if (entry.metadata) found.push({ name: entry.name, createdAt: entry.created_at ? new Date(entry.created_at) : null });
+    if (data.length < 1000) break;
+  }
+  return found;
+}
+
+/**
  * Phase 50 — downloads an object's bytes back into the server for
  * processing (PDF text extraction). Every other upload in this codebase is
  * write-only from the server's point of view (store a path, let the browser

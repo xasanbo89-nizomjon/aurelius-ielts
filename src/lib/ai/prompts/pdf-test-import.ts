@@ -437,3 +437,49 @@ ${INTERNAL_REVIEW_NOTE}`;
     ].join("\n\n"),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Phase A — focused answer-key recovery. The one-shot title+answers call reads
+// the whole paper and sometimes drops entries (a compact key printed as
+// "16 bags 17 Monday 18 pencils" lost 16–19 in a real run). The question
+// numbers are known from the extraction, so the missing answers are asked for
+// by number from just the answer-key text.
+// ---------------------------------------------------------------------------
+
+export const missingAnswersResponseSchema = z.object({ answers: z.array(extractedAnswerSchema) });
+export type MissingAnswersResponse = z.infer<typeof missingAnswersResponseSchema>;
+
+export const MISSING_ANSWERS_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    answers: {
+      type: "array",
+      items: answerJsonSchema,
+      description: "One entry for each requested question number whose answer is actually printed in the text. Leave out any number whose answer is not there.",
+    },
+  },
+  required: ["answers"],
+  additionalProperties: false,
+} as const;
+
+export function buildMissingAnswersExtractionPrompt(params: {
+  testType: "READING" | "LISTENING";
+  missingNumbers: number[];
+  keyText: string;
+}): { system: string; user: string } {
+  const list = numberList(params.missingNumbers);
+  const system = `You are recovering answer-key entries that an earlier pass missed from a real IELTS ${noun(params.testType)} test's answer key, for a teacher who will review every field before anything is saved. Faithfulness to the source text is the only goal — never invent, guess, or infer an answer from the question content.
+
+The only question numbers whose answers are still missing are: ${list}.
+
+Rules:
+- Find the answer printed for exactly those numbers in the text and return them in "answers", each exactly as printed (a letter like "C", TRUE / FALSE / NOT GIVEN, a word or short phrase, a number).
+- A key is often laid out compactly, several entries per line (e.g. "16 bags 17 Monday 18 pencils") or in a table — each number is followed by its own answer; read them apart carefully.
+- Never return a number that is not in the list above. If one of those numbers has no answer in the text, simply leave it out.
+${INTERNAL_REVIEW_NOTE}`;
+
+  return {
+    system,
+    user: [`Answer key text:\n"""\n${params.keyText}\n"""`, `Return the answers for question numbers ${list} now, using only the text above.`].join("\n\n"),
+  };
+}

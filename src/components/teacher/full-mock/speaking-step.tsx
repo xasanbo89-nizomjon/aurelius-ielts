@@ -111,9 +111,15 @@ export function SpeakingStep({
         );
       })}
 
-      <Button onClick={onContinue} disabled={!hasPart1 || !hasPart2 || !hasPart3}>
-        Continue
-      </Button>
+      {/* Speaking is optional: skip it entirely, or add all three parts. */}
+      {(() => {
+        const anySpeaking = hasPart1 || hasPart2 || hasPart3;
+        return (
+          <Button onClick={onContinue} disabled={anySpeaking && (!hasPart1 || !hasPart2 || !hasPart3)}>
+            {anySpeaking ? "Continue" : "Skip Speaking"}
+          </Button>
+        );
+      })()}
 
       {dialogPart && (
         <SpeakingTaskDialog

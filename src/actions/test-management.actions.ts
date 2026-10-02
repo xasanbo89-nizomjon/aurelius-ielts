@@ -99,12 +99,27 @@ export async function setArchivedAction(testId: string, isArchived: boolean): Pr
   }
 }
 
-export async function deleteTestAction(testId: string): Promise<ActionResult> {
+export type DeleteTestActionResult = { success: true; warning?: string } | { success: false; error: string };
+
+/**
+ * Phase A — deletes a test with everything attached to it (questions, answer
+ * key, attempts, audio and other uploaded files). `deleteResults` must be
+ * passed explicitly when students have attempted the test — the UI only sends
+ * it after a separate, clearly-worded confirmation.
+ */
+export async function deleteTestAction(testId: string, options: { deleteResults?: boolean } = {}): Promise<DeleteTestActionResult> {
   try {
     const { profile } = await requireTeacherProfile();
-    await tm.deleteTest(testId, profile.id);
+    const outcome = await tm.deleteTest(testId, profile.id, { deleteResults: options.deleteResults === true });
     revalidatePath("/teacher/tests");
-    return { success: true };
+    revalidatePath("/teacher/mock-results");
+    return {
+      success: true,
+      warning:
+        outcome.failedFiles.length > 0
+          ? `The test was deleted, but ${outcome.failedFiles.length} uploaded file${outcome.failedFiles.length === 1 ? "" : "s"} could not be removed from storage and may need manual cleanup.`
+          : undefined,
+    };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not delete the test.") };
   }
@@ -169,6 +184,30 @@ export async function deletePassageAction(passageId: string, testId: string): Pr
     return { success: true };
   } catch (error) {
     return { success: false, error: errorMessage(error, "Could not delete the passage.") };
+  }
+}
+
+/** Phase B — remove one section's audio (and its stored file, unless another section of the test shares the same recording). */
+export async function removePassageAudioAction(passageId: string, testId: string): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    await tm.removePassageAudio(passageId, profile.id);
+    revalidatePath(`/teacher/tests/${testId}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not remove the audio.") };
+  }
+}
+
+/** Phase B — remove the audio from every section of a Listening test. */
+export async function removeTestAudioAction(testId: string): Promise<ActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    await tm.removeTestAudio(testId, profile.id);
+    revalidatePath(`/teacher/tests/${testId}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not remove the audio.") };
   }
 }
 

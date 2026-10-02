@@ -4,8 +4,17 @@ import { Flag } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * One button per NUMBERED question. A matching / summary row that covers
+ * questions 22–26 contributes five of these, all pointing at the same row
+ * (`questionId`) — so the navigator always shows every question number the
+ * paper has (1–40), not one button per database row.
+ */
 export type NavigatorQuestionState = {
+  /** Unique per number (a row id is shared by every number it covers). */
   id: string;
+  /** The row this number belongs to — what selecting it navigates to. */
+  questionId: string;
   number: number;
   answered: boolean;
   flagged: boolean;
@@ -27,7 +36,7 @@ export function QuestionNavigator({
 }: {
   questions: NavigatorQuestionState[];
   currentQuestionId: string;
-  onSelect: (questionId: string) => void;
+  onSelect: (questionId: string, number: number) => void;
   showCounters?: boolean;
 }) {
   const answeredCount = questions.filter((q) => q.answered).length;
@@ -38,12 +47,12 @@ export function QuestionNavigator({
     <nav aria-label="Question navigator" className="space-y-3">
       <div className="grid grid-cols-5 gap-2 sm:grid-cols-6 lg:grid-cols-5">
         {questions.map((question) => {
-          const isCurrent = question.id === currentQuestionId;
+          const isCurrent = question.questionId === currentQuestionId;
           return (
             <button
               key={question.id}
               type="button"
-              onClick={() => onSelect(question.id)}
+              onClick={() => onSelect(question.questionId, question.number)}
               aria-current={isCurrent ? "true" : undefined}
               aria-label={`Question ${question.number}${question.answered ? ", answered" : ", not answered"}${question.flagged ? ", flagged for review" : ""}${isCurrent ? ", current question" : ""}`}
               className={cn(
