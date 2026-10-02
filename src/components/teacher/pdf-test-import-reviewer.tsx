@@ -437,6 +437,48 @@ function ConfirmImportPanel({ importedTestId, defaultTitle }: { importedTestId: 
 }
 
 // ---------------------------------------------------------------------------
+// Import summary — real counts from the actually-loaded data, never fixed/fake numbers.
+// ---------------------------------------------------------------------------
+
+function ImportSummaryStats({ passages, answerCount }: { passages: PassageRow[]; answerCount: number }) {
+  const passageCount = passages.length;
+  const groupCount = passages.reduce((sum, p) => sum + p.questionGroups.length, 0);
+  const questionCount = allQuestionNumbers(passages).length;
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Card className="py-3.5">
+        <CardContent className="space-y-0.5 px-4 text-center">
+          <p className="text-muted-foreground text-[11px] font-medium">Passages found</p>
+          <p className="font-display text-lg font-medium">{passageCount}</p>
+        </CardContent>
+      </Card>
+      <Card className="py-3.5">
+        <CardContent className="space-y-0.5 px-4 text-center">
+          <p className="text-muted-foreground text-[11px] font-medium">Question groups</p>
+          <p className="font-display text-lg font-medium">{groupCount}</p>
+        </CardContent>
+      </Card>
+      <Card className="py-3.5">
+        <CardContent className="space-y-0.5 px-4 text-center">
+          <p className="text-muted-foreground text-[11px] font-medium">Questions found</p>
+          <p className="font-display text-lg font-medium">{questionCount}</p>
+        </CardContent>
+      </Card>
+      <Card className="py-3.5">
+        <CardContent className="space-y-0.5 px-4 text-center">
+          <p className="text-muted-foreground text-[11px] font-medium">Answers found</p>
+          <p className="font-display text-lg font-medium">
+            {answerCount}
+            {answerCount < questionCount && <span className="text-amber-600 text-sm"> /{questionCount}</span>}
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Root
 // ---------------------------------------------------------------------------
 
@@ -502,6 +544,8 @@ export function PdfTestImportReviewer({ importedTest }: { importedTest: Imported
           </div>
         </CardContent>
       </Card>
+
+      <ImportSummaryStats passages={passages} answerCount={importedTest.answers.length} />
 
       {passages.length === 0 ? (
         <Card>

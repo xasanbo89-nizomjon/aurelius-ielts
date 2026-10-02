@@ -183,18 +183,35 @@ export const PDF_TEST_EXTRACTION_JSON_SCHEMA = {
 const SYSTEM_PROMPT = `You are extracting the structure of a real IELTS Reading or Listening test from its raw PDF text, for a teacher who will review and edit every field before anything is saved. Faithfulness to the source text is the only goal — never invent, guess, or embellish content that isn't actually present.
 
 Rules:
-- Identify every passage (Reading) or part/section (Listening) in order, with its full body text (or transcript, for Listening).
-- Identify every question block as one GROUP covering a contiguous range of question numbers sharing one instruction and one type (e.g. "Questions 1-5" is ONE group, not five). Never split a group into individual questions unless the source itself numbers them as fully independent single questions of that type.
+- A full IELTS Reading test almost always has THREE separate passages (headed "PASSAGE 1" / "READING PASSAGE 1", "PASSAGE 2", "PASSAGE 3", or similar); a full Listening test almost always has FOUR separate sections/parts (headed "SECTION 1", "PART 1", etc.). Each numbered passage/section header starts a brand-new, separate entry in the "passages" array. NEVER merge two differently-numbered passages/sections into a single entry, even though their question ranges are contiguous (e.g. Passage 1 = Questions 1-13, Passage 2 = Questions 14-26, Passage 3 = Questions 27-40 is THREE entries, not one). A passage header commonly repeats as a running header on every page of that passage — this does not mean a new passage starts each time; it's the same passage until the number changes.
+- Worked example: if the text contains "PASSAGE 1" ... (content) ... "Questions 1-13" ... "PASSAGE 2" ... (content) ... "Questions 14-26" ... "PASSAGE 3" ... (content) ... "Questions 27-40", you must return passages = [ {title: "Passage 1", content: <only Passage 1's text>, questionGroups: <only groups within 1-13>}, {title: "Passage 2", content: <only Passage 2's text>, questionGroups: <only groups within 14-26>}, {title: "Passage 3", ...} ] — three separate array entries, each with ONLY its own content and ONLY the question groups whose numbers fall inside that passage's range.
+- Identify every passage (Reading) or part/section (Listening) in order, with its own full body text (or transcript, for Listening) — never another passage's text.
+- Identify every question block as one GROUP covering a contiguous range of question numbers sharing one instruction and one type (e.g. "Questions 1-5" is ONE group, not five). Never split a group into individual questions unless the source itself numbers them as fully independent single questions of that type. Every question group belongs to exactly the one passage/section its question numbers physically appear under in the source — never attach a question group to the wrong passage.
 - Classify each group's questionType as exactly one of: MULTIPLE_CHOICE, TRUE_FALSE_NOT_GIVEN, FILL_IN_BLANK, MATCHING, SHORT_ANSWER, SENTENCE_COMPLETION, SUMMARY_COMPLETION.
 - For MULTIPLE_CHOICE, TRUE_FALSE_NOT_GIVEN, FILL_IN_BLANK, SHORT_ANSWER, SENTENCE_COMPLETION: fill "items" with one entry per question number in the group's range, each with its own prompt text (and choices, for MULTIPLE_CHOICE only, letter-labeled A/B/C/D...). Leave summaryText null and matchingPrompts/matchingOptions empty.
 - For SUMMARY_COMPLETION: leave "items" empty. Instead fill "summaryText" with the full connected paragraph, writing each blank inline as its own question number in square brackets (e.g. "...rose by [14] percent...").
 - For MATCHING: leave "items" empty. Instead fill "matchingPrompts" (one per question number, in order, id = that number as a string) and "matchingOptions" (the fixed list being matched against, e.g. headings, id = its printed label).
-- Find the answer key — it is commonly a separate section near the end headed ANSWER KEY, ANSWERS, KEY, or ANSWER SHEET, mapping question numbers to correct answers. Extract every number -> answer pair you can find, exactly as printed. If genuinely no answer key exists anywhere in the text, return an empty answers array — do not fabricate answers from guessing at the question content.
+- Find the answer key — it is commonly a separate section near the end headed ANSWER KEY, ANSWERS, KEY, or ANSWER SHEET, mapping question numbers to correct answers across the WHOLE test (all passages/sections combined, e.g. 1-40). Extract every number -> answer pair you can find, exactly as printed. If genuinely no answer key exists anywhere in the text, return an empty answers array — do not fabricate answers from guessing at the question content.
 - This is for internal teacher review only, not for a student to see — extract everything as accurately as possible, including the answer key, so the teacher can verify it quickly rather than re-typing it by hand.`;
 
-export function buildPdfTestExtractionPrompt(params: { testType: "READING" | "LISTENING"; pdfText: string }): { system: string; user: string } {
+export function buildPdfTestExtractionPrompt(params: {
+  testType: "READING" | "LISTENING";
+  pdfText: string;
+  detectedMarkers?: string[];
+}): { system: string; user: string } {
   const lines: string[] = [];
   lines.push(`This is a ${params.testType === "READING" ? "Reading" : "Listening"} IELTS test PDF, extracted to plain text below.`);
+
+  if (params.detectedMarkers && params.detectedMarkers.length >= 2) {
+    const noun = params.testType === "READING" ? "passages" : "sections";
+    const list = params.detectedMarkers.map((label, i) => `${i + 1}) "${label}"`).join(", ");
+    lines.push(
+      `A deterministic scan of this exact document already found ${params.detectedMarkers.length} separate ${noun} headers, in this order: ${list}. ` +
+        `You MUST return exactly ${params.detectedMarkers.length} entries in the "passages" array, one per header listed above, in the same order — never fewer, never merged. ` +
+        `Split the text at each header boundary and assign every question group to the one passage it actually falls under.`
+    );
+  }
+
   lines.push(`Raw PDF text:\n"""\n${params.pdfText}\n"""`);
   lines.push("Extract its full structure now using only the text above.");
   return { system: SYSTEM_PROMPT, user: lines.join("\n\n") };
