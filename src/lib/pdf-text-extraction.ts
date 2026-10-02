@@ -71,3 +71,20 @@ export function detectSectionMarkers(text: string, testType: "READING" | "LISTEN
 
   return [...firstByNumber.values()].sort((a, b) => a.index - b.index);
 }
+
+/**
+ * Phase 50.3 — deterministically slices `text` into one chunk per detected
+ * marker, from that marker's own start to the next marker's start (or end
+ * of text for the last one). This is what makes "AI returns fewer passages
+ * than detected" structurally impossible when markers.length >= 2: each
+ * chunk is extracted in its own separate AI call
+ * (extractTestStructureFromPdfText), so the result array's length is
+ * exactly markers.length by construction — never dependent on the model
+ * choosing to split correctly.
+ */
+export function splitTextByMarkers(text: string, markers: DetectedSectionMarker[]): string[] {
+  return markers.map((marker, i) => {
+    const end = i + 1 < markers.length ? markers[i + 1].index : text.length;
+    return text.slice(marker.index, end);
+  });
+}
