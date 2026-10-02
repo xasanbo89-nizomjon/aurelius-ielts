@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FullMockExamCard, type FullMockCardStatus } from "@/components/student/full-mock-exam-card";
+import { MockAccessCodeGate } from "@/components/student/mock-access-code-gate";
 import type { FullMockCardData } from "@/lib/full-mock-dashboard";
 
 export const metadata: Metadata = { title: "Mock Exams" };
@@ -36,6 +37,12 @@ export default async function MockExamCenterPage() {
     return (
       <>
         <PageHeader title="Mock Exams" description="Sit a full Listening → Reading → Writing → Speaking exam under real timing." />
+        <Card className="py-5">
+          <CardContent className="space-y-3">
+            <p className="text-sm font-medium">Have an access code from your teacher?</p>
+            <MockAccessCodeGate />
+          </CardContent>
+        </Card>
         <EmptyState
           icon={ClipboardCheck}
           title="No mock exams available yet"
@@ -48,6 +55,13 @@ export default async function MockExamCenterPage() {
   return (
     <>
       <PageHeader title="Mock Exams" description="Sit a full Listening → Reading → Writing → Speaking exam under real timing." />
+
+      <Card className="py-5">
+        <CardContent className="space-y-3">
+          <p className="text-sm font-medium">Have an access code from your teacher? Enter it here to unlock your mock.</p>
+          <MockAccessCodeGate />
+        </CardContent>
+      </Card>
 
       {dashboard.bandTrend && (
         <Card className="border-accent/20 bg-accent/[0.04] py-4">

@@ -62,6 +62,8 @@ export const TEACHER_NAV_ITEMS: NavItem[] = [
   // Phase 38 — central reusable file store for Reading/Listening/Articles.
   { label: "Media Library", href: "/teacher/media", icon: "Image" },
   { label: "Tests", href: "/teacher/tests", icon: "FileText" },
+  // Phase 51 — Mock Access Code System's teacher-wide scoreboard, across every Full Mock Test.
+  { label: "Mock Results", href: "/teacher/mock-results", icon: "ClipboardCheck" },
   { label: "Articles", href: "/teacher/articles", icon: "Newspaper" },
   // Phase 45 — Media Library 2.0: real standalone browsable content,
   // distinct from Tests (timed/graded MockTests) and Articles (interactive

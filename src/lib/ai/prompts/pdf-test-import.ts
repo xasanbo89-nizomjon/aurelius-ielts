@@ -18,7 +18,7 @@ const extractedItemSchema = z.object({
   choices: z.array(extractedChoiceSchema),
 });
 
-const extractedQuestionGroupSchema = z.object({
+export const extractedQuestionGroupSchema = z.object({
   startNumber: z.number().int().positive(),
   endNumber: z.number().int().positive(),
   questionType: z.enum(QUESTION_TYPE_VALUES),
@@ -85,7 +85,7 @@ const itemJsonSchema = {
   additionalProperties: false,
 } as const;
 
-const questionGroupJsonSchema = {
+export const questionGroupJsonSchema = {
   type: "object",
   properties: {
     startNumber: { type: "integer", description: "First question number in this block (e.g. 1 in \"Questions 1-5\")." },
@@ -286,4 +286,154 @@ export function buildTitleAndAnswersExtractionPrompt(params: { testType: "READIN
     "Extract only the title and the full answer key now, using only the text above.",
   ];
   return { system: TITLE_AND_ANSWERS_SYSTEM_PROMPT, user: lines.join("\n\n") };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 50.4 — focused calls. The per-passage call in 50.3 still asked the model
+// to enumerate EVERY question block of a passage in one response, and it would
+// sometimes stop after the first (Passage 1 -> only Q1-5). Question blocks are
+// now found by regex (detectQuestionGroupMarkers), so each block gets its own
+// small call told exactly which numbers it must contain, and the passage text
+// is extracted separately from the question blocks.
+// ---------------------------------------------------------------------------
+
+const noun = (testType: "READING" | "LISTENING") => (testType === "READING" ? "Reading" : "Listening");
+
+export const passageBodyResponseSchema = z.object({ title: z.string(), content: z.string() });
+export type PassageBodyResponse = z.infer<typeof passageBodyResponseSchema>;
+
+export const PASSAGE_BODY_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string", description: "The passage's own title if it has one (e.g. \"The Return of the Wetlands\"), otherwise the heading as printed (e.g. \"Reading Passage 1\" or \"Section 2\")." },
+    content: { type: "string", description: "The passage's full body text, copied faithfully, with its paragraph labels (A, B, C…) and a blank line between paragraphs. Excludes instructions, headers/footers, and all question blocks." },
+  },
+  required: ["title", "content"],
+  additionalProperties: false,
+} as const;
+
+const PASSAGE_BODY_SYSTEM_PROMPT = `You are extracting the reading text of ONE passage (or the transcript of one Listening section) from a pre-isolated slice of a real IELTS test's raw PDF text, for a teacher who will review it before anything is saved. Copy the text faithfully — never summarise, reorder, add or invent anything.
+
+Rules:
+- "content" is the passage's full body text, keeping its paragraph labels (A, B, C…) and a blank line between paragraphs.
+- Leave OUT: the paper instruction line ("You should spend about 20 minutes on Questions 1-13, which are based on Reading Passage 1 below."), headings such as "READING PASSAGE 1" or "Questions 1-13", page headers/footers and page numbers, and any question blocks, question instructions or answer key.
+- "title" is the passage's own title if it has one (for example "The Return of the Wetlands"). If it has none, use the heading as printed (for example "Reading Passage 1" or "Section 2").
+- For a Listening section where the slice contains no transcript at all (only questions), set "content" to exactly: "No transcript included in this PDF — audio must be added separately."`;
+
+export function buildPassageBodyExtractionPrompt(params: { testType: "READING" | "LISTENING"; passageLabel: string; text: string }): { system: string; user: string } {
+  return {
+    system: PASSAGE_BODY_SYSTEM_PROMPT,
+    user: [
+      `This is the text of one ${params.testType === "READING" ? "passage" : "section"} (header: "${params.passageLabel}") of an IELTS ${noun(params.testType)} test.`,
+      `Text:\n"""\n${params.text}\n"""`,
+      "Extract this passage's title and body text now.",
+    ].join("\n\n"),
+  };
+}
+
+const QUESTION_TYPE_GUIDANCE = `Choose "questionType" as exactly one of: MULTIPLE_CHOICE (choose the letter), TRUE_FALSE_NOT_GIVEN (True/False/Not Given and Yes/No/Not Given blocks), MATCHING (matching headings, matching sentence endings, matching information or features to a list), SUMMARY_COMPLETION (ONE connected summary or passage with numbered blanks), FILL_IN_BLANK (notes, tables, forms or flow-charts with numbered blanks), SENTENCE_COMPLETION (separate sentences each with a blank), SHORT_ANSWER (questions answered in a few words).`;
+
+function numberList(numbers: number[]): string {
+  return numbers.join(", ");
+}
+
+export function questionNumberRange(startNumber: number, endNumber: number): number[] {
+  const numbers: number[] = [];
+  for (let n = startNumber; n <= endNumber; n++) numbers.push(n);
+  return numbers;
+}
+
+export function buildQuestionGroupExtractionPrompt(params: {
+  testType: "READING" | "LISTENING";
+  passageLabel: string;
+  startNumber: number;
+  endNumber: number;
+  groupText: string;
+  /** Set on a retry: what was wrong with the earlier attempt ("missed 8–9", "typed it SUMMARY_COMPLETION instead of SHORT_ANSWER"…), so the model is told exactly what to fix rather than just asked again. */
+  retryNotes?: string[];
+  /** The type the block's printed instructions identify it as (inferQuestionTypeFromInstructions) — binding when present. */
+  expectedType?: string | null;
+}): { system: string; user: string } {
+  const numbers = questionNumberRange(params.startNumber, params.endNumber);
+  const list = numberList(numbers);
+  const count = numbers.length;
+
+  const system = `You are extracting ONE block of questions from a real IELTS ${noun(params.testType)} test, from a pre-isolated slice of its raw PDF text, for a teacher who will review every field before anything is saved. Faithfulness to the source text is the only goal — never invent, guess, or embellish content that is not actually present.
+
+This slice has ALREADY been cut down to exactly one question block: questions ${params.startNumber} to ${params.endNumber} (${count} question${count === 1 ? "" : "s"}). Extract only this block. Ignore page headers and footers, running headings such as "READING PASSAGE 2", and any answer key.
+
+Rules:
+- Set "startNumber" to ${params.startNumber} and "endNumber" to ${params.endNumber}.
+- "instructions" is the block's instruction text exactly as printed (for example "Choose the correct letter, A, B, C or D." together with any word limit such as "NO MORE THAN TWO WORDS"). Do not include the "Questions ${params.startNumber}-${params.endNumber}" heading itself, and do not include any of the questions.
+- ${QUESTION_TYPE_GUIDANCE}
+- For MULTIPLE_CHOICE, TRUE_FALSE_NOT_GIVEN, FILL_IN_BLANK, SHORT_ANSWER and SENTENCE_COMPLETION: "items" MUST contain exactly one entry for EVERY question number — ${list} — which is ${count} entr${count === 1 ? "y" : "ies"} in total, in order. Each entry holds that question's own prompt text (for notes or table rows with a blank, the line that contains the blank, with the blank shown as ..........) and, for MULTIPLE_CHOICE only, its answer choices labelled A, B, C, D. Never stop early and never skip a number. Leave "summaryText" null and "matchingPrompts" / "matchingOptions" empty.
+- For SUMMARY_COMPLETION: leave "items" empty. Put the full connected summary in "summaryText", copied exactly as printed, with each numbered blank replaced by [n] (for example [${params.startNumber}]). NEVER turn separate questions or sentences into a summary, and never rewrite any text. If the block prints a list of words/phrases to choose from (often labelled A, B, C…), put the WORDS THEMSELVES in "wordBank" in printed order — for a box printed "A currents  B gravity  C cameras" return ["currents", "gravity", "cameras"] — never the letter labels.
+- For FILL_IN_BLANK and SENTENCE_COMPLETION blocks that print a list of words to choose from, "wordBank" works the same way: the words themselves, in printed order, not their letters. Otherwise leave "wordBank" empty.
+- For MATCHING: leave "items" empty. "matchingPrompts" MUST contain exactly one entry for EVERY number — ${list} — with id = the number as a string and text = what is being matched (for example "Paragraph B", or the beginning of the sentence). "matchingOptions" is the complete list being matched against (for example the List of Headings i-vii, or the sentence endings A-G), each id being its printed label and text its wording — include every option, even unused ones.
+${INTERNAL_REVIEW_NOTE}`;
+
+  const lines = [
+    `This is one question block of ${params.passageLabel} of an IELTS ${noun(params.testType)} test.`,
+    `Question block text:\n"""\n${params.groupText}\n"""`,
+  ];
+  if (params.expectedType) {
+    lines.push(
+      `The block's printed instructions identify it as ${params.expectedType}. Set "questionType" to exactly ${params.expectedType} and fill in the fields that type requires, using the questions exactly as they are printed.`
+    );
+  }
+  if (params.retryNotes && params.retryNotes.length > 0) {
+    lines.push(
+      `IMPORTANT: a previous attempt on this block was wrong — it ${params.retryNotes.join("; and it ")}. Correct this. The block contains all of questions ${list}: return every one of them, with the right type, copying the printed text exactly.`
+    );
+  }
+  lines.push("Extract this question block now.");
+  return { system, user: lines.join("\n\n") };
+}
+
+export const missingQuestionsResponseSchema = z.object({ questionGroups: z.array(extractedQuestionGroupSchema) });
+export type MissingQuestionsResponse = z.infer<typeof missingQuestionsResponseSchema>;
+
+export const MISSING_QUESTIONS_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    questionGroups: {
+      type: "array",
+      items: questionGroupJsonSchema,
+      description: "Question blocks covering ONLY the missing question numbers that actually appear in the text. Empty array if none of them are in the text.",
+    },
+  },
+  required: ["questionGroups"],
+  additionalProperties: false,
+} as const;
+
+export function buildMissingQuestionsExtractionPrompt(params: {
+  testType: "READING" | "LISTENING";
+  passageLabel: string;
+  missingNumbers: number[];
+  text: string;
+}): { system: string; user: string } {
+  const list = numberList(params.missingNumbers);
+  const system = `You are recovering question blocks that an earlier extraction pass missed from one passage/section of a real IELTS ${noun(params.testType)} test, working from its raw PDF text, for a teacher who will review every field before anything is saved. Faithfulness to the source text is the only goal — never invent, guess, or embellish content that is not actually present.
+
+The only question numbers still missing are: ${list}.
+
+Rules:
+- Find the questions with exactly those numbers in the text and return them in "questionGroups". Numbers that belong to the same printed block (same heading, instructions and type) go in ONE group; separate blocks go in separate groups.
+- Each group's startNumber/endNumber must cover ONLY numbers from the list above — never return any other number.
+- If one of those numbers genuinely does not appear in the text, simply leave it out. Never make up a question.
+- ${QUESTION_TYPE_GUIDANCE}
+- For MULTIPLE_CHOICE, TRUE_FALSE_NOT_GIVEN, FILL_IN_BLANK, SHORT_ANSWER and SENTENCE_COMPLETION: "items" has one entry per question number in the group, each with that question's own prompt text (and, for MULTIPLE_CHOICE only, its choices labelled A, B, C, D). Leave "summaryText" null and "matchingPrompts" / "matchingOptions" empty.
+- For SUMMARY_COMPLETION: leave "items" empty; put the full connected summary in "summaryText" with numbered blanks written inline as [n]; put any printed word list in "wordBank".
+- For MATCHING: leave "items" empty; "matchingPrompts" has one entry per number (id = the number as a string); "matchingOptions" is the complete list being matched against, with every option's printed label as its id.
+- "instructions" is the block's instruction text as printed, without the heading or any questions.
+${INTERNAL_REVIEW_NOTE}`;
+
+  return {
+    system,
+    user: [
+      `This is the text of ${params.passageLabel} of an IELTS ${noun(params.testType)} test.`,
+      `Text:\n"""\n${params.text}\n"""`,
+      `Return the question blocks for the missing question numbers (${list}) now.`,
+    ].join("\n\n"),
+  };
 }

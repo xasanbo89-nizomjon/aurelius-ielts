@@ -306,6 +306,9 @@ model StudentProfile {
   /// Phase 45 — Media Library 2.0.
   readingLibraryBookmarks   ReadingLibraryBookmark[]
   listeningLibraryBookmarks ListeningLibraryBookmark[]
+  /// Phase 51 — Mock Access Code System.
+  assignedMockAccessCodes MockAccessCode[] @relation("MockAccessCodeAssigned")
+  redeemedMockAccessCodes MockAccessCode[] @relation("MockAccessCodeRedeemed")
 
   @@map("student_profiles")
 }
@@ -357,6 +360,8 @@ model TeacherProfile {
   updatedSkillCoverImages SkillCoverImage[]
   /// Phase 50 — PDF Test Importer staging rows.
   importedTests           ImportedTest[]
+  /// Phase 51 — Mock Access Code System.
+  mockAccessCodes         MockAccessCode[]
 
   @@map("teacher_profiles")
 }
@@ -1377,6 +1382,8 @@ model FullMockTest {
   writingSections   FullMockWritingSection[]
   speakingSections  FullMockSpeakingSection[]
   attempts          FullMockAttempt[]
+  /// Phase 51 — Mock Access Code System.
+  accessCodes       MockAccessCode[]
 
   @@map("full_mock_tests")
 }
@@ -1481,6 +1488,14 @@ model FullMockAttempt {
   /// Listening -> Reading -> Writing -> Speaking, never backward.
   currentSection FullMockSectionType   @default(LISTENING)
 
+  /// Phase 51 — the access code redeemed to start this sitting. Null for
+  /// every attempt created before this phase (and never backfilled) — the
+  /// gate only applies to NEW attempts going forward; an already-in-progress
+  /// legacy attempt keeps working unchanged. SetNull so deleting a code
+  /// later never destroys real attempt/result history.
+  accessCodeId String?
+  accessCode   MockAccessCode? @relation(fields: [accessCodeId], references: [id], onDelete: SetNull)
+
   startedAt   DateTime  @default(now())
   completedAt DateTime?
 
@@ -1491,7 +1506,49 @@ model FullMockAttempt {
 
   @@index([studentId])
   @@index([fullMockTestId])
+  @@index([accessCodeId])
   @@map("full_mock_attempts")
+}
+
+/// Phase 51 — Mock Access Code System. A teacher-issued, single-sitting
+/// entry code gating a FullMockTest ("MOCK-XXXXXX"). Either pre-assigned to
+/// one named student at creation (assignedStudentId), or left unassigned
+/// for bulk distribution — the first eligible student to redeem it claims
+/// it (redeemedByStudentId/redeemedAt), after which it behaves exactly like
+/// a pre-assigned code for every subsequent check. Deliberately mirrors
+/// PromoCode's isActive/expiresAt lifecycle and "block delete once used,
+/// disable instead" rule (src/lib/promo-codes.ts) for consistency.
+model MockAccessCode {
+  id             String       @id @default(cuid())
+  code           String       @unique
+  fullMockTestId String
+  fullMockTest   FullMockTest @relation(fields: [fullMockTestId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  /// Set by the teacher at creation ("one code per student") — only this exact student may ever redeem it. Null for a bulk-generated code (see redeemedByStudentId).
+  assignedStudentId String?
+  assignedStudent   StudentProfile? @relation("MockAccessCodeAssigned", fields: [assignedStudentId], references: [id], onDelete: SetNull)
+
+  /// Set the first time any eligible student redeems this code, locking it to that student from then on — including for a bulk/unassigned code, so the results table always shows exactly who used it even though the teacher never pre-assigned it.
+  redeemedByStudentId String?
+  redeemedByStudent   StudentProfile? @relation("MockAccessCodeRedeemed", fields: [redeemedByStudentId], references: [id], onDelete: SetNull)
+  redeemedAt          DateTime?
+
+  isActive  Boolean   @default(true)
+  expiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attempts FullMockAttempt[]
+
+  @@index([fullMockTestId])
+  @@index([createdById])
+  @@index([assignedStudentId])
+  @@index([redeemedByStudentId])
+  @@map("mock_access_codes")
 }
 
 /// Links ONE real completed Result / WritingSubmission / SpeakingSubmission

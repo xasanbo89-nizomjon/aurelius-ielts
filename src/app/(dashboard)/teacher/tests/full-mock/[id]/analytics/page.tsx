@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, KeyRound } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getFullMockTestAnalytics } from "@/lib/analytics/full-mock-analytics";
@@ -34,7 +34,17 @@ export default async function FullMockAnalyticsPage({
         </Link>
       </Button>
 
-      <PageHeader title={test.title} description="Full Mock Test analytics — every number below is a real student attempt." />
+      <PageHeader
+        title={test.title}
+        description="Full Mock Test analytics — every number below is a real student attempt."
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/teacher/tests/full-mock/${id}/access-codes`}>
+              <KeyRound className="size-4" /> Access Codes
+            </Link>
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card className="py-4">

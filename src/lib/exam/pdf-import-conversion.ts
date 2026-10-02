@@ -39,6 +39,25 @@ function rangeArray(start: number, end: number): number[] {
   return out;
 }
 
+/**
+ * A summary/notes block with a printed word list ("A currents  B gravity…")
+ * has an answer key written as letters ("B"), but the student picks or types
+ * the WORD — so the stored correct answer must be the word, or a correct
+ * student could never match the key. Only applied when the list really holds
+ * words (2+ entries) and the answer is a single letter inside it; anything
+ * else (an answer that's already a word, no list at all) is left untouched.
+ */
+function resolveWordBankAnswer(raw: string, wordBank: string[]): string {
+  const trimmed = raw.trim();
+  if (wordBank.length >= 2 && /^[A-Za-z]$/.test(trimmed)) {
+    const index = trimmed.toUpperCase().charCodeAt(0) - 65;
+    const word = wordBank[index]?.trim();
+    // A list of bare letters ("A", "B"…) means the words were lost — nothing to map to, keep the letter.
+    if (word && !/^[A-Za-z]$/.test(word)) return word;
+  }
+  return trimmed;
+}
+
 function normalizeTrueFalseNotGiven(raw: string): "TRUE" | "FALSE" | "NOT_GIVEN" | null {
   const v = raw.trim().toUpperCase().replace(/\s+/g, "_");
   if (["TRUE", "T", "YES"].includes(v)) return "TRUE";
@@ -69,7 +88,7 @@ export function buildQuestionPayloadsFromGroup(
     const unmatchedNumbers: number[] = [];
     for (const n of rangeArray(group.startNumber, group.endNumber)) {
       const raw = answersByNumber.get(n);
-      if (raw) correctAnswer[String(n)] = raw.trim();
+      if (raw) correctAnswer[String(n)] = resolveWordBankAnswer(raw, json.wordBank);
       else unmatchedNumbers.push(n);
     }
     return [
@@ -144,7 +163,7 @@ export function buildQuestionPayloadsFromGroup(
       case "SENTENCE_COMPLETION":
       case "FILL_IN_BLANK":
         options = { maxWords: json.maxWords ?? undefined, wordBank: json.wordBank.length > 0 ? json.wordBank : undefined };
-        correctAnswer = raw.split("/")[0]?.trim() ?? "";
+        correctAnswer = resolveWordBankAnswer(raw.split("/")[0] ?? "", json.wordBank);
         break;
       case "SHORT_ANSWER":
         options = { maxWords: json.maxWords ?? undefined };

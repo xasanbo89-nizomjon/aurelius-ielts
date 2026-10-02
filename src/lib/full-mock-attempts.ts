@@ -23,7 +23,8 @@ export async function findInProgressFullMockAttempt(studentId: string, fullMockT
   });
 }
 
-export async function getOrCreateFullMockAttempt(studentId: string, fullMockTestId: string) {
+/** Phase 51 — `accessCodeId` is only ever written on a brand-new attempt (the `existing` branch below is untouched), so a legacy in-progress attempt started before the access-code gate existed keeps its `accessCodeId: null` unchanged. */
+export async function getOrCreateFullMockAttempt(studentId: string, fullMockTestId: string, accessCodeId?: string) {
   const test = await prisma.fullMockTest.findFirst({ where: { id: fullMockTestId, status: "PUBLISHED" } });
   if (!test) return null;
 
@@ -33,7 +34,7 @@ export async function getOrCreateFullMockAttempt(studentId: string, fullMockTest
   });
   if (existing) return existing;
 
-  return prisma.fullMockAttempt.create({ data: { studentId, fullMockTestId } });
+  return prisma.fullMockAttempt.create({ data: { studentId, fullMockTestId, accessCodeId } });
 }
 
 async function loadAttemptContext(attemptId: string, studentId: string) {

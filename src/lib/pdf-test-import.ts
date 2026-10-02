@@ -1,5 +1,5 @@
 import "server-only";
-import type { MockTestCategory, Prisma, TestType } from "@prisma/client";
+import type { MockTestCategory, Prisma, QuestionType, TestType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { downloadFromSupabase } from "@/lib/uploads/supabase";
@@ -13,12 +13,53 @@ import {
   type ImportedQuestionGroupJson,
 } from "@/lib/exam/pdf-import-conversion";
 import { createTestSchema, passageSchema, questionBaseSchema, questionGroupSchema } from "@/lib/validations/test-management";
+import { validateImportedTest, type ImportIssue, type ImportValidation } from "@/lib/exam/pdf-import-validation";
+import type { PdfTestExtractionResponse } from "@/lib/ai/prompts/pdf-test-import";
 
 export class OwnershipError extends Error {
   constructor(message = "You don't have access to this import.") {
     super(message);
     this.name = "OwnershipError";
   }
+}
+
+/** Thrown by confirmImport when the staged import is incomplete or inconsistent — carries every issue, and its message reads cleanly in a toast. */
+export class ImportValidationError extends Error {
+  readonly issues: ImportIssue[];
+
+  constructor(issues: ImportIssue[]) {
+    const shown = issues
+      .slice(0, 3)
+      .map((issue) => issue.message)
+      .join(" ");
+    const more = issues.length > 3 ? ` (+${issues.length - 3} more — see the checklist on this page)` : "";
+    super(`Can't import yet: ${shown}${more}`);
+    this.name = "ImportValidationError";
+    this.issues = issues;
+  }
+}
+
+/** The one place a stored import's rows are turned into a validation — used by the review page (to show it) and confirmImport (to enforce it), so what the teacher sees is exactly what is checked. */
+export function validateImportedTestRows(importedTest: {
+  type: TestType;
+  passages: { id: string; title: string; questionGroups: { id: string; startNumber: number; endNumber: number; questionType: QuestionType; questionsJson: unknown }[] }[];
+  answers: { questionNumber: number }[];
+}): ImportValidation {
+  return validateImportedTest(
+    importedTest.passages.map((passage) => ({
+      id: passage.id,
+      title: passage.title,
+      questionGroups: passage.questionGroups.map((group) => ({
+        id: group.id,
+        startNumber: group.startNumber,
+        endNumber: group.endNumber,
+        questionType: group.questionType,
+        questionsJson: group.questionsJson,
+      })),
+    })),
+    importedTest.answers.map((answer) => answer.questionNumber),
+    { sectionLabel: importedTest.type === "LISTENING" ? "Section" : "Passage" }
+  );
 }
 
 async function assertOwnsImportedTest(importedTestId: string, teacherId: string) {
@@ -58,28 +99,22 @@ export async function createImportedTest(
 }
 
 /**
- * Downloads the uploaded PDF, extracts its text, runs the AI structured
- * extraction, and persists the result as staging rows for teacher review.
- * Any failure (bad PDF, AI unavailable, unexpected shape) lands the row in
- * FAILED with a real errorMessage rather than leaving it stuck — the
- * teacher can always retry or delete it.
+ * Replaces an import's staged passages / question blocks / answer key with a
+ * fresh extraction, atomically (a failed write leaves the previous parse
+ * untouched). Split out of analyzeImportedTest so the persistence step can be
+ * exercised on its own. The generous transaction timeout matters now: a
+ * 3-passage paper is ~9+ question blocks, each its own insert, which can
+ * brush Prisma's 5s default over a remote (serverless Postgres) connection.
  */
-export async function analyzeImportedTest(importedTestId: string, teacherId: string) {
-  const row = await assertOwnsImportedTest(importedTestId, teacherId);
-  await prisma.importedTest.update({ where: { id: row.id }, data: { status: "PARSING", errorMessage: null } });
-
-  try {
-    const buffer = await downloadFromSupabase(TEST_IMPORT_PDF_BUCKET, row.pdfPath);
-    const { text } = await extractPdfText(buffer);
-    const extraction = await extractTestStructureFromPdfText(row.type as "READING" | "LISTENING", text);
-
-    await prisma.$transaction(async (txn) => {
-      await txn.importedPassage.deleteMany({ where: { importedTestId: row.id } });
-      await txn.importedAnswer.deleteMany({ where: { importedTestId: row.id } });
+export async function persistExtraction(importedTestId: string, extraction: PdfTestExtractionResponse, rawText: string) {
+  await prisma.$transaction(
+    async (txn) => {
+      await txn.importedPassage.deleteMany({ where: { importedTestId } });
+      await txn.importedAnswer.deleteMany({ where: { importedTestId } });
 
       if (extraction.answers.length > 0) {
         await txn.importedAnswer.createMany({
-          data: extraction.answers.map((a) => ({ importedTestId: row.id, questionNumber: a.number, answerText: a.answer.slice(0, 500) })),
+          data: extraction.answers.map((a) => ({ importedTestId, questionNumber: a.number, answerText: a.answer.slice(0, 500) })),
           skipDuplicates: true,
         });
       }
@@ -88,7 +123,7 @@ export async function analyzeImportedTest(importedTestId: string, teacherId: str
         const passage = extraction.passages[passageIndex];
         const createdPassage = await txn.importedPassage.create({
           data: {
-            importedTestId: row.id,
+            importedTestId,
             title: (passage.title || `Passage ${passageIndex + 1}`).slice(0, 160),
             content: passage.content,
             orderIndex: passageIndex,
@@ -120,10 +155,30 @@ export async function analyzeImportedTest(importedTestId: string, teacherId: str
       }
 
       await txn.importedTest.update({
-        where: { id: row.id },
-        data: { status: "PARSED", title: extraction.title.slice(0, 160), rawExtractedText: text, errorMessage: null },
+        where: { id: importedTestId },
+        data: { status: "PARSED", title: extraction.title.slice(0, 160), rawExtractedText: rawText, errorMessage: null },
       });
-    });
+    },
+    { timeout: 30_000, maxWait: 10_000 }
+  );
+}
+
+/**
+ * Downloads the uploaded PDF, extracts its text, runs the AI structured
+ * extraction, and persists the result as staging rows for teacher review.
+ * Any failure (bad PDF, AI unavailable, unexpected shape) lands the row in
+ * FAILED with a real errorMessage rather than leaving it stuck — the
+ * teacher can always retry or delete it.
+ */
+export async function analyzeImportedTest(importedTestId: string, teacherId: string) {
+  const row = await assertOwnsImportedTest(importedTestId, teacherId);
+  await prisma.importedTest.update({ where: { id: row.id }, data: { status: "PARSING", errorMessage: null } });
+
+  try {
+    const buffer = await downloadFromSupabase(TEST_IMPORT_PDF_BUCKET, row.pdfPath);
+    const { text } = await extractPdfText(buffer);
+    const extraction = await extractTestStructureFromPdfText(row.type as "READING" | "LISTENING", text);
+    await persistExtraction(row.id, extraction, text);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not analyze this PDF.";
     await prisma.importedTest.update({ where: { id: row.id }, data: { status: "FAILED", errorMessage: message.slice(0, 1000) } });
@@ -203,6 +258,7 @@ export async function updateImportedQuestionGroup(
     endNumber?: number;
     summaryText?: string | null;
     items?: ImportedQuestionGroupJson["items"];
+    wordBank?: string[];
   }
 ) {
   const existing = await assertOwnsImportedQuestionGroup(groupId, teacherId);
@@ -211,6 +267,7 @@ export async function updateImportedQuestionGroup(
     ...currentJson,
     summaryText: input.summaryText !== undefined ? input.summaryText : currentJson.summaryText,
     items: input.items ?? currentJson.items,
+    wordBank: input.wordBank ?? currentJson.wordBank,
   };
 
   return prisma.importedQuestionGroup.update({
@@ -287,6 +344,12 @@ export async function confirmImport(
   if (row.status === "IMPORTED") throw new Error("This PDF has already been imported.");
   if (row.status !== "PARSED") throw new Error("This import isn't ready yet — analyze it first.");
   if (row.passages.length === 0) throw new Error("No passages were detected — nothing to import.");
+
+  // Phase 50.4 — the completeness gate. Enforced here (not only in the UI) so no
+  // client can import a partial test: every question number must exist exactly
+  // once, and map to exactly one answer key entry, before anything is written.
+  const validation = validateImportedTestRows(row);
+  if (!validation.ok) throw new ImportValidationError(validation.issues);
 
   const parsedTest = createTestSchema.parse({
     title: input.title,

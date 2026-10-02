@@ -28,6 +28,8 @@ export const updateImportedQuestionGroupSchema = z.object({
   startNumber: z.number().int().positive().optional(),
   endNumber: z.number().int().positive().optional(),
   summaryText: z.string().trim().max(20000).nullable().optional(),
+  /** The block's printed list of words to choose from, in printed order (A first) — so a key letter like "B" can be resolved to its word. */
+  wordBank: z.array(z.string().trim().min(1, "A word-list entry can't be empty.").max(120)).max(60).optional(),
   items: z
     .array(
       z.object({

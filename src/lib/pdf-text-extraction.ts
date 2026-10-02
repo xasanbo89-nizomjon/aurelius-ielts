@@ -88,3 +88,163 @@ export function splitTextByMarkers(text: string, markers: DetectedSectionMarker[
     return text.slice(marker.index, end);
   });
 }
+
+// ---------------------------------------------------------------------------
+// Phase 50.4 — question-block ("Questions 6–9") boundary detection. Same
+// principle as passage markers above, one level down: a real IELTS paper
+// prints every question block under a regular "Questions N–M" heading, so the
+// set of blocks in a passage is something a regex can enumerate exactly —
+// there is no reason to ask an LLM to *decide* how many blocks exist (it
+// sometimes stops after the first one, which is the bug this phase fixes).
+// ---------------------------------------------------------------------------
+
+export type DetectedQuestionGroupMarker = { startNumber: number; endNumber: number; label: string; index: number };
+
+// groups: 1 = first number, 2 = separator, 3 = last number, 4 = rest of the line
+const GROUP_MARKER_PATTERN = /^[ \t]*Questions?[ \t]+(\d{1,3})[ \t]*([-‐-―−]|\bto\b|\band\b|&)[ \t]*(\d{1,3})(?!\d)([^\n]*)$/gim;
+
+/**
+ * A real block heading is the whole line ("Questions 6–9") or is followed by
+ * the start of a new sentence/instruction ("Questions 1–5 Complete the notes").
+ * A line that merely *starts* with the same words but continues an ordinary
+ * sentence — "Questions 1–13, which are based on Reading Passage 1 below" once
+ * the PDF has wrapped it — continues in lowercase or after a comma, which is
+ * how the two are told apart.
+ */
+function isGroupHeaderRemainder(rest: string): boolean {
+  const r = rest.trim();
+  if (r === "") return true;
+  if (/^[:.\-–—]/.test(r)) return true;
+  return /^[A-Z(]/.test(r);
+}
+
+/**
+ * Finds every real question-block heading in `text` (a single passage's
+ * segment), in document order. Handles "Questions 6–9", "Questions 6-9",
+ * "Questions 6 to 9" and "Questions 14 and 15" (a two-question block).
+ * Repeats of the same heading (a running header on the block's second
+ * page) keep only the first occurrence, and a passage-level container
+ * heading ("Questions 1–13") is dropped when smaller blocks inside its range
+ * follow it ("Questions 1–5", "6–9", "10–13") — the sub-blocks are the real
+ * groups.
+ */
+export function detectQuestionGroupMarkers(text: string): DetectedQuestionGroupMarker[] {
+  const found: DetectedQuestionGroupMarker[] = [];
+
+  for (const match of text.matchAll(GROUP_MARKER_PATTERN)) {
+    const startNumber = Number(match[1]);
+    const endNumber = Number(match[3]);
+    const separator = match[2].toLowerCase();
+    if (!isGroupHeaderRemainder(match[4] ?? "")) continue;
+    if (startNumber < 1 || endNumber < startNumber || endNumber > 200 || endNumber - startNumber > 60) continue;
+    if ((separator === "and" || separator === "&") && endNumber !== startNumber + 1) continue;
+
+    found.push({ startNumber, endNumber, label: `Questions ${startNumber}–${endNumber}`, index: match.index ?? 0 });
+  }
+
+  const seen = new Set<string>();
+  const unique = found
+    .sort((a, b) => a.index - b.index)
+    .filter((m) => {
+      const key = `${m.startNumber}-${m.endNumber}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  return unique.filter(
+    (m, i) =>
+      !unique
+        .slice(i + 1)
+        .some((later) => later.startNumber >= m.startNumber && later.endNumber <= m.endNumber && (later.startNumber !== m.startNumber || later.endNumber !== m.endNumber))
+  );
+}
+
+const ANSWER_KEY_HEADING_PATTERN = /^[ \t]*(?:(?:READING|LISTENING)[ \t]+)?(?:ANSWER[ \t]*KEY|ANSWERS?|ANSWER[ \t]*SHEET|KEY)[ \t]*:?[ \t]*$/gim;
+
+/**
+ * The index where the answer key section starts, or null if there isn't a
+ * real one. A bare "KEY"/"ANSWERS" line only counts if a numbered list
+ * actually follows it, so a stray word in question text can never cut a
+ * question block short.
+ */
+export function detectAnswerKeyStart(text: string): number | null {
+  for (const match of text.matchAll(ANSWER_KEY_HEADING_PATTERN)) {
+    const index = match.index ?? 0;
+    const after = text.slice(index + match[0].length, index + match[0].length + 800);
+    const numberedLines = after.split("\n").filter((line) => /^[ \t]*\d{1,2}[ \t]*[.):\-–]?[ \t]+\S/.test(line)).length;
+    if (numberedLines >= 5) return index;
+  }
+  return null;
+}
+
+export type InferredQuestionType =
+  | "MULTIPLE_CHOICE"
+  | "TRUE_FALSE_NOT_GIVEN"
+  | "FILL_IN_BLANK"
+  | "MATCHING"
+  | "SHORT_ANSWER"
+  | "SENTENCE_COMPLETION"
+  | "SUMMARY_COMPLETION";
+
+/**
+ * IELTS prints a fixed instruction for each question type ("Answer the
+ * questions below", "Complete the sentences below", "Do the following
+ * statements agree with…"), so the type of a block can be read from its
+ * instruction deterministically rather than left to the model — which, left
+ * to its own judgment, drifted to SUMMARY_COMPLETION for blocks that are
+ * really sentence-completion or short-answer (a summary is a single string
+ * to fill, the easiest path), even rewriting the questions into statements.
+ * Only the instruction area at the top of the block is read, so wording deep
+ * inside a question can't change the answer. Returns null when the wording
+ * isn't recognised, in which case the model decides as before.
+ * Order matters: matching is checked before the "complete each sentence…"
+ * family because "Complete each sentence with the correct ending" is matching.
+ */
+export function inferQuestionTypeFromInstructions(blockText: string, firstQuestionNumber?: number): InferredQuestionType | null {
+  // The instruction area ends where the first numbered question line begins ("6 Wetland areas…") — so wording inside the questions themselves, or any text that follows the block (an answer key's "TRUE/FALSE/NOT GIVEN" entries), can never retype it.
+  let area = blockText;
+  if (firstQuestionNumber != null) {
+    const firstQuestionLine = new RegExp(`^[ \\t]*${firstQuestionNumber}[ \\t]*[.):]?[ \\t]+\\S`, "m").exec(blockText);
+    if (firstQuestionLine && firstQuestionLine.index > 0) area = blockText.slice(0, firstQuestionLine.index);
+  }
+  const head = area.slice(0, 900);
+
+  if (/\b(true|yes)\b[\s\S]{0,120}\b(false|no)\b[\s\S]{0,120}\bnot\s+given\b/i.test(head)) return "TRUE_FALSE_NOT_GIVEN";
+  if (/list\s+of\s+headings|choose\s+the\s+correct\s+heading|correct\s+ending|which\s+paragraph\s+contains|match\s+(each|the)\b|matching\s+(headings|features|information|sentence)|you\s+may\s+use\s+any\s+letter\s+more\s+than\s+once/i.test(head)) return "MATCHING";
+  if (/choose\s+the\s+correct\s+letter|choose\s+(two|three|four)\s+letters?/i.test(head)) return "MULTIPLE_CHOICE";
+  if (/complete\s+the\s+(summary|passage)\b/i.test(head)) return "SUMMARY_COMPLETION";
+  if (/answer\s+the\s+(following\s+)?questions?\b/i.test(head)) return "SHORT_ANSWER";
+  if (/complete\s+(the|each)\s+sentences?\b/i.test(head)) return "SENTENCE_COMPLETION";
+  if (/complete\s+the\s+(notes|table|flow-?\s?chart|form|diagram)\b/i.test(head)) return "FILL_IN_BLANK";
+  return null;
+}
+
+export type QuestionGroupSlice = { marker: DetectedQuestionGroupMarker; text: string };
+
+/**
+ * Cuts one passage's segment into its body (everything before the first
+ * question block) and one text slice per detected block — each running from
+ * its own heading to the next block's heading, and never past
+ * `answerKeyIndex` (so a trailing answer key can't leak into the last block).
+ * Indexes are relative to `segmentText`.
+ */
+export function splitSegmentByQuestionGroups(
+  segmentText: string,
+  markers: DetectedQuestionGroupMarker[],
+  answerKeyIndex: number | null
+): { bodyText: string; groups: QuestionGroupSlice[] } {
+  const limit = answerKeyIndex != null && answerKeyIndex >= 0 && answerKeyIndex < segmentText.length ? answerKeyIndex : segmentText.length;
+
+  if (markers.length === 0) return { bodyText: segmentText.slice(0, limit), groups: [] };
+
+  const bodyText = segmentText.slice(0, Math.min(markers[0].index, limit));
+  const groups = markers
+    .map((marker, i) => {
+      const end = Math.min(i + 1 < markers.length ? markers[i + 1].index : limit, limit);
+      return { marker, text: segmentText.slice(marker.index, Math.max(end, marker.index)) };
+    })
+    .filter((slice) => slice.text.trim().length > 0);
+
+  return { bodyText, groups };
+}

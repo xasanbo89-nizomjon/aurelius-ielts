@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { BookOpen, CheckCircle2, CircleDashed, ClipboardCheck, Clock, Headphones, Mic, PenLine } from "lucide-react";
+import { BookOpen, CheckCircle2, CircleDashed, ClipboardCheck, Clock, Headphones, KeyRound, Mic, PenLine } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { hasActiveAccessForFullMockTest } from "@/lib/subscription";
 import { getPublishedFullMockTestDetail } from "@/lib/full-mock-tests";
 import { MOCK_TEST_DIFFICULTY_BADGE_VARIANT, MOCK_TEST_DIFFICULTY_LABELS } from "@/lib/labels";
 import { findInProgressFullMockAttempt, getFullMockProgressSummary } from "@/lib/full-mock-attempts";
+import { getRedeemedAccessCodeForFullMockTest } from "@/lib/mock-access-codes";
 import { startFullMockAttemptAction } from "@/actions/full-mock-attempts.actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
 import { FullMockStartForm } from "@/components/student/full-mock-start-form";
+import { MockAccessCodeGate } from "@/components/student/mock-access-code-gate";
 
 export const metadata: Metadata = { title: "Start Full Mock Test" };
 
@@ -34,9 +36,33 @@ export default async function FullMockStartPage({
     );
   }
 
-  const boundStart = startFullMockAttemptAction.bind(null, fullMockTestId);
-
   const inProgress = await findInProgressFullMockAttempt(profile.id, fullMockTestId);
+
+  // Phase 51 — a brand-new sitting requires a redeemed access code; an
+  // already-in-progress attempt (including one started before this gate
+  // existed) is never blocked from resuming.
+  if (!inProgress && !(await getRedeemedAccessCodeForFullMockTest(profile.id, fullMockTestId))) {
+    return (
+      <div className="flex min-h-svh items-center justify-center px-6 py-12">
+        <Card className="w-full max-w-md py-8">
+          <CardContent className="space-y-5 text-center">
+            <span className="bg-secondary text-accent mx-auto flex size-14 items-center justify-center rounded-2xl">
+              <KeyRound className="size-7" strokeWidth={1.5} />
+            </span>
+            <div className="space-y-2">
+              <h1 className="font-display text-xl font-medium tracking-tight">{test.title}</h1>
+              <p className="text-muted-foreground text-sm">
+                This mock requires an access code from your teacher before you can start it.
+              </p>
+            </div>
+            <MockAccessCodeGate />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const boundStart = startFullMockAttemptAction.bind(null, fullMockTestId);
   const progress = inProgress ? await getFullMockProgressSummary(inProgress.id, profile.id) : null;
 
   return (
