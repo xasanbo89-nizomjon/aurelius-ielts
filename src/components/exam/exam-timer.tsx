@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Clock } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -27,12 +27,15 @@ export function ExamTimer({
   onExpire,
   size = "default",
   label,
+  render,
 }: {
   durationSeconds: number | null;
   onExpire: () => void;
   size?: "default" | "large";
   /** Phase E — names what is being counted down when it isn't the whole test (e.g. "Transfer time"). */
   label?: string;
+  /** Phase G — the official exam screen draws the countdown itself (plain text); the deadline, the announcements and the one-time expiry stay here. `remaining` is null for an untimed test. */
+  render?: (state: { remaining: number | null; announcement: string }) => ReactNode;
 }) {
   // null, NaN or infinite = untimed. (0 is a real value: the time has already run out.)
   const usableSeconds = durationSeconds != null && Number.isFinite(durationSeconds) ? Math.max(0, Math.floor(durationSeconds)) : null;
@@ -72,6 +75,8 @@ export function ExamTimer({
       document.removeEventListener("visibilitychange", tick);
     };
   }, [usableSeconds]);
+
+  if (render) return <>{render({ remaining: usableSeconds == null ? null : remaining, announcement })}</>;
 
   if (usableSeconds == null || remaining == null) {
     return (

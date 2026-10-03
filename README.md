@@ -41,6 +41,10 @@ Tailwind CSS, Prisma and Firebase Authentication.
      secrets; never commit the downloaded JSON or expose it to the client.
    - Add `http://localhost:3000` to **Authentication → Settings → Authorized domains** for local
      Google sign-in to work.
+   - `NEXT_PUBLIC_EXAM_UI` (optional) — the Reading exam screen: `official` (the default; the look
+     of the computer-delivered IELTS test) or `legacy` (the screen from before Phase G). Both draw
+     the same attempt, so switching loses nothing; it needs a rebuild/redeploy. A single visit can
+     be switched with `?ui=legacy` / `?ui=official` on the exam URL.
 
 3. **Push the schema to your database**
 

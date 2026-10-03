@@ -1,0 +1,1006 @@
+/*
+ * Phase G — the official computer-delivered IELTS look for the Reading exam.
+ * Everything is scoped to .official-exam (the exam root) or an .ex-* class inside it: nothing here
+ * touches another screen. Sizes are in em so the whole screen scales with the "Text size" setting
+ * (the root's font-size); colours are variables so the three "Contrast" settings only swap them.
+ * Flat on purpose: no rounded corners, no shadows, thin grey rules.
+ */
+
+.official-exam,
+.ex-start {
+  --ex-bg: #ffffff;
+  --ex-fg: #000000;
+  --ex-muted: #4d4d4d;
+  --ex-border: #cccccc; /* structure: rules between regions */
+  --ex-control: #767676; /* things you operate: boxes, buttons, checkboxes */
+  --ex-bar: #f0f0f0;
+  --ex-accent: #233d63;
+  --ex-accent-ink: #ffffff;
+  --ex-flag: #b45309;
+  --ex-warn: #b3261e;
+  /* the one highlight colour of the exam (see globals.css .exam-highlight) */
+  --exam-highlight: #ffe46b;
+  --exam-highlight-ink: #000000;
+
+  background: var(--ex-bg);
+  color: var(--ex-fg);
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* The exam itself fills the screen and never scrolls as a page: only its two panes do. */
+.official-exam {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.official-exam[data-contrast="white-on-black"],
+.ex-start[data-contrast="white-on-black"] {
+  --ex-bg: #000000;
+  --ex-fg: #ffffff;
+  --ex-muted: #d0d0d0;
+  --ex-border: #6e6e6e;
+  --ex-control: #a8a8a8;
+  --ex-bar: #1c1c1c;
+  --ex-accent: #8ab4f8;
+  --ex-accent-ink: #000000;
+  --ex-flag: #ffb454;
+  --ex-warn: #ff8a80;
+}
+
+.official-exam[data-contrast="yellow-on-black"],
+.ex-start[data-contrast="yellow-on-black"] {
+  --ex-bg: #000000;
+  --ex-fg: #ffe600;
+  --ex-muted: #e6d500;
+  --ex-border: #8f8300;
+  --ex-control: #c7b800;
+  --ex-bar: #1a1700;
+  --ex-accent: #ffe600;
+  --ex-accent-ink: #000000;
+  --ex-flag: #ff9d4d;
+  --ex-warn: #ff8a65;
+}
+
+.official-exam :focus-visible,
+.ex-start :focus-visible {
+  outline: 2px solid var(--ex-accent);
+  outline-offset: 2px;
+}
+
+/* :where() keeps this at the lowest specificity, so any class below (the filled finish button, the primary button) can set its own colour. */
+:where(.official-exam, .ex-start) :is(button, input, select) {
+  font: inherit;
+  color: inherit;
+}
+
+.ex-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.ex-header {
+  position: relative;
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1em;
+  padding: 0.5em 1em;
+  border-bottom: 1px solid var(--ex-border);
+  background: var(--ex-bg);
+}
+
+.ex-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  min-width: 0;
+}
+
+.ex-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  flex: none;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ex-brand-mark svg {
+  width: 1.15em;
+  height: 1.15em;
+}
+
+.ex-candidate {
+  min-width: 0;
+  padding-left: 0.7em;
+  border-left: 1px solid var(--ex-border);
+  overflow: hidden;
+  color: var(--ex-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ex-clock {
+  font-size: 1.1em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ex-clock[data-warning="true"] {
+  padding: 0.1em 0.55em;
+  border: 2px solid var(--ex-warn);
+  color: var(--ex-warn);
+}
+
+.ex-clock-untimed {
+  color: var(--ex-muted);
+  font-weight: 400;
+}
+
+.ex-time-short {
+  display: none;
+}
+
+.ex-header-end {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ex-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4em;
+  height: 2.4em;
+  padding: 0;
+  border: 1px solid var(--ex-control);
+  background: var(--ex-bg);
+  cursor: pointer;
+}
+
+.ex-icon-button svg {
+  width: 1.2em;
+  height: 1.2em;
+}
+
+.ex-icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.ex-icon-button[aria-expanded="true"] {
+  background: var(--ex-bar);
+}
+
+.ex-menu {
+  position: absolute;
+  top: calc(100% + 1px);
+  right: 1em;
+  z-index: 40;
+  min-width: 16em;
+  padding: 1em 1.25em 0.5em;
+  border: 1px solid var(--ex-fg);
+  background: var(--ex-bg);
+}
+
+.ex-menu fieldset {
+  min-width: 0;
+  margin: 0 0 1em;
+  padding: 0;
+  border: 0;
+}
+
+.ex-menu legend {
+  margin-bottom: 0.35em;
+  padding: 0;
+  font-weight: 700;
+}
+
+.ex-menu label {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.25em 0;
+  cursor: pointer;
+}
+
+.ex-menu input[type="radio"] {
+  width: 1em;
+  height: 1em;
+  margin: 0;
+  accent-color: var(--ex-accent);
+}
+
+/* ---------------------------------------------------------------- part bar */
+
+.ex-partbar {
+  flex: none;
+  padding: 0.6em 1em;
+  border-bottom: 1px solid var(--ex-border);
+  background: var(--ex-bar);
+}
+
+.ex-partbar strong {
+  margin-right: 0.6em;
+}
+
+/* ---------------------------------------------------------------- split */
+
+.ex-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.ex-split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ex-split[data-dragging="true"] {
+  cursor: col-resize;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ex-pane {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.25em 1.5em 3em;
+}
+
+/* Phones: one pane at a time, the other stays mounted (so scroll position and typed answers survive a tab switch). */
+.ex-phone-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ex-phone-pane[hidden] {
+  display: none;
+}
+
+.ex-divider {
+  position: relative;
+  flex: none;
+  width: 0.7em;
+  border-right: 1px solid var(--ex-border);
+  border-left: 1px solid var(--ex-border);
+  background: var(--ex-bar);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.ex-divider::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.25em;
+  height: 2.2em;
+  transform: translate(-50%, -50%);
+  border-right: 1px solid var(--ex-control);
+  border-left: 1px solid var(--ex-control);
+}
+
+.ex-divider:focus-visible {
+  outline-offset: -2px;
+}
+
+.ex-tabs {
+  display: flex;
+  flex: none;
+  border-bottom: 1px solid var(--ex-border);
+}
+
+.ex-tab {
+  flex: 1;
+  padding: 0.65em 0.5em;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: var(--ex-bar);
+  cursor: pointer;
+}
+
+.ex-tab[aria-selected="true"] {
+  border-bottom-color: var(--ex-accent);
+  background: var(--ex-bg);
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- passage */
+
+.ex-passage-title {
+  margin: 0 0 0.8em;
+  font-size: 1.35em;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.ex-passage-text {
+  white-space: pre-wrap;
+  line-height: 1.65;
+}
+
+.ex-passage-heading {
+  font-size: 1.3em;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+/* The paragraph letter is drawn here, never part of the selectable / measured text. */
+.ex-para::before {
+  content: attr(data-para-label);
+  display: inline-block;
+  min-width: 1ch;
+  margin-right: 0.6em;
+  font-weight: 700;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ex-hidden {
+  display: none;
+}
+
+.ex-figure {
+  margin: 0 0 1.25em;
+  border: 1px solid var(--ex-border);
+}
+
+.ex-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ex-figure figcaption {
+  padding: 0.4em 0.7em;
+  border-top: 1px solid var(--ex-border);
+  color: var(--ex-muted);
+  font-size: 0.875em;
+}
+
+/* ---------------------------------------------------------------- questions */
+
+.ex-questions {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ex-group {
+  margin: 0 0 2em;
+}
+
+.ex-group-title {
+  margin: 0 0 0.35em;
+  font-size: 1.05em;
+  font-weight: 700;
+}
+
+.ex-instructions {
+  margin: 0 0 1em;
+  white-space: pre-line;
+}
+
+.ex-item {
+  margin: 0 0 1.15em;
+  scroll-margin-top: 1em;
+}
+
+.ex-item-text {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.ex-number {
+  margin-right: 0.6em;
+  font-weight: 700;
+}
+
+.ex-blank {
+  display: inline-block;
+  width: 17ch;
+  max-width: 100%;
+  margin: 0 0.25em;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--ex-control);
+  border-radius: 0;
+  background: var(--ex-bg);
+  vertical-align: baseline;
+}
+
+.ex-blank::placeholder {
+  color: var(--ex-muted);
+  font-weight: 700;
+  opacity: 1;
+}
+
+.ex-blank[data-filled="true"] {
+  border-color: var(--ex-fg);
+}
+
+.ex-blank-own-line {
+  display: block;
+  margin: 0.45em 0 0;
+}
+
+.ex-options {
+  margin: 0.45em 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ex-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6em;
+  padding: 0.2em 0;
+  cursor: pointer;
+}
+
+.ex-option input {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  margin: 0.3em 0 0;
+  accent-color: var(--ex-accent);
+}
+
+.ex-option-letter {
+  flex: none;
+  min-width: 1.1em;
+  font-weight: 700;
+}
+
+.ex-option-caps {
+  letter-spacing: 0.02em;
+}
+
+.ex-select {
+  min-width: 6em;
+  margin-left: 0.4em;
+  padding: 0.2em 0.35em;
+  border: 1px solid var(--ex-control);
+  border-radius: 0;
+  background: var(--ex-bg);
+}
+
+.ex-match-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35em 0.6em;
+}
+
+.ex-list {
+  margin: 0.5em 0 1.1em;
+  padding: 0.6em 0.9em;
+  border: 1px solid var(--ex-border);
+}
+
+.ex-list-title {
+  margin: 0 0 0.35em;
+  font-weight: 700;
+}
+
+.ex-list-row {
+  display: flex;
+  gap: 0.7em;
+  padding: 0.1em 0;
+}
+
+.ex-list-row strong {
+  flex: none;
+  min-width: 1.4em;
+}
+
+.ex-bank {
+  margin: 0 0 1em;
+  padding: 0.6em 0.9em;
+  border: 1px solid var(--ex-border);
+}
+
+.ex-bank-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  margin-top: 0.4em;
+}
+
+.ex-bank-word {
+  padding: 0.15em 0.6em;
+  border: 1px solid var(--ex-control);
+  background: var(--ex-bg);
+  cursor: grab;
+}
+
+.ex-bank-word[aria-pressed="true"] {
+  background: var(--ex-accent);
+  color: var(--ex-accent-ink);
+}
+
+.ex-drop {
+  display: inline;
+}
+
+.ex-drop[data-over="true"] .ex-blank,
+.ex-drop[data-armed="true"] .ex-blank {
+  outline: 2px dashed var(--ex-accent);
+}
+
+.ex-summary {
+  line-height: 2;
+  white-space: pre-line;
+}
+
+.ex-table {
+  width: 100%;
+  border-collapse: collapse;
+  line-height: 2;
+}
+
+.ex-table th,
+.ex-table td {
+  padding: 0.3em 0.7em;
+  border: 1px solid var(--ex-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.ex-table th {
+  background: var(--ex-bar);
+}
+
+.ex-flow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 36em;
+  margin: 0 auto;
+  line-height: 2;
+}
+
+.ex-flow-step {
+  padding: 0.5em 0.9em;
+  border: 1px solid var(--ex-control);
+  text-align: center;
+}
+
+.ex-flow-arrow {
+  text-align: center;
+  line-height: 1.4;
+}
+
+.ex-remaining {
+  margin: 1em 0 0;
+  padding: 0.6em 0.9em;
+  border: 1px solid var(--ex-border);
+}
+
+.ex-remaining p {
+  margin: 0 0 0.4em;
+  font-weight: 700;
+}
+
+.ex-remaining-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  margin: 0.25em 0;
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.ex-footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 1em;
+  padding: 0.5em 1em;
+  border-top: 1px solid var(--ex-border);
+  background: var(--ex-bg);
+}
+
+.ex-parts {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 1.25em;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0.2em 0.1em;
+}
+
+.ex-part {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.35em;
+}
+
+.ex-part-label {
+  margin-right: 0.35em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ex-part-button {
+  padding: 0.35em 0.55em;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ex-part-button:hover {
+  border-color: var(--ex-control);
+}
+
+.ex-part-count {
+  margin-left: 0.6em;
+  color: var(--ex-muted);
+}
+
+.ex-qbtn {
+  position: relative;
+  min-width: 2em;
+  height: 2em;
+  padding: 0 0.35em;
+  border: 1px solid transparent;
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.ex-qbtn:hover {
+  border-color: var(--ex-control);
+}
+
+.ex-qbtn[data-state="answered"] {
+  background: var(--ex-accent);
+  color: var(--ex-accent-ink);
+}
+
+.ex-qbtn[aria-current="true"] {
+  outline: 2px solid var(--ex-fg);
+  outline-offset: 1px;
+}
+
+.ex-qbtn[data-flagged="true"]::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  border-style: solid;
+  border-width: 0 0.7em 0.7em 0;
+  border-color: transparent var(--ex-flag) transparent transparent;
+}
+
+.ex-footer-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.6em;
+}
+
+.ex-review {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  margin-right: 0.4em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ex-review input {
+  width: 1.05em;
+  height: 1.05em;
+  margin: 0;
+  accent-color: var(--ex-accent);
+}
+
+.ex-finish {
+  border-color: var(--ex-accent);
+  background: var(--ex-accent);
+  color: var(--ex-accent-ink);
+}
+
+/* ---------------------------------------------------------------- dialog */
+
+.ex-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.ex-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 61;
+  width: min(32em, calc(100% - 2em));
+  transform: translate(-50%, -50%);
+  padding: 1.5em;
+  border: 2px solid var(--ex-fg);
+  background: var(--ex-bg);
+  color: var(--ex-fg);
+}
+
+.ex-dialog h2 {
+  margin: 0 0 0.6em;
+  font-size: 1.2em;
+}
+
+.ex-dialog p {
+  margin: 0 0 0.6em;
+}
+
+.ex-dialog-warning {
+  font-weight: 700;
+}
+
+.ex-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.6em;
+  margin-top: 1.25em;
+}
+
+.ex-button {
+  padding: 0.5em 1.1em;
+  border: 1px solid var(--ex-control);
+  background: var(--ex-bg);
+  cursor: pointer;
+}
+
+.ex-button-primary {
+  border-color: var(--ex-accent);
+  background: var(--ex-accent);
+  color: var(--ex-accent-ink);
+  font-weight: 700;
+}
+
+.ex-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------- start screen */
+
+.ex-start {
+  min-height: 100svh;
+  background: var(--ex-bg);
+  color: var(--ex-fg);
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.5;
+}
+
+.ex-start-body {
+  max-width: 44em;
+  margin: 0 auto;
+  padding: 2em 1.25em 3em;
+}
+
+.ex-start h1 {
+  margin: 0 0 0.25em;
+  font-size: 1.6em;
+}
+
+.ex-start-facts {
+  margin: 1.25em 0;
+  border-top: 1px solid var(--ex-border);
+}
+
+.ex-start-facts div {
+  display: flex;
+  gap: 1em;
+  padding: 0.55em 0;
+  border-bottom: 1px solid var(--ex-border);
+}
+
+.ex-start-facts dt {
+  flex: none;
+  width: 9em;
+  font-weight: 700;
+}
+
+.ex-start-facts dd {
+  margin: 0;
+}
+
+.ex-start ul {
+  margin: 0.5em 0 1.5em;
+  padding-left: 1.25em;
+}
+
+.ex-start li {
+  margin: 0.3em 0;
+}
+
+/* ---------------------------------------------------------------- phones */
+
+@media (max-width: 767px) {
+  .ex-header {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.6em;
+    padding: 0.5em 0.75em;
+  }
+
+  .ex-candidate {
+    display: none;
+  }
+
+  .ex-time-long {
+    display: none;
+  }
+
+  .ex-time-short {
+    display: inline;
+  }
+
+  .ex-partbar {
+    padding: 0.5em 0.75em;
+  }
+
+  .ex-pane {
+    padding: 1em 0.9em 2.5em;
+  }
+
+  .ex-footer {
+    flex-wrap: wrap;
+    padding: 0.4em 0.6em;
+    gap: 0.4em;
+  }
+
+  .ex-parts {
+    flex-basis: 100%;
+    order: 2;
+  }
+
+  .ex-footer-end {
+    margin-left: auto;
+  }
+}
+
+/* ---------------------------------------------------------------- type and the highlight toolbar */
+
+/* Headings use the exam's own face; the app's display font belongs to the dashboards. */
+.official-exam h1,
+.official-exam h2,
+.official-exam h3,
+.ex-start h1,
+.ex-start h2 {
+  font-family: inherit;
+  letter-spacing: normal;
+}
+
+/*
+ * The Highlight / Clear toolbar is drawn INSIDE the exam root (HighlightSurface portalContainer), so it follows
+ * the contrast setting and the text size, and a plain rule here is enough to make it flat: this stylesheet is
+ * not in a cascade layer, so it wins over the toolbar's own utility classes without any !important.
+ */
+.official-exam [data-exam-text-toolbar] {
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--ex-fg);
+  border-radius: 0;
+  background: var(--ex-bg);
+  color: var(--ex-fg);
+  box-shadow: none;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.official-exam [data-exam-text-toolbar] button {
+  padding: 0.4em 0.85em;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.875em;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.official-exam [data-exam-text-toolbar] button:hover {
+  background: var(--ex-bar);
+}
+
+.official-exam [data-exam-text-toolbar] button + button {
+  border-left: 1px solid var(--ex-border);
+}
+
+/* ---------------------------------------------------------------- matching: drag an option onto an item */
+
+.ex-list-item {
+  display: flex;
+  width: 100%;
+  gap: 0.7em;
+  padding: 0.15em 0.3em;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ex-list-item strong {
+  flex: none;
+  min-width: 1.4em;
+}
+
+.ex-list-item:hover {
+  border-color: var(--ex-control);
+}
+
+.ex-list-item[aria-pressed="true"] {
+  background: var(--ex-accent);
+  color: var(--ex-accent-ink);
+}
+
+.ex-match-row[data-armed="true"] {
+  cursor: pointer;
+}
+
+.ex-match-row[data-over="true"],
+.ex-match-row[data-armed="true"]:hover {
+  outline: 2px dashed var(--ex-accent);
+  outline-offset: 2px;
+}
+
+.ex-select[data-empty="true"] {
+  color: var(--ex-muted);
+  font-weight: 700;
+}
+
+.ex-select option {
+  color: var(--ex-fg);
+  font-weight: 400;
+}
+
+.ex-chosen {
+  color: var(--ex-fg);
+}
+
+.ex-clear {
+  padding: 0 0.45em;
+  border: 1px solid var(--ex-control);
+  background: var(--ex-bg);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+/* The pre-test screen: the app's reset removes list bullets and heading weight, put them back for reading. */
+.ex-start h1,
+.ex-start h2 {
+  font-weight: 700;
+}
+
+.ex-start ul {
+  list-style: disc;
+}

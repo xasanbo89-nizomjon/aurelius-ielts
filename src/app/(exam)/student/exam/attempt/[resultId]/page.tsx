@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
 import { requireStudentProfile } from "@/lib/session";
@@ -9,17 +10,22 @@ import { listQuestionHighlights } from "@/lib/exam/annotations";
 import { getFullMockExamContext } from "@/lib/full-mock-attempts";
 import { answerKeysOf } from "@/lib/exam/summary-blanks";
 import { examDurationSeconds, remainingSeconds } from "@/lib/exam/timing";
+import { resolveExamUiMode } from "@/lib/exam/ui-mode";
+import { examPreferencesCookieName, parseExamPreferences } from "@/lib/exam/ui-preferences";
 import { ExamRunner } from "@/components/exam/exam-runner";
 
 export const metadata: Metadata = { title: "Exam in progress" };
 
 export default async function ExamAttemptPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ resultId: string }>;
+  searchParams: Promise<{ ui?: string | string[] }>;
 }) {
   const { resultId } = await params;
-  const { profile } = await requireStudentProfile();
+  const { ui: uiOverride } = await searchParams;
+  const { user, profile } = await requireStudentProfile();
 
   const attempt = await getAttemptDetail(resultId, profile.id);
   if (!attempt) notFound();
@@ -34,12 +40,13 @@ export default async function ExamAttemptPage({
     ? (attempt.flaggedQuestionIds as string[])
     : [];
 
-  const [initialBookmarks, questionHighlights] = await Promise.all([
+  const [initialBookmarks, questionHighlights, cookieStore] = await Promise.all([
     getBookmarkedQuestionIds(
       profile.id,
       attempt.mockTest.questions.map((q) => q.id)
     ),
     listQuestionHighlights(attempt.id),
+    cookies(),
   ]);
 
   // Inside a running Full Mock the section has the OFFICIAL length (Listening 40 min, Reading 60 min) whatever the standalone test happens to be set to, and Listening may already be in its 2-minute transfer time.
@@ -55,6 +62,22 @@ export default async function ExamAttemptPage({
       resultId={attempt.id}
       testTitle={attempt.mockTest.title}
       testType={attempt.mockTest.type === "LISTENING" ? "LISTENING" : "READING"}
+      // Phase G — the Reading screen: official (default) or the legacy one, from NEXT_PUBLIC_EXAM_UI (or ?ui= for this visit). Same attempt, same data, same autosave either way.
+      ui={resolveExamUiMode(uiOverride)}
+      candidateName={user.name ?? ""}
+      preferenceKey={profile.id}
+      initialPreferences={parseExamPreferences(cookieStore.get(examPreferencesCookieName(profile.id))?.value)}
+      groups={attempt.mockTest.passages.flatMap((passage) =>
+        passage.questionGroups.map((group) => ({
+          id: group.id,
+          passageId: group.passageId,
+          startQuestion: group.startQuestion,
+          endQuestion: group.endQuestion,
+          title: group.title,
+          instructions: group.instructions,
+          orderIndex: group.orderIndex,
+        }))
+      )}
       initialRemainingSeconds={initialRemainingSeconds}
       fullMock={fullMock ? { attemptId: fullMock.attemptId, transferSecondsRemaining: fullMock.transferSecondsRemaining } : null}
       passages={attempt.mockTest.passages.map((passage) => ({
@@ -73,6 +96,7 @@ export default async function ExamAttemptPage({
       questions={attempt.mockTest.questions.map((question) => ({
         id: question.id,
         passageId: question.passageId,
+        groupId: question.questionGroupId,
         type: question.type,
         prompt: question.prompt,
         options: question.options,

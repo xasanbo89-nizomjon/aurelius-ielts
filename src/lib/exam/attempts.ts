@@ -52,7 +52,11 @@ export async function getAttemptDetail(resultId: string, studentId: string) {
         include: {
           passages: {
             orderBy: { orderIndex: "asc" },
-            include: { attachments: { orderBy: { orderIndex: "asc" } } },
+            include: {
+              attachments: { orderBy: { orderIndex: "asc" } },
+              // Phase G — the official exam screen heads each group of questions with its instructions.
+              questionGroups: { orderBy: [{ orderIndex: "asc" }, { startQuestion: "asc" }] },
+            },
           },
           questions: { orderBy: { orderIndex: "asc" } },
         },

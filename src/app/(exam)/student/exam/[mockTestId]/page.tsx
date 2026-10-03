@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookOpen, Clock, FileQuestion, Headphones, Lock } from "lucide-react";
@@ -8,20 +9,27 @@ import { requireStudentProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hasActiveAccess } from "@/lib/subscription";
 import { getQuestionNumberCount } from "@/lib/exam/question-counts";
+import { examDurationSeconds } from "@/lib/exam/timing";
+import { resolveExamUiMode } from "@/lib/exam/ui-mode";
+import { examPreferencesCookieName, parseExamPreferences } from "@/lib/exam/ui-preferences";
 import { startAttemptAction } from "@/actions/exam.actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { OfficialStartScreen } from "@/components/exam/official/official-start-screen";
 
 export const metadata: Metadata = { title: "Start Test" };
 
 export default async function ExamStartPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ mockTestId: string }>;
+  searchParams: Promise<{ ui?: string | string[] }>;
 }) {
   const { mockTestId } = await params;
-  const { profile } = await requireStudentProfile();
+  const { ui: uiOverride } = await searchParams;
+  const { user, profile } = await requireStudentProfile();
 
   const test = await prisma.mockTest.findFirst({
     where: { id: mockTestId, isPublished: true, isArchived: false, packageFullMockTestId: null, type: { in: ["READING", "LISTENING"] } },
@@ -32,6 +40,7 @@ export default async function ExamStartPage({
       type: true,
       category: true,
       durationMinutes: true,
+      _count: { select: { passages: true } },
     },
   });
 
@@ -42,6 +51,24 @@ export default async function ExamStartPage({
   const canStart = test.category === "CAMBRIDGE" || (await hasActiveAccess(profile.id));
   const boundStart = startAttemptAction.bind(null, test.id);
   const Icon = test.type === "LISTENING" ? Headphones : BookOpen;
+
+  // Phase G — a Reading test is introduced in the same flat style it is taken in (Listening keeps the card below, its screen comes in a later phase).
+  if (test.type === "READING" && resolveExamUiMode(uiOverride) === "official") {
+    const cookieStore = await cookies();
+    return (
+      <OfficialStartScreen
+        candidateName={user.name ?? ""}
+        title={test.title}
+        description={test.description}
+        minutes={examDurationSeconds(test.durationMinutes) != null ? test.durationMinutes : null}
+        questionCount={questionCount}
+        partCount={test._count.passages}
+        preferences={parseExamPreferences(cookieStore.get(examPreferencesCookieName(profile.id))?.value)}
+        canStart={canStart}
+        startAction={boundStart}
+      />
+    );
+  }
 
   return (
     <div className="flex min-h-svh items-center justify-center px-6 py-12">

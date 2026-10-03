@@ -21,6 +21,9 @@ import { FULL_MOCK_LISTENING_TRANSFER_MINUTES } from "@/lib/full-mock-constants"
 import { numberQuestions, slotAnswered, summarizeSlotAnswer, type NumberedQuestion } from "@/lib/exam/question-numbering";
 import { adjacentNumber, buildPassageGroups, groupIndexOfNumber, type NavNumber, type PassageGroup } from "@/lib/exam/passage-groups";
 import { passageRegion, questionRegion, reanchorHighlight, type HighlightRange } from "@/lib/exam/text-highlight";
+import type { QuestionGroupInfo } from "@/lib/exam/question-groups";
+import type { ExamUiMode } from "@/lib/exam/ui-mode";
+import { DEFAULT_EXAM_PREFERENCES, examPreferencesCookieName, type ExamPreferences } from "@/lib/exam/ui-preferences";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -44,10 +47,13 @@ import { useStableValue } from "@/components/exam/use-stable-value";
 import { HighlightSurface } from "@/components/exam/highlight/highlight-surface";
 import { QuestionHighlightProvider } from "@/components/exam/highlight/question-highlight-context";
 import { useExamHighlights, type StoredHighlight } from "@/components/exam/highlight/use-exam-highlights";
+import { OfficialReadingExam } from "@/components/exam/official/official-reading-exam";
 
 export type ExamQuestion = {
   id: string;
   passageId: string | null;
+  /** Phase G — the teacher-side question group this row belongs to (its instructions head the group on the official screen). */
+  groupId?: string | null;
   type: QuestionType;
   prompt: string;
   options: unknown;
@@ -131,6 +137,11 @@ export function ExamRunner({
   initialQuestionHighlights = [],
   initialNotes,
   initialLastSeenQuestionId,
+  ui = "legacy",
+  candidateName = "",
+  groups = [],
+  preferenceKey = "",
+  initialPreferences = DEFAULT_EXAM_PREFERENCES,
 }: {
   resultId: string;
   testTitle: string;
@@ -148,6 +159,14 @@ export function ExamRunner({
   initialQuestionHighlights?: ExamQuestionHighlight[];
   initialNotes: ExamNoteRecord[];
   initialLastSeenQuestionId: string | null;
+  /** Phase G — which Reading screen to draw. "official" is the computer-delivered look; "legacy" (the default here) is the screen from before Phase G. Listening always uses the legacy layout. */
+  ui?: ExamUiMode;
+  candidateName?: string;
+  /** The teacher-side question groups (instructions) of this test; only the official screen uses them. */
+  groups?: QuestionGroupInfo[];
+  /** The student's profile id — names the cookie that remembers their contrast / text-size choice. */
+  preferenceKey?: string;
+  initialPreferences?: ExamPreferences;
 }) {
   const [answers, setAnswers] = useState<Record<string, unknown>>(initialAnswers);
   const latestAnswers = useRef<Record<string, unknown>>(initialAnswers);
@@ -739,6 +758,48 @@ export function ExamRunner({
       </TabsContent>
     </Tabs>
   );
+
+  // Phase G — the official computer-delivered screen draws exactly the same attempt (answers, flags, highlights, autosave, position, submit) that the legacy screen below draws. Everything above has already run, so switching screens changes nothing but the markup.
+  if (ui === "official" && isReading) {
+    return (
+      <OfficialReadingExam
+        session={{
+          candidateName,
+          initialRemainingSeconds,
+          onExpire: handleExpire,
+          preferencesCookieName: examPreferencesCookieName(preferenceKey),
+          initialPreferences,
+          sections,
+          sectionIndex,
+          groups,
+          passageGroups,
+          activeNumber: effectiveActiveNumber,
+          activeQuestionId: effectiveActiveQuestionId,
+          answers,
+          flags,
+          onAnswer: handleAnswerChange,
+          onToggleFlag: handleToggleFlag,
+          goToQuestion,
+          goToPassage: handleSelectPassage,
+          onPrevious: goToPrevious,
+          onNext: goToNext,
+          hasPrevious: adjacentNumber(passageGroups, effectiveActiveNumber, -1) !== null,
+          hasNext: adjacentNumber(passageGroups, effectiveActiveNumber, 1) !== null,
+          highlights: highlightStore,
+          panelRef: questionsPanelRef,
+          onPanelInteraction: handlePanelInteraction,
+          onAnswerKeyDown: handleAnswerKeyDown,
+          mobileTab,
+          onMobileTabChange: setMobileTab,
+          submitting,
+          onSubmit: handleSubmit,
+          answeredCount,
+          flaggedCount,
+          totalQuestionCount,
+        }}
+      />
+    );
+  }
 
   return (
     <div ref={examContainerRef} className="bg-background flex h-svh flex-col">

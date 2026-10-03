@@ -60,6 +60,7 @@ export function ResizableSplit({
       if (!draggingRef.current) return;
       updateFromClientX(event.clientX);
     }
+    // Phase G — however a drag ends (release, a cancelled touch/pen gesture, the window losing focus, or this component going away mid-drag) the page must get its text selection back: a missed `pointerup` used to leave `user-select: none` on <body> for the rest of the visit.
     function handleUp() {
       if (!draggingRef.current) return;
       draggingRef.current = false;
@@ -68,9 +69,14 @@ export function ResizableSplit({
     }
     window.addEventListener("pointermove", handleMove);
     window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
+    window.addEventListener("blur", handleUp);
     return () => {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+      window.removeEventListener("blur", handleUp);
+      handleUp();
     };
   }, [updateFromClientX]);
 
