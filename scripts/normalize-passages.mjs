@@ -25,7 +25,16 @@ import { normalizePassageWithMap, remapStoredHighlight } from "@/lib/text/normal
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
-const value = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
+const value = (name) => {
+  if (!args.includes(name)) return undefined;
+  const given = args[args.indexOf(name) + 1];
+  // A flag that needs a value but has none (an empty shell variable, a missing argument) must stop the run: carrying on would silently widen "--test <id>" to EVERY test.
+  if (!given || given.startsWith("--")) {
+    console.error(`${name} needs a value (got ${given === undefined ? "nothing" : JSON.stringify(given)}). Nothing was changed.`);
+    process.exit(2);
+  }
+  return given;
+};
 const apply = flag("--apply");
 const details = flag("--details");
 const includeSingleBlock = flag("--include-single-block");

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { BookOpen, Clock, FileQuestion, Headphones, Lock } from "lucide-react";
 
 import { isInternalTestTitle } from "@/lib/test-visibility";
@@ -16,7 +16,7 @@ import { startAttemptAction } from "@/actions/exam.actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { OfficialStartScreen } from "@/components/exam/official/official-start-screen";
+import { OfficialPreTest } from "@/components/exam/official/official-start-screen";
 
 export const metadata: Metadata = { title: "Start Test" };
 
@@ -25,10 +25,10 @@ export default async function ExamStartPage({
   searchParams,
 }: {
   params: Promise<{ mockTestId: string }>;
-  searchParams: Promise<{ ui?: string | string[] }>;
+  searchParams: Promise<{ ui?: string | string[]; step?: string | string[] }>;
 }) {
   const { mockTestId } = await params;
-  const { ui: uiOverride } = await searchParams;
+  const { ui: uiOverride, step: stepParam } = await searchParams;
   const { user, profile } = await requireStudentProfile();
 
   const test = await prisma.mockTest.findFirst({
@@ -40,7 +40,6 @@ export default async function ExamStartPage({
       type: true,
       category: true,
       durationMinutes: true,
-      _count: { select: { passages: true } },
     },
   });
 
@@ -52,19 +51,32 @@ export default async function ExamStartPage({
   const boundStart = startAttemptAction.bind(null, test.id);
   const Icon = test.type === "LISTENING" ? Headphones : BookOpen;
 
-  // Phase G — a Reading test is introduced in the same flat style it is taken in (Listening keeps the card below, its screen comes in a later phase).
+  // Phase G — a Reading test is introduced in the same flat style it is taken in: two screens (confirm your details, then the instructions). Listening keeps the card below, its screen comes in a later phase.
   if (test.type === "READING" && resolveExamUiMode(uiOverride) === "official") {
+    // Resuming skips both screens: a test already in progress goes straight back to where it was (its clock keeps running from the original start).
+    if (canStart) {
+      const inProgress = await prisma.result.findFirst({
+        where: { studentId: profile.id, mockTestId: test.id, completedAt: null },
+        orderBy: { startedAt: "desc" },
+        select: { id: true },
+      });
+      if (inProgress) redirect(`/student/exam/attempt/${inProgress.id}`);
+    }
+
     const cookieStore = await cookies();
+    const step = (Array.isArray(stepParam) ? stepParam[0] : stepParam) === "instructions" ? "instructions" : "details";
+    const carryUi = typeof uiOverride === "string" && uiOverride ? `&ui=${encodeURIComponent(uiOverride)}` : "";
     return (
-      <OfficialStartScreen
+      <OfficialPreTest
+        step={step}
         candidateName={user.name ?? ""}
         title={test.title}
         description={test.description}
         minutes={examDurationSeconds(test.durationMinutes) != null ? test.durationMinutes : null}
         questionCount={questionCount}
-        partCount={test._count.passages}
         preferences={parseExamPreferences(cookieStore.get(examPreferencesCookieName(profile.id))?.value)}
         canStart={canStart}
+        instructionsHref={`?step=instructions${carryUi}`}
         startAction={boundStart}
       />
     );

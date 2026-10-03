@@ -3,11 +3,11 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 
 /**
- * "Finish the test?" — what the ✓ button in the footer opens. States plainly how many questions are
- * answered, not answered and marked for review, and that there is no way back once the test is
- * handed in. Built on the same accessible dialog primitive as the rest of the app (focus stays
- * inside, Escape closes it), but rendered INSIDE the exam screen (`container`) so it follows the
- * contrast and text-size settings, and flat.
+ * "Submit your test?" - what the tick in the footer opens. Shows how many questions are answered,
+ * unanswered and flagged for review, and that there is no way back once the test is handed in.
+ * "Return to test" closes it; "Submit" hands the test in. Built on the same accessible dialog
+ * primitive as the rest of the app (focus stays inside, Escape closes it), but rendered INSIDE the
+ * exam screen (`container`) so it follows the contrast and text-size settings, and flat.
  */
 export function OfficialSubmitDialog({
   open,
@@ -29,7 +29,6 @@ export function OfficialSubmitDialog({
   onConfirm: () => void;
 }) {
   const unanswered = Math.max(0, totalQuestions - answeredCount);
-  const plural = (count: number) => (count === 1 ? "question" : "questions");
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(next) => (submitting ? undefined : onOpenChange(next))}>
@@ -37,24 +36,27 @@ export function OfficialSubmitDialog({
         <DialogPrimitive.Overlay className="ex-overlay" />
         <DialogPrimitive.Content className="ex-dialog" onInteractOutside={(event) => event.preventDefault()} data-testid="submit-dialog">
           <DialogPrimitive.Title asChild>
-            <h2>Finish the test?</h2>
+            <h2>Submit your test?</h2>
           </DialogPrimitive.Title>
           <DialogPrimitive.Description asChild>
             <div>
-              <p>
-                You have answered {answeredCount} of {totalQuestions} {plural(totalQuestions)}.
-              </p>
-              {unanswered > 0 && (
-                <p className="ex-dialog-warning">
-                  {unanswered} {plural(unanswered)} not answered.
-                </p>
-              )}
-              {flaggedCount > 0 && (
-                <p>
-                  {flaggedCount} {plural(flaggedCount)} marked for review.
-                </p>
-              )}
-              <p>Once you finish, you cannot go back to the test or change your answers.</p>
+              <dl className="ex-counts">
+                <div>
+                  <dt>Answered</dt>
+                  <dd data-testid="count-answered">
+                    {answeredCount} of {totalQuestions}
+                  </dd>
+                </div>
+                <div data-warning={unanswered > 0 ? "true" : undefined}>
+                  <dt>Unanswered</dt>
+                  <dd data-testid="count-unanswered">{unanswered}</dd>
+                </div>
+                <div>
+                  <dt>Flagged for review</dt>
+                  <dd data-testid="count-flagged">{flaggedCount}</dd>
+                </div>
+              </dl>
+              <p>Once you submit, you cannot go back to the test or change your answers.</p>
             </div>
           </DialogPrimitive.Description>
           <div className="ex-dialog-actions">
@@ -62,7 +64,7 @@ export function OfficialSubmitDialog({
               Return to test
             </button>
             <button type="button" className="ex-button ex-button-primary" onClick={onConfirm} disabled={submitting}>
-              {submitting ? "Submitting…" : "Finish test"}
+              {submitting ? "Submitting…" : "Submit"}
             </button>
           </div>
         </DialogPrimitive.Content>

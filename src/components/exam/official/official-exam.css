@@ -1004,3 +1004,40 @@
 .ex-start ul {
   list-style: disc;
 }
+
+/* ---------------------------------------------------------------- submit dialog counts */
+
+.ex-counts {
+  margin: 0 0 0.9em;
+  border-top: 1px solid var(--ex-border);
+}
+
+.ex-counts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+  padding: 0.45em 0;
+  border-bottom: 1px solid var(--ex-border);
+}
+
+.ex-counts dt {
+  font-weight: 700;
+}
+
+.ex-counts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ex-counts div[data-warning="true"] dd {
+  color: var(--ex-warn);
+  font-weight: 700;
+}
+
+.ex-start p {
+  margin: 0 0 1em;
+}
+
+.ex-start form {
+  margin-top: 0.5em;
+}
