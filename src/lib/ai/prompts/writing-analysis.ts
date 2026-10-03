@@ -51,8 +51,9 @@ export const writingAnalysisResponseSchema = z.object({
   grammarIssues: z.array(grammarIssueSchema),
   vocabulary: vocabularySchema,
   keyImprovements: z.array(z.string().min(1)).min(1),
-  strengths: z.array(z.string().min(1)).min(1).max(6),
-  weaknesses: z.array(z.string().min(1)).min(1).max(6),
+  // May be empty: a very short or very weak essay genuinely has nothing specific to praise, and the prompt forbids generic filler.
+  strengths: z.array(z.string().min(1)).max(6),
+  weaknesses: z.array(z.string().min(1)).max(6),
 });
 export type WritingAnalysisResponse = z.infer<typeof writingAnalysisResponseSchema>;
 
@@ -125,12 +126,12 @@ export const WRITING_ANALYSIS_JSON_SCHEMA = {
     strengths: {
       type: "array",
       items: { type: "string" },
-      description: "1-6 genuine, specific strengths of this response — never generic praise.",
+      description: "Up to 6 genuine, specific strengths of this response — never generic praise. Leave empty if there is nothing specific to praise.",
     },
     weaknesses: {
       type: "array",
       items: { type: "string" },
-      description: "1-6 genuine, specific weaknesses of this response — never generic criticism.",
+      description: "Up to 6 genuine, specific weaknesses of this response — never generic criticism. Leave empty if there is nothing specific to criticise.",
     },
   },
   required: [

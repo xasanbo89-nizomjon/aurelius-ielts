@@ -61,7 +61,7 @@ export function describeAnalysisFailure(error: unknown): string {
 export function validateImportedTestRows(importedTest: {
   type: TestType;
   passages: { id: string; title: string; questionGroups: { id: string; startNumber: number; endNumber: number; questionType: QuestionType; questionsJson: unknown }[] }[];
-  answers: { questionNumber: number }[];
+  answers: { questionNumber: number; answerText?: string | null }[];
 }): ImportValidation {
   return validateImportedTest(
     importedTest.passages.map((passage) => ({
@@ -75,7 +75,8 @@ export function validateImportedTestRows(importedTest: {
         questionsJson: group.questionsJson,
       })),
     })),
-    importedTest.answers.map((answer) => answer.questionNumber),
+    // A staged answer with no text (the answer key was unreadable at that number — common in scanned PDFs) is an answer that is MISSING: a question with an empty key can never be marked correct, so it must block the import instead of counting as "40 answers".
+    importedTest.answers.filter((answer) => answer.answerText == null || answer.answerText.trim().length > 0).map((answer) => answer.questionNumber),
     { sectionLabel: importedTest.type === "LISTENING" ? "Section" : "Passage", listeningStructure: importedTest.type === "LISTENING" }
   );
 }

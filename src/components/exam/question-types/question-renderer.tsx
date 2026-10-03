@@ -21,22 +21,32 @@ import { SummaryCompletionAnswer } from "@/components/exam/question-types/summar
  * Dispatches to the right answer widget for a question's type. This is the
  * one place that needs to change when a new QuestionType is added.
  */
-export function QuestionRenderer({
-  questionId,
-  type,
-  options,
-  value,
-  onChange,
-  startNumber,
-}: {
+type QuestionRendererProps = {
   questionId: string;
   type: QuestionType;
   options: unknown;
   value: unknown;
   onChange: (value: unknown) => void;
-  /** First IELTS question number this row covers — only matching / summary rows use it, to number their individual items. */
+  /** First IELTS question number this row covers — matching / summary rows use it to number their individual items; every type uses it to label its answer control. */
   startNumber?: number;
-}) {
+  /** A summary row's answer keys, one per question number — so the boxes drawn are exactly the ones the navigator and grading count. */
+  slotKeys?: readonly (string | null)[];
+};
+
+export function QuestionRenderer(props: QuestionRendererProps) {
+  try {
+    return renderByType(props);
+  } catch {
+    // A question whose stored options don't parse must not take the whole exam down with it.
+    return (
+      <p className="border-destructive/30 bg-destructive/5 text-destructive rounded-xl border px-4 py-3 text-sm">
+        This question could not be displayed. Tell your teacher — your other answers are safe.
+      </p>
+    );
+  }
+}
+
+function renderByType({ questionId, type, options, value, onChange, startNumber, slotKeys }: QuestionRendererProps) {
   switch (type) {
     case "MULTIPLE_CHOICE":
       return (
@@ -45,6 +55,7 @@ export function QuestionRenderer({
           options={multipleChoiceOptionsSchema.parse(options)}
           value={value as string[] | undefined}
           onChange={onChange}
+          startNumber={startNumber}
         />
       );
 
@@ -55,6 +66,7 @@ export function QuestionRenderer({
           options={trueFalseNotGivenOptionsSchema.parse(options)}
           value={value as "TRUE" | "FALSE" | "NOT_GIVEN" | undefined}
           onChange={onChange}
+          startNumber={startNumber}
         />
       );
 
@@ -77,6 +89,7 @@ export function QuestionRenderer({
           value={value as Record<string, string> | undefined}
           onChange={onChange}
           startNumber={startNumber}
+          slotKeys={slotKeys}
         />
       );
 
@@ -87,6 +100,7 @@ export function QuestionRenderer({
           options={sentenceCompletionOptionsSchema.parse(options)}
           value={value as string | undefined}
           onChange={onChange}
+          startNumber={startNumber}
         />
       );
 
@@ -97,6 +111,7 @@ export function QuestionRenderer({
           options={fillInBlankOptionsSchema.parse(options)}
           value={value as string | undefined}
           onChange={onChange}
+          startNumber={startNumber}
         />
       );
 
@@ -107,6 +122,7 @@ export function QuestionRenderer({
           options={shortAnswerOptionsSchema.parse(options)}
           value={value as string | undefined}
           onChange={onChange}
+          startNumber={startNumber}
         />
       );
 

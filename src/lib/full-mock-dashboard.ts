@@ -4,7 +4,13 @@ import type { MockTestCategory, MockTestDifficulty } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hasActiveAccess } from "@/lib/subscription";
 import { overallBandFromSections, requiredSectionsFor } from "@/lib/full-mock-band-composition";
-import { FULL_MOCK_SPEAKING_MINUTES, FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
+import {
+  FULL_MOCK_LISTENING_MINUTES,
+  FULL_MOCK_LISTENING_TRANSFER_MINUTES,
+  FULL_MOCK_READING_MINUTES,
+  FULL_MOCK_SPEAKING_MINUTES,
+  FULL_MOCK_WRITING_MINUTES,
+} from "@/lib/full-mock-constants";
 
 export type FullMockCardData = {
   id: string;
@@ -71,7 +77,7 @@ export async function getStudentFullMockDashboard(studentId: string): Promise<Fu
           select: {
             section: true,
             result: { select: { bandScore: true } },
-            writingSubmission: { select: { bandScore: true } },
+            writingSubmission: { select: { bandScore: true, taskType: true, analysis: { select: { estimatedBand: true } } } },
             speakingSubmission: { select: { bandScore: true } },
           },
         },
@@ -90,8 +96,9 @@ export async function getStudentFullMockDashboard(studentId: string): Promise<Fu
   const premiumLocked: FullMockCardData[] = [];
 
   for (const test of tests) {
-    const readingMinutes = test.readingSections.reduce((sum, s) => sum + (s.mockTest.durationMinutes ?? 0), 0);
-    const listeningMinutes = test.listeningSections.reduce((sum, s) => sum + (s.mockTest.durationMinutes ?? 0), 0);
+    // Inside a Full Mock every section runs on the real IELTS clock, whatever length the standalone paper was saved with.
+    const readingMinutes = test.readingSections.length > 0 ? FULL_MOCK_READING_MINUTES : 0;
+    const listeningMinutes = test.listeningSections.length > 0 ? FULL_MOCK_LISTENING_MINUTES + FULL_MOCK_LISTENING_TRANSFER_MINUTES : 0;
     const hasWriting = test.writingSections.length > 0;
     const hasSpeaking = test.speakingSections.length > 0;
     const locked = test.category === "GENERAL" && !hasAccess;

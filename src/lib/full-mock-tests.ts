@@ -8,7 +8,13 @@ import { deleteBucketObjects } from "@/lib/uploads/storage-cleanup";
 import { TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
 import { createWritingTask, setWritingTaskStatus } from "@/lib/writing-tasks";
 import { createSpeakingTask, setSpeakingTaskStatus } from "@/lib/speaking";
-import { FULL_MOCK_SPEAKING_MINUTES, FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
+import {
+  FULL_MOCK_LISTENING_MINUTES,
+  FULL_MOCK_LISTENING_TRANSFER_MINUTES,
+  FULL_MOCK_READING_MINUTES,
+  FULL_MOCK_SPEAKING_MINUTES,
+  FULL_MOCK_WRITING_MINUTES,
+} from "@/lib/full-mock-constants";
 
 // ---------------------------------------------------------------------------
 // Phase 34 — Full Mock Test builder (teacher side). See prisma/schema.prisma
@@ -615,8 +621,9 @@ export async function getPublishedFullMockTestDetail(id: string) {
   });
   if (!test) return null;
 
-  const readingMinutes = test.readingSections.reduce((sum, s) => sum + (s.mockTest.durationMinutes ?? 0), 0);
-  const listeningMinutes = test.listeningSections.reduce((sum, s) => sum + (s.mockTest.durationMinutes ?? 0), 0);
+  // Inside a Full Mock every section runs on the real IELTS clock, whatever length the standalone paper was saved with.
+  const readingMinutes = test.readingSections.length > 0 ? FULL_MOCK_READING_MINUTES : 0;
+  const listeningMinutes = test.listeningSections.length > 0 ? FULL_MOCK_LISTENING_MINUTES + FULL_MOCK_LISTENING_TRANSFER_MINUTES : 0;
   // Numbered questions (a matching / summary row covers several), not database rows — see getQuestionNumberCounts.
   const questionCounts = await getQuestionNumberCounts([...test.readingSections, ...test.listeningSections].map((s) => s.mockTest.id));
   const readingQuestionCount = test.readingSections.reduce((sum, s) => sum + (questionCounts.get(s.mockTest.id) ?? 0), 0);

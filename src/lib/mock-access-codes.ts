@@ -2,7 +2,7 @@ import "server-only";
 import { randomInt } from "crypto";
 
 import { prisma } from "@/lib/prisma";
-import { bandForSection, overallBandFromSections, requiredSectionsFor } from "@/lib/full-mock-band-composition";
+import { bandForSection, overallBandFromSections, requiredSectionsFor, writingProgressLabel } from "@/lib/full-mock-band-composition";
 
 export class OwnershipError extends Error {
   constructor(message = "You don't have access to this resource.") {
@@ -302,6 +302,8 @@ export async function hasRedeemedAccessCodeForFullMockTest(studentId: string, fu
 // logic, just a new real per-attempt view onto the same underlying rows.
 // ---------------------------------------------------------------------------
 
+export type MockSectionScore = { correct: number; total: number };
+
 export type MockResultRow = {
   attemptId: string;
   accessCode: string | null;
@@ -313,11 +315,20 @@ export type MockResultRow = {
   listeningBand: number | null;
   writingBand: number | null;
   speakingBand: number | null;
+  /** Marks earned out of marks available once the section is handed in; null while it is still open or never started. */
+  listeningScore: MockSectionScore | null;
+  readingScore: MockSectionScore | null;
+  /** "Not started" / "In progress" / "Submitted — AI estimate" / "Graded" … — null when the mock has no Writing section. */
+  writingStatus: string | null;
   overallBand: number | null;
   status: "IN_PROGRESS" | "COMPLETED";
+  /** The section the student is sitting right now ("Listening", "Reading", "Writing", "Speaking"); null once the sitting is over. */
+  currentSection: string | null;
   startedAt: Date;
   /** null while the sitting is still in progress. */
   completedAt: Date | null;
+  /** Start to finish of the whole sitting, null while in progress. */
+  durationSeconds: number | null;
   /** Which skills this mock actually contains — a column for a skill it doesn't test shows "n/a" instead of an empty cell that looks like a missing score. */
   includes: { writing: boolean; speaking: boolean };
 };
@@ -331,6 +342,7 @@ export async function listMockResultsForTeacher(teacherId: string, search?: stri
       status: true,
       startedAt: true,
       completedAt: true,
+      writingStartedAt: true,
       fullMockTestId: true,
       fullMockTest: { select: { title: true, _count: { select: { writingSections: true, speakingSections: true } } } },
       student: { select: { user: { select: { name: true, email: true } } } },
@@ -338,37 +350,62 @@ export async function listMockResultsForTeacher(teacherId: string, search?: stri
       sectionResults: {
         select: {
           section: true,
-          result: { select: { bandScore: true } },
-          writingSubmission: { select: { bandScore: true } },
+          result: {
+            select: { bandScore: true, rawScore: true, completedAt: true, mockTest: { select: { questions: { select: { points: true } } } } },
+          },
+          writingSubmission: { select: { status: true, bandScore: true, taskType: true, analysis: { select: { estimatedBand: true } } } },
           speakingSubmission: { select: { bandScore: true } },
         },
       },
     },
   });
 
-  const rows: MockResultRow[] = attempts.map((attempt) => ({
-    attemptId: attempt.id,
-    accessCode: attempt.accessCode?.code ?? null,
-    mockTitle: attempt.fullMockTest.title,
-    fullMockTestId: attempt.fullMockTestId,
-    studentName: attempt.student.user.name ?? attempt.student.user.email,
-    studentEmail: attempt.student.user.email,
-    readingBand: bandForSection(attempt.sectionResults, "READING"),
-    listeningBand: bandForSection(attempt.sectionResults, "LISTENING"),
-    writingBand: bandForSection(attempt.sectionResults, "WRITING"),
-    speakingBand: bandForSection(attempt.sectionResults, "SPEAKING"),
-    overallBand: overallBandFromSections(
-      attempt.sectionResults,
-      requiredSectionsFor({
-        writingSectionCount: attempt.fullMockTest._count.writingSections,
-        speakingSectionCount: attempt.fullMockTest._count.speakingSections,
-      })
-    ),
-    status: attempt.status,
-    startedAt: attempt.startedAt,
-    completedAt: attempt.completedAt,
-    includes: { writing: attempt.fullMockTest._count.writingSections > 0, speaking: attempt.fullMockTest._count.speakingSections > 0 },
-  }));
+  const rows: MockResultRow[] = attempts.map((attempt) => {
+    const writingSectionCount = attempt.fullMockTest._count.writingSections;
+    const speakingSectionCount = attempt.fullMockTest._count.speakingSections;
+
+    // A section's score only exists once the student handed it in — an open Reading paper has no mark yet.
+    const scoreOf = (section: "LISTENING" | "READING"): MockSectionScore | null => {
+      const result = attempt.sectionResults.find((r) => r.section === section)?.result;
+      if (!result?.completedAt || result.rawScore == null) return null;
+      return { correct: result.rawScore, total: result.mockTest.questions.reduce((sum, q) => sum + q.points, 0) };
+    };
+    const handedIn = (section: "LISTENING" | "READING") => attempt.sectionResults.some((r) => r.section === section && r.result?.completedAt != null);
+    const writingStatus = writingProgressLabel({ taskCount: writingSectionCount, started: attempt.writingStartedAt != null, rows: attempt.sectionResults });
+    const writingDone =
+      attempt.sectionResults.filter((r) => r.section === "WRITING" && r.writingSubmission && r.writingSubmission.status !== "DRAFT").length >= writingSectionCount;
+
+    let currentSection: string | null = null;
+    if (attempt.status === "IN_PROGRESS") {
+      if (!handedIn("LISTENING")) currentSection = "Listening";
+      else if (!handedIn("READING")) currentSection = "Reading";
+      else if (writingSectionCount > 0 && !writingDone) currentSection = "Writing";
+      else if (speakingSectionCount > 0) currentSection = "Speaking";
+    }
+
+    return {
+      attemptId: attempt.id,
+      accessCode: attempt.accessCode?.code ?? null,
+      mockTitle: attempt.fullMockTest.title,
+      fullMockTestId: attempt.fullMockTestId,
+      studentName: attempt.student.user.name ?? attempt.student.user.email,
+      studentEmail: attempt.student.user.email,
+      readingBand: bandForSection(attempt.sectionResults, "READING"),
+      listeningBand: bandForSection(attempt.sectionResults, "LISTENING"),
+      writingBand: bandForSection(attempt.sectionResults, "WRITING"),
+      speakingBand: bandForSection(attempt.sectionResults, "SPEAKING"),
+      listeningScore: scoreOf("LISTENING"),
+      readingScore: scoreOf("READING"),
+      writingStatus,
+      overallBand: overallBandFromSections(attempt.sectionResults, requiredSectionsFor({ writingSectionCount, speakingSectionCount })),
+      status: attempt.status,
+      currentSection,
+      startedAt: attempt.startedAt,
+      completedAt: attempt.completedAt,
+      durationSeconds: attempt.completedAt ? Math.max(0, Math.round((attempt.completedAt.getTime() - attempt.startedAt.getTime()) / 1000)) : null,
+      includes: { writing: writingSectionCount > 0, speaking: speakingSectionCount > 0 },
+    };
+  });
 
   if (!search?.trim()) return rows;
   const q = search.trim().toLowerCase();

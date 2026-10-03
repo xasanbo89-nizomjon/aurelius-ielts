@@ -49,7 +49,7 @@ export async function getFullMockTestAnalytics(fullMockTestId: string, teacherId
         select: {
           section: true,
           result: { select: { bandScore: true } },
-          writingSubmission: { select: { bandScore: true } },
+          writingSubmission: { select: { bandScore: true, taskType: true, analysis: { select: { estimatedBand: true } } } },
           speakingSubmission: { select: { bandScore: true } },
         },
       },
@@ -124,7 +124,7 @@ export async function getFullMockTeacherOverviewAnalytics(teacherId: string): Pr
             select: {
               section: true,
               result: { select: { bandScore: true } },
-              writingSubmission: { select: { bandScore: true } },
+              writingSubmission: { select: { bandScore: true, taskType: true, analysis: { select: { estimatedBand: true } } } },
               speakingSubmission: { select: { bandScore: true } },
             },
           },

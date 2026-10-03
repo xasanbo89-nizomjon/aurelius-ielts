@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Flag } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -28,14 +29,17 @@ export type NavigatorQuestionState = {
  * "I already answered it". A blue ring marks the current question,
  * independent of and layered on top of whichever fill state applies.
  */
-export function QuestionNavigator({
+export const QuestionNavigator = memo(function QuestionNavigator({
   questions,
   currentQuestionId,
+  currentNumber,
   onSelect,
   showCounters = true,
 }: {
   questions: NavigatorQuestionState[];
   currentQuestionId: string;
+  /** Phase D — the exact question number the student is on. When given, only that number is marked current (not every number of a grouped row). */
+  currentNumber?: number;
   onSelect: (questionId: string, number: number) => void;
   showCounters?: boolean;
 }) {
@@ -47,7 +51,7 @@ export function QuestionNavigator({
     <nav aria-label="Question navigator" className="space-y-3">
       <div className="grid grid-cols-5 gap-2 sm:grid-cols-6 lg:grid-cols-5">
         {questions.map((question) => {
-          const isCurrent = question.questionId === currentQuestionId;
+          const isCurrent = currentNumber != null ? question.number === currentNumber : question.questionId === currentQuestionId;
           return (
             <button
               key={question.id}
@@ -93,4 +97,4 @@ export function QuestionNavigator({
       )}
     </nav>
   );
-}
+});

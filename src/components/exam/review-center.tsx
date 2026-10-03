@@ -23,6 +23,7 @@ export function ReviewCenter({
   onOpenChange,
   questions,
   currentQuestionId,
+  currentNumber,
   onSelect,
   onSubmit,
 }: {
@@ -30,6 +31,7 @@ export function ReviewCenter({
   onOpenChange: (open: boolean) => void;
   questions: NavigatorQuestionState[];
   currentQuestionId: string;
+  currentNumber?: number;
   onSelect: (questionId: string, number: number) => void;
   onSubmit: () => void;
 }) {
@@ -93,7 +95,7 @@ export function ReviewCenter({
                 {filter === "all" ? "No questions in this test." : `No ${filter} questions.`}
               </p>
             ) : (
-              <QuestionNavigator questions={filtered} currentQuestionId={currentQuestionId} onSelect={handleSelect} showCounters={false} />
+              <QuestionNavigator questions={filtered} currentQuestionId={currentQuestionId} currentNumber={currentNumber} onSelect={handleSelect} showCounters={false} />
             )}
           </TabsContent>
         </Tabs>

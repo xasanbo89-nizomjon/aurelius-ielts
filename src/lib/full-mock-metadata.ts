@@ -1,4 +1,4 @@
-import { FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
+import { FULL_MOCK_LISTENING_MINUTES, FULL_MOCK_LISTENING_TRANSFER_MINUTES, FULL_MOCK_READING_MINUTES, FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
 
 /**
  * Phase B — the generated facts about a Full Mock built from files (title
@@ -6,8 +6,8 @@ import { FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
  * BEFORE anything is created, and the server uses the same function to store
  * them, so what was previewed is exactly what gets saved.
  */
-export const QUICK_BUILD_LISTENING_MINUTES = 30;
-export const QUICK_BUILD_READING_MINUTES = 60;
+export const QUICK_BUILD_LISTENING_MINUTES = FULL_MOCK_LISTENING_MINUTES;
+export const QUICK_BUILD_READING_MINUTES = FULL_MOCK_READING_MINUTES;
 
 export type FullMockPackageSummary = {
   listeningParts: number;
@@ -18,7 +18,7 @@ export type FullMockPackageSummary = {
 };
 
 export function estimateFullMockMinutes(summary: Pick<FullMockPackageSummary, "writingTasks">): number {
-  return QUICK_BUILD_LISTENING_MINUTES + QUICK_BUILD_READING_MINUTES + (summary.writingTasks > 0 ? FULL_MOCK_WRITING_MINUTES : 0);
+  return QUICK_BUILD_LISTENING_MINUTES + FULL_MOCK_LISTENING_TRANSFER_MINUTES + QUICK_BUILD_READING_MINUTES + (summary.writingTasks > 0 ? FULL_MOCK_WRITING_MINUTES : 0);
 }
 
 export function formatMinutes(totalMinutes: number): string {

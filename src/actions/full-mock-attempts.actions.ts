@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { requireStudentProfile } from "@/lib/session";
 import { hasActiveAccessForFullMockTest } from "@/lib/subscription";
-import { getOrCreateFullMockAttempt, findInProgressFullMockAttempt } from "@/lib/full-mock-attempts";
+import { getOrCreateFullMockAttempt, findInProgressFullMockAttempt, startFullMockSection, type FullMockStartableSection } from "@/lib/full-mock-attempts";
 import { getRedeemedAccessCodeForFullMockTest } from "@/lib/mock-access-codes";
 
 /**
@@ -42,4 +42,19 @@ export async function startFullMockAttemptAction(fullMockTestId: string) {
   }
 
   redirect(`/student/full-mock/attempt/${attempt.id}`);
+}
+
+/**
+ * Phase E — the "Start Reading" / "Start Writing" button between sections.
+ * The section's countdown begins here and only here. `startFullMockSection`
+ * refuses anything but the genuinely-next section, so replaying this request,
+ * pressing it in two tabs or calling it for a section out of order is harmless;
+ * every outcome ends on the orchestrator, which sends the student wherever they
+ * really are.
+ */
+export async function startFullMockSectionAction(attemptId: string, section: FullMockStartableSection) {
+  const { profile } = await requireStudentProfile();
+  if (section !== "READING" && section !== "WRITING") redirect(`/student/full-mock/attempt/${attemptId}`);
+  await startFullMockSection(attemptId, profile.id, section);
+  redirect(`/student/full-mock/attempt/${attemptId}`);
 }

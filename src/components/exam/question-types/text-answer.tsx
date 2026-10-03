@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Input } from "@/components/ui/input";
+import { AnswerInput } from "@/components/exam/answer-input";
 import { DraggableWordBank, DroppableBlank } from "@/components/exam/question-types/word-bank";
 import type { QuestionAnswerProps } from "@/components/exam/question-types/types";
 
@@ -11,6 +11,7 @@ export function TextAnswer({
   options,
   value,
   onChange,
+  startNumber,
 }: QuestionAnswerProps<{ maxWords?: number; wordBank?: string[] }, string>) {
   const [armedWord, setArmedWord] = useState<string | null>(null);
 
@@ -23,12 +24,14 @@ export function TextAnswer({
     <div className="space-y-3">
       <div className="space-y-1.5">
         <DroppableBlank onPlace={place} armedWord={armedWord}>
-          <Input
+          <AnswerInput
             id={questionId}
             value={value ?? ""}
-            onChange={(event) => onChange(event.target.value)}
+            onValueChange={onChange}
             placeholder="Type your answer, or drop a word here…"
             className="max-w-sm"
+            data-question-number={startNumber}
+            aria-label={startNumber != null ? `Answer for question ${startNumber}` : "Your answer"}
             aria-describedby={options.maxWords ? `${questionId}-hint` : undefined}
           />
         </DroppableBlank>

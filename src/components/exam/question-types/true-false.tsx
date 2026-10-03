@@ -13,14 +13,15 @@ export function TrueFalseNotGivenAnswer({
   questionId,
   value,
   onChange,
+  startNumber,
 }: QuestionAnswerProps<Record<string, never>, "TRUE" | "FALSE" | "NOT_GIVEN">) {
   return (
     <RadioGroup value={value ?? ""} onValueChange={onChange} aria-label="Answer options" className="gap-2.5">
-      {CHOICES.map((choice) => {
+      {CHOICES.map((choice, index) => {
         const id = `${questionId}-${choice.value}`;
         return (
           <label key={choice.value} htmlFor={id} className={optionRowClass}>
-            <RadioGroupItem value={choice.value} id={id} />
+            <RadioGroupItem value={choice.value} id={id} data-question-number={index === 0 ? startNumber : undefined} />
             <span>{choice.label}</span>
           </label>
         );

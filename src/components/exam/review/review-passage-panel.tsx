@@ -10,12 +10,6 @@ import { PassageAttachments, type ExamAttachment } from "@/components/exam/passa
 export type ReviewHighlight = { id: string; passageId: string; startOffset: number; endOffset: number; color: HighlightColor };
 export type EvidenceSpan = { start: number; end: number };
 
-const SAVED_MARK_CLASS: Record<HighlightColor, string> = {
-  YELLOW: "bg-yellow-300/60",
-  BLUE: "bg-sky-300/60",
-  GREEN: "bg-emerald-300/60",
-};
-
 type SearchMatch = { start: number; end: number };
 
 function findMatches(content: string, query: string): SearchMatch[] {
@@ -172,7 +166,8 @@ export function ReviewPassagePanel({
 
           let inner = <>{segment.text}</>;
           if (segment.highlight) {
-            inner = <mark className={cn("rounded-sm px-0.5", SAVED_MARK_CLASS[segment.highlight.color])}>{segment.text}</mark>;
+            // Phase D — one highlight colour everywhere, whatever colour an older attempt happened to save.
+            inner = <mark className="exam-highlight">{segment.text}</mark>;
           }
 
           return (

@@ -5,6 +5,7 @@ import type { z } from "zod";
 
 import type { matchingOptionsSchema } from "@/lib/exam/question-types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { HlText } from "@/components/exam/highlight/question-highlight-context";
 import { DraggableWordBank, DroppableRow } from "@/components/exam/question-types/word-bank";
 import type { QuestionAnswerProps } from "@/components/exam/question-types/types";
 
@@ -37,14 +38,14 @@ export function MatchingAnswer({
                 onChange({ ...answers, [prompt.id]: optionId });
                 setArmedOptionId(null);
               }}
-              className="flex items-center gap-3 px-4 py-3"
+              className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3"
             >
               {number != null && (
                 <span className="bg-secondary text-muted-foreground flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold tabular-nums">
                   {number}
                 </span>
               )}
-              <span className="min-w-0 flex-1 text-sm">{prompt.text}</span>
+              <HlText questionId={questionId} part={`item:${prompt.id}`} text={prompt.text} className="min-w-[7rem] flex-1 text-sm" />
               {matchedOptionId && (
                 <span className="text-accent bg-accent/10 hidden shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium sm:inline">
                   {optionLabelById.get(matchedOptionId) ?? matchedOptionId}

@@ -11,6 +11,7 @@ import { getProgressHistory } from "@/lib/analytics/student-insights";
 import { getWritingBandTrend, getSpeakingBandTrend } from "@/lib/analytics/student-growth-profile";
 import { getWeeklyActivityBreakdown } from "@/lib/study-activity";
 import { getSubscriptionHistory } from "@/lib/subscription-history";
+import { getStudentResultsHistory } from "@/lib/analytics/teacher-results";
 import { VOCABULARY_STATUS_LABELS, VOCABULARY_STATUS_EMOJI } from "@/lib/labels";
 import { formatRelativeTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -22,8 +23,9 @@ import { VocabularyStatsCards } from "@/components/analytics/vocabulary-stats-ca
 import { VocabularyInsightsCard } from "@/components/teacher/vocabulary-insights-card";
 import { TeacherAIReportCard } from "@/components/teacher/teacher-ai-report-card";
 import { StudentGrowthProfileSection } from "@/components/analytics/student-growth-profile-section";
+import { StudentResultsHistorySection } from "@/components/teacher/results/student-results-history";
 
-export const metadata: Metadata = { title: "Student Vocabulary" };
+export const metadata: Metadata = { title: "Student Profile" };
 
 const TREND_META = {
   IMPROVING: { label: "Improving", icon: TrendingUp, className: "text-success" },
@@ -42,7 +44,7 @@ export default async function TeacherStudentDetailPage({
   const student = await getStudentForTeacher(profile.id, studentId, profile.isRootTeacher);
   if (!student) notFound();
 
-  const [stats, activity, trends, progressHistory, writingTrend, speakingTrend, weeklyActivity, subscriptionHistory] = await Promise.all([
+  const [stats, activity, trends, progressHistory, writingTrend, speakingTrend, weeklyActivity, subscriptionHistory, resultsHistory] = await Promise.all([
     getStudentVocabularyStats(studentId),
     getStudentVocabularyActivity(studentId),
     getStudentVocabularyTrends(studentId),
@@ -51,6 +53,8 @@ export default async function TeacherStudentDetailPage({
     getSpeakingBandTrend(studentId),
     getWeeklyActivityBreakdown(studentId),
     getSubscriptionHistory(studentId),
+    // Authorizes again on its own (the student must be this teacher's, or this is the root roster view) — see getStudentResultsHistory.
+    getStudentResultsHistory(profile.id, studentId, profile.isRootTeacher),
   ]);
 
   const readingHistory = progressHistory.filter((p) => p.skill === "READING");
@@ -67,6 +71,8 @@ export default async function TeacherStudentDetailPage({
       <PageHeader title={student.name ?? "Student"} description={student.email} />
 
       <TeacherAIReportCard studentId={studentId} />
+
+      {resultsHistory && <StudentResultsHistorySection history={resultsHistory} />}
 
       <StudentGrowthProfileSection
         readingHistory={readingHistory}

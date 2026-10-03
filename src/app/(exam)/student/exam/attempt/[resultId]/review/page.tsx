@@ -6,7 +6,10 @@ import { ArrowLeft } from "lucide-react";
 import { requireStudentProfile } from "@/lib/session";
 import { getAttemptSummary } from "@/lib/exam/attempts";
 import { getResultInsights } from "@/lib/exam/result-insights";
+import { findInProgressFullMockLinkForResult } from "@/lib/full-mock-attempts";
+import { officialBandForScore } from "@/lib/analytics/band-conversion";
 import { summarizeAttemptSlots } from "@/lib/exam/question-numbering";
+import { reanchorHighlight } from "@/lib/exam/text-highlight";
 import { Button } from "@/components/ui/button";
 import { ReviewHeader } from "@/components/exam/review/review-header";
 import { ExamReviewSplit, type ReviewQuestionData } from "@/components/exam/review/exam-review-split";
@@ -28,6 +31,12 @@ export default async function ExamReviewPage({
   ]);
   if (!attempt) notFound();
   if (!attempt.completedAt) redirect(`/student/exam/attempt/${resultId}`);
+  // A Full Mock section is not marked between papers — see the results page.
+  const fullMockAttemptId = await findInProgressFullMockLinkForResult(resultId);
+  if (fullMockAttemptId) redirect(`/student/full-mock/attempt/${fullMockAttemptId}`);
+
+  const reviewTotalPoints = attempt.mockTest.questions.reduce((sum, question) => sum + question.points, 0);
+  const reviewBand = attempt.bandScore ?? officialBandForScore(attempt.skill, attempt.rawScore ?? 0, reviewTotalPoints);
 
   const answerByQuestion = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
 
@@ -55,13 +64,13 @@ export default async function ExamReviewPage({
   const incorrectCount = totals.incorrect;
   const skippedCount = totals.skipped;
 
-  const savedHighlights: ReviewHighlight[] = attempt.highlights.map((highlight) => ({
-    id: highlight.id,
-    passageId: highlight.passageId,
-    startOffset: highlight.startOffset,
-    endOffset: highlight.endOffset,
-    color: highlight.color,
-  }));
+  // Highlights saved by the old engine were shifted by the passage's paragraph labels; put every one back on the words it was made on (new ones pass through unchanged).
+  const passageContent = new Map(attempt.mockTest.passages.map((passage) => [passage.id, passage.content]));
+  const savedHighlights: ReviewHighlight[] = attempt.highlights.flatMap((highlight) => {
+    const content = passageContent.get(highlight.passageId);
+    const range = content == null ? null : reanchorHighlight(content, highlight);
+    return range ? [{ id: highlight.id, passageId: highlight.passageId, startOffset: range.start, endOffset: range.end, color: highlight.color }] : [];
+  });
 
   const skillLabel = attempt.skill === "LISTENING" ? "Listening" : "Reading";
 
@@ -77,7 +86,7 @@ export default async function ExamReviewPage({
         <ReviewHeader
           testTitle={attempt.mockTest.title}
           skillLabel={skillLabel}
-          bandScore={attempt.bandScore}
+          bandScore={reviewBand}
           correctCount={correctCount}
           incorrectCount={incorrectCount}
           skippedCount={skippedCount}

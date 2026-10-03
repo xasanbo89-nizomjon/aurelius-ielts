@@ -301,6 +301,58 @@ export async function submitEssay(studentId: string, input: SubmitEssayInput): P
   return { success: true, submissionId, analysisWarning: analysisResult.success ? undefined : analysisResult.error };
 }
 
+export type SubmitFullMockEssayResult = { success: true; submissionId: string; blank: boolean } | { success: false; error: string };
+
+/**
+ * Phase E — hands in one task of a Full Mock Writing session. Same storage as
+ * `submitEssay` (server-derived task details, an existing draft promoted to a
+ * submitted essay, the exact-duplicate check), with two deliberate
+ * differences, both because the sitting must be able to END:
+ *
+ *  - no minimum length — when the 60 minutes run out, whatever is on the page
+ *    (even one sentence, even nothing) is what gets handed in; a blank task is
+ *    recorded as band 0 ("no response"), exactly as the real exam marks it;
+ *  - no AI call here — saving must be instant and can't fail on a slow model.
+ *    The caller runs `runAnalysis` afterwards for the essays that have text.
+ *
+ * Idempotent: a task already handed in returns its existing submission.
+ */
+export async function submitFullMockEssay(
+  studentId: string,
+  input: { taskId: string; content: string; submissionId?: string | null }
+): Promise<SubmitFullMockEssayResult> {
+  const task = await getAssignedTaskForStudent(input.taskId, studentId);
+  if (!task) return { success: false, error: "This assignment isn't available to you." };
+  const { taskType, category, prompt } = taskFields(task);
+  const content = input.content.trim().slice(0, 8000);
+  const wordCount = countWords(content);
+  const blank = content.length === 0;
+  const isDuplicate = await checkExactDuplicate(task.id, studentId, content);
+  const data = {
+    taskId: task.id,
+    taskType,
+    category,
+    prompt,
+    content,
+    wordCount,
+    status: "PENDING" as const,
+    submittedAt: new Date(),
+    isDuplicate,
+    ...(blank ? { bandScore: 0, feedback: "No response was submitted for this task." } : {}),
+  };
+
+  if (input.submissionId) {
+    const existing = await prisma.writingSubmission.findFirst({ where: { id: input.submissionId, studentId } });
+    if (!existing) return { success: false, error: "Draft not found." };
+    if (existing.status !== "DRAFT") return { success: true, submissionId: existing.id, blank: existing.content.trim().length === 0 };
+    await prisma.writingSubmission.update({ where: { id: existing.id }, data });
+    return { success: true, submissionId: existing.id, blank };
+  }
+
+  const created = await prisma.writingSubmission.create({ data: { studentId, ...data } });
+  return { success: true, submissionId: created.id, blank };
+}
+
 export type DraftForEdit = {
   id: string;
   taskId: string | null;

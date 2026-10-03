@@ -59,6 +59,8 @@ export const TEACHER_NAV_ITEMS: NavItem[] = [
   { label: "Overview", href: "/teacher/dashboard", icon: "LayoutDashboard" },
   { label: "AI Assistant", href: "/teacher/assistant", icon: "Sparkles" },
   { label: "Students", href: "/teacher/students", icon: "Users" },
+  // Phase C — every student's Reading / Listening / Writing / Full Mock result in one place, plus per-student monitoring.
+  { label: "Student Results", href: "/teacher/results", icon: "ClipboardList" },
   // Phase 38 — central reusable file store for Reading/Listening/Articles.
   { label: "Media Library", href: "/teacher/media", icon: "Image" },
   { label: "Tests", href: "/teacher/tests", icon: "FileText" },

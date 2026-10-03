@@ -1,15 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type KeyboardEvent, type SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { HighlightColor, QuestionType } from "@prisma/client";
-import { Bookmark, ChevronLeft, ChevronRight, ClipboardList, Flag, Home, List, Loader2, Maximize2, Minimize2, NotebookPen } from "lucide-react";
+import { ClipboardList, Home, List, Loader2, Maximize2, Minimize2, NotebookPen } from "lucide-react";
 import { toast } from "sonner";
 
 import {
-  addHighlightAction,
   deleteNoteAction,
-  removeHighlightAction,
+  markListeningAudioEndedAction,
   saveAnswerAction,
   saveNoteAction,
   submitAttemptAction,
@@ -18,7 +17,10 @@ import {
 } from "@/actions/exam.actions";
 import { toggleQuestionBookmarkAction } from "@/actions/bookmarks.actions";
 import { cn } from "@/lib/utils";
-import { formatNumberRange, numberQuestions, slotAnswered, summarizeSlotAnswer } from "@/lib/exam/question-numbering";
+import { FULL_MOCK_LISTENING_TRANSFER_MINUTES } from "@/lib/full-mock-constants";
+import { numberQuestions, slotAnswered, summarizeSlotAnswer, type NumberedQuestion } from "@/lib/exam/question-numbering";
+import { adjacentNumber, buildPassageGroups, groupIndexOfNumber, type NavNumber, type PassageGroup } from "@/lib/exam/passage-groups";
+import { passageRegion, questionRegion, reanchorHighlight, type HighlightRange } from "@/lib/exam/text-highlight";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -30,12 +32,18 @@ import { SubmitConfirmationDialog } from "@/components/exam/submit-confirmation-
 import { ReviewCenter } from "@/components/exam/review-center";
 import { LeaveTestDialog } from "@/components/exam/leave-test-dialog";
 import { PassagePanel } from "@/components/exam/passage-panel";
+import { PassageNavBar } from "@/components/exam/passage-nav-bar";
+import { QuestionBlock } from "@/components/exam/question-block";
 import { ResizableSplit } from "@/components/exam/resizable-split";
 import { NotesDrawer, type ExamNote } from "@/components/exam/notes-drawer";
 import { AudioPlayer } from "@/components/exam/audio-player";
 import { PassageAttachments, type ExamAttachment } from "@/components/exam/passage-attachments";
 import { MobileSplitTabs } from "@/components/exam/mobile-split-tabs";
-import { QuestionRenderer } from "@/components/exam/question-types/question-renderer";
+import { useMediaQuery } from "@/components/exam/use-media-query";
+import { useStableValue } from "@/components/exam/use-stable-value";
+import { HighlightSurface } from "@/components/exam/highlight/highlight-surface";
+import { QuestionHighlightProvider } from "@/components/exam/highlight/question-highlight-context";
+import { useExamHighlights, type StoredHighlight } from "@/components/exam/highlight/use-exam-highlights";
 
 export type ExamQuestion = {
   id: string;
@@ -44,6 +52,8 @@ export type ExamQuestion = {
   prompt: string;
   options: unknown;
   orderIndex: number;
+  /** A summary row's answer KEYS (never the answers), so every number gets an answer box even when the text marks fewer blanks than the row claims. */
+  blankKeys?: string[] | null;
 };
 
 export type ExamPassage = {
@@ -56,7 +66,16 @@ export type ExamPassage = {
 };
 
 export type ExamHighlight = { id: string; passageId: string; text: string; startOffset: number; endOffset: number; color: HighlightColor };
+export type ExamQuestionHighlight = { id: string; questionId: string; region: string; text: string; startOffset: number; endOffset: number };
 export type ExamNoteRecord = { id: string; passageId: string | null; content: string };
+
+type NumberedExamQuestion = NumberedQuestion<ExamQuestion>;
+type ExamSection = { passage: ExamPassage | undefined; questions: NumberedExamQuestion[] };
+
+/** Typing is saved this long after the last keystroke — and immediately when the test is submitted or time runs out. */
+const SAVE_DEBOUNCE_MS = 450;
+const EMPTY_RANGES: readonly HighlightRange[] = [];
+const FOCUSABLE_ANSWER_CONTROL = 'input:not([type="hidden"]), textarea, [role="combobox"], [role="radio"], [role="checkbox"]';
 
 /**
  * Phase 46 (CBT Listening) — the exam-taking LEFT panel: a real "Sticky
@@ -66,7 +85,15 @@ export type ExamNoteRecord = { id: string; passageId: string | null; content: st
  * both the desktop resizable split and the mobile tab, so the two can never
  * drift out of sync.
  */
-function ListeningLeftPanel({ passage, sectionLabel }: { passage: ExamPassage; sectionLabel: string | undefined }) {
+function ListeningLeftPanel({
+  passage,
+  sectionLabel,
+  onAudioEnded,
+}: {
+  passage: ExamPassage;
+  sectionLabel: string | undefined;
+  onAudioEnded?: (src: string) => void;
+}) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="border-border/70 bg-background/95 shrink-0 border-b px-5 py-4 backdrop-blur-sm">
@@ -75,7 +102,7 @@ function ListeningLeftPanel({ passage, sectionLabel }: { passage: ExamPassage; s
       </div>
       <div className="shrink-0 px-5 pt-4">
         {passage.audioUrl ? (
-          <AudioPlayer src={passage.audioUrl} label={passage.title} />
+          <AudioPlayer src={passage.audioUrl} label={passage.title} onEnded={onAudioEnded} />
         ) : (
           <div className="border-border/70 bg-secondary/30 text-muted-foreground rounded-2xl border border-dashed px-4 py-6 text-center text-sm">
             Audio isn&apos;t available for this section yet.
@@ -93,68 +120,91 @@ export function ExamRunner({
   resultId,
   testTitle,
   testType,
-  durationMinutes,
-  startedAt,
+  initialRemainingSeconds,
+  fullMock = null,
   passages,
   questions,
   initialAnswers,
   initialFlags,
   initialBookmarks,
   initialHighlights,
+  initialQuestionHighlights = [],
   initialNotes,
   initialLastSeenQuestionId,
 }: {
   resultId: string;
   testTitle: string;
   testType: "READING" | "LISTENING";
-  durationMinutes: number | null;
-  startedAt: string;
+  /** Seconds left when the page was rendered (null = untimed) — computed once on the server so the server render and hydration agree. */
+  initialRemainingSeconds: number | null;
+  /** Set when this paper is a leg of a running Full Mock: the Listening recording ending starts the 2-minute transfer time (`transferSecondsRemaining` is already running if the page was reloaded during it). */
+  fullMock?: { attemptId: string; transferSecondsRemaining: number | null } | null;
   passages: ExamPassage[];
   questions: ExamQuestion[];
   initialAnswers: Record<string, unknown>;
   initialFlags: string[];
   initialBookmarks: string[];
   initialHighlights: ExamHighlight[];
+  initialQuestionHighlights?: ExamQuestionHighlight[];
   initialNotes: ExamNoteRecord[];
   initialLastSeenQuestionId: string | null;
 }) {
   const [answers, setAnswers] = useState<Record<string, unknown>>(initialAnswers);
+  const latestAnswers = useRef<Record<string, unknown>>(initialAnswers);
   const [flags, setFlags] = useState<Set<string>>(() => new Set(initialFlags));
   const [bookmarks, setBookmarks] = useState<Set<string>>(() => new Set(initialBookmarks));
-  const [highlights, setHighlights] = useState<ExamHighlight[]>(initialHighlights);
   const [notes, setNotes] = useState<ExamNoteRecord[]>(initialNotes);
-  // Phase 24 — "student returns exactly where they left": which passage/part
-  // they were on is remembered per-attempt so a refresh doesn't drop them
-  // back to the start. Per-viewer convenience only (localStorage), restored
-  // in an effect (not the initializer) to avoid an SSR/hydration mismatch —
-  // answers/timer/flags/bookmarks already restore for real from the server
-  // regardless of whether this happens to be available.
-  const [sectionIndex, setSectionIndex] = useState(0);
-  // Phase 41 — Part 3/14/15: the exact question the student was last on,
-  // real and server-backed (Result.lastSeenQuestionId) — takes priority over
-  // the older Phase 24 client-only section memory below, which now only
-  // serves as a fallback for attempts started before this field existed.
-  const [activeQuestionId, setActiveQuestionId] = useState<string>(
-    () => (initialLastSeenQuestionId && questions.some((q) => q.id === initialLastSeenQuestionId) ? initialLastSeenQuestionId : "")
-  );
+
+  const sortedPassages = useMemo(() => [...passages].sort((a, b) => a.orderIndex - b.orderIndex), [passages]);
+  const sortedQuestions = useMemo(() => [...questions].sort((a, b) => a.orderIndex - b.orderIndex), [questions]);
+
+  // Phase A — a Question ROW is not always one numbered question (a matching task covering 22–26 is one row, five numbers), so everything the student sees — the navigator, the "x of 40", the answered tally — counts NUMBERS, via the same helper the importer/teacher side uses. Counting rows here is what made a 40-question test show as 26.
+  const numberedQuestions = useMemo(() => numberQuestions(sortedQuestions), [sortedQuestions]);
+  const numberedById = useMemo(() => new Map(numberedQuestions.map((question) => [question.id, question])), [numberedQuestions]);
+  const totalQuestionCount = numberedQuestions.length > 0 ? numberedQuestions[numberedQuestions.length - 1].endNumber : 0;
+
+  // The question rows shown with each passage / part. A row that belongs to no passage (or to one that no longer exists) is shown with the LAST section instead of nowhere — a question the student can't see is a question they can't answer.
+  const sections: ExamSection[] = useMemo(() => {
+    if (sortedPassages.length === 0) return [{ passage: undefined, questions: numberedQuestions }];
+    const indexById = new Map(sortedPassages.map((passage, index) => [passage.id, index]));
+    const last = sortedPassages.length - 1;
+    const built: ExamSection[] = sortedPassages.map((passage) => ({ passage, questions: [] }));
+    for (const question of numberedQuestions) {
+      const index = question.passageId != null ? (indexById.get(question.passageId) ?? last) : last;
+      built[index].questions.push(question);
+    }
+    return built;
+  }, [sortedPassages, numberedQuestions]);
+  const sectionIndexByQuestionId = useMemo(() => {
+    const map = new Map<string, number>();
+    sections.forEach((section, index) => section.questions.forEach((question) => map.set(question.id, index)));
+    return map;
+  }, [sections]);
+
+  // Where the student is. `activeNumber` is the IELTS question number they are on (it follows what they click, type into or jump to); the visible passage is the one that number belongs to. The server remembers the question across refreshes and devices (Result.lastSeenQuestionId); the older localStorage section memory below only serves attempts that predate it.
+  const [activeNumber, setActiveNumber] = useState<number>(() => {
+    const row = initialLastSeenQuestionId ? numberedById.get(initialLastSeenQuestionId) : undefined;
+    return row?.startNumber ?? 1;
+  });
+  const [sectionIndex, setSectionIndex] = useState<number>(() => {
+    const row = initialLastSeenQuestionId ? numberedById.get(initialLastSeenQuestionId) : undefined;
+    return row ? (sectionIndexByQuestionId.get(row.id) ?? 0) : 0;
+  });
+  const [mobileTab, setMobileTab] = useState<"left" | "right">("left");
 
   useEffect(() => {
-    if (initialLastSeenQuestionId) {
-      const question = questions.find((q) => q.id === initialLastSeenQuestionId);
-      const orderedPassages = [...passages].sort((a, b) => a.orderIndex - b.orderIndex);
-      const targetSection = question ? orderedPassages.findIndex((p) => p.id === question.passageId) : -1;
-      if (targetSection >= 0) {
-        setSectionIndex(targetSection);
-        return;
-      }
-    }
+    if (initialLastSeenQuestionId && numberedById.has(initialLastSeenQuestionId)) return;
     try {
-      const saved = window.localStorage.getItem(`exam-section-${resultId}`);
-      if (saved) setSectionIndex(Number(saved) || 0);
+      const saved = Number(window.localStorage.getItem(`exam-section-${resultId}`));
+      if (Number.isInteger(saved) && saved > 0 && saved < sections.length) {
+        setSectionIndex(saved);
+        const first = sections[saved].questions[0];
+        if (first) setActiveNumber(first.startNumber);
+      }
     } catch {
-      // Private browsing / storage disabled — just starts from section 0.
+      // Private browsing / storage disabled — just starts from the first section.
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore, resultId/initialLastSeenQuestionId are stable for this component's lifetime
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only restore; everything it reads is stable for this component's lifetime
   }, []);
 
   useEffect(() => {
@@ -164,6 +214,7 @@ export function ExamRunner({
       // Private browsing / storage disabled — position just won't be remembered, no functional loss.
     }
   }, [resultId, sectionIndex]);
+
   const [navOpen, setNavOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
@@ -174,10 +225,10 @@ export function ExamRunner({
   const [pendingSaves, setPendingSaves] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
   const router = useRouter();
+  const isDesktop = useMediaQuery("(min-width: 768px)");
 
-  const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const lastSeenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const examContainerRef = useRef<HTMLDivElement>(null);
+  const questionsPanelRef = useRef<HTMLFieldSetElement>(null);
 
   useEffect(() => {
     function handler(event: BeforeUnloadEvent) {
@@ -187,28 +238,39 @@ export function ExamRunner({
     return () => window.removeEventListener("beforeunload", handler);
   }, []);
 
-  const sortedPassages = useMemo(() => [...passages].sort((a, b) => a.orderIndex - b.orderIndex), [passages]);
-  const sortedQuestions = useMemo(() => [...questions].sort((a, b) => a.orderIndex - b.orderIndex), [questions]);
+  // ---- highlights: one store for the passage AND the question panel -----------------------------------------------
+  const [initialStoredHighlights] = useState<StoredHighlight[]>(() => {
+    const contentById = new Map(passages.map((passage) => [passage.id, passage.content]));
+    const stored: StoredHighlight[] = [];
+    for (const highlight of initialHighlights) {
+      const content = contentById.get(highlight.passageId);
+      if (content == null) continue;
+      // Highlights saved by the old engine were shifted by the paragraph labels — put them back on the words they were made on.
+      const range = reanchorHighlight(content, highlight);
+      if (!range) continue;
+      stored.push({ id: highlight.id, region: passageRegion(highlight.passageId), start: range.start, end: range.end, text: content.slice(range.start, range.end) });
+    }
+    for (const highlight of initialQuestionHighlights) {
+      stored.push({ id: highlight.id, region: questionRegion(highlight.questionId, highlight.region), start: highlight.startOffset, end: highlight.endOffset, text: highlight.text });
+    }
+    return stored;
+  });
+  const highlightStore = useExamHighlights(resultId, initialStoredHighlights);
+  const flushHighlights = highlightStore.flush;
 
-  const currentPassage: ExamPassage | undefined = sortedPassages[sectionIndex];
+  // ---- derived navigation data --------------------------------------------------------------------------------------
+  const currentSection: ExamSection = sections[Math.min(sectionIndex, sections.length - 1)] ?? { passage: undefined, questions: [] };
+  const currentPassage = currentSection.passage;
+  const currentQuestions = currentSection.questions;
 
-  const currentQuestions = useMemo(
-    () =>
-      sortedQuestions.filter((question) =>
-        currentPassage ? question.passageId === currentPassage.id : question.passageId == null
-      ),
-    [sortedQuestions, currentPassage]
-  );
-
-  // Phase A — a Question ROW is not always one numbered question (a matching task covering 22–26 is one row, five numbers), so everything the student sees — the navigator, the "x of 40", the answered tally — counts NUMBERS, via the same helper the importer/teacher side uses. Counting rows here is what made a 40-question test show as 26.
-  const numberedQuestions = useMemo(() => numberQuestions(sortedQuestions), [sortedQuestions]);
-  const numberedById = useMemo(() => new Map(numberedQuestions.map((question) => [question.id, question])), [numberedQuestions]);
-  const totalQuestionCount = numberedQuestions.length > 0 ? numberedQuestions[numberedQuestions.length - 1].endNumber : 0;
+  // Which numbers are answered only changes when a box becomes empty/non-empty, not on every keystroke — keep the same array until it really changes, so the navigation bars below don't re-render for every key pressed.
+  const answeredFlags = useMemo(() => numberedQuestions.map((question) => slotAnswered(question, answers[question.id])), [numberedQuestions, answers]);
+  const stableAnsweredFlags = useStableValue(answeredFlags, (previous, next) => previous.length === next.length && previous.every((row, i) => row.length === next[i].length && row.every((flag, j) => flag === next[i][j])));
 
   const navigatorItems: NavigatorQuestionState[] = useMemo(
     () =>
-      numberedQuestions.flatMap((question) =>
-        slotAnswered(question, answers[question.id]).map((answered, slotIndex) => ({
+      numberedQuestions.flatMap((question, rowIndex) =>
+        stableAnsweredFlags[rowIndex].map((answered, slotIndex) => ({
           id: `${question.id}:${slotIndex}`,
           questionId: question.id,
           number: question.startNumber + slotIndex,
@@ -216,7 +278,7 @@ export function ExamRunner({
           flagged: flags.has(question.id),
         }))
       ),
-    [numberedQuestions, answers, flags]
+    [numberedQuestions, stableAnsweredFlags, flags]
   );
 
   const answerSummaryQuestions: AnswerSummaryQuestion[] = useMemo(
@@ -232,18 +294,25 @@ export function ExamRunner({
     [numberedQuestions, answers]
   );
 
+  const passageGroups: PassageGroup[] = useMemo(
+    () =>
+      buildPassageGroups(
+        sortedPassages,
+        navigatorItems.map((item) => ({ number: item.number, questionId: item.questionId, answered: item.answered, flagged: item.flagged, passageId: numberedById.get(item.questionId)?.passageId ?? null }))
+      ),
+    [sortedPassages, navigatorItems, numberedById]
+  );
+
   const answeredCount = navigatorItems.filter((item) => item.answered).length;
   const flaggedCount = navigatorItems.filter((item) => item.flagged).length;
   const completionPercent = totalQuestionCount > 0 ? Math.round((answeredCount / totalQuestionCount) * 100) : 0;
 
-  // Phase 41 — Part 3's real current-question tracking, self-healing if
-  // activeQuestionId ever references a question outside the current data
-  // (stale localStorage, teacher edited the test) by falling back to the
-  // current section's first question.
-  const effectiveActiveQuestionId =
-    activeQuestionId && sortedQuestions.some((q) => q.id === activeQuestionId) ? activeQuestionId : (currentQuestions[0]?.id ?? "");
-  const activeQuestion = numberedQuestions.find((q) => q.id === effectiveActiveQuestionId);
-  const activeQuestionLabel = activeQuestion ? formatNumberRange(activeQuestion.startNumber, activeQuestion.endNumber) : "–";
+  const activeRow = numberedQuestions.find((question) => activeNumber >= question.startNumber && activeNumber <= question.endNumber) ?? currentQuestions[0] ?? numberedQuestions[0];
+  const effectiveActiveNumber = activeRow ? Math.min(Math.max(activeNumber, activeRow.startNumber), activeRow.endNumber) : activeNumber;
+  const effectiveActiveQuestionId = activeRow?.id ?? "";
+  const activeGroupIndex = groupIndexOfNumber(passageGroups, effectiveActiveNumber);
+  const activeGroupKey = passageGroups[activeGroupIndex]?.key ?? passageGroups[0]?.key ?? "";
+
   const activeSectionLabel = testType === "LISTENING" ? currentPassage?.title || `Part ${sectionIndex + 1}` : `Passage ${sectionIndex + 1}`;
   // Phase 48 — the CBT passage panel's sticky-header "section information", omitted for single-passage Reading tests (nothing to disambiguate).
   const readingSectionLabel = sortedPassages.length > 1 ? `Passage ${sectionIndex + 1} of ${sortedPassages.length}` : undefined;
@@ -252,53 +321,97 @@ export function ExamRunner({
 
   const listeningParts: ListeningPart[] = useMemo(
     () =>
-      sortedPassages.map((passage, index) => {
-        const partQuestionIds = new Set(sortedQuestions.filter((q) => q.passageId === passage.id).map((q) => q.id));
-        const partItems = navigatorItems.filter((item) => partQuestionIds.has(item.questionId));
+      sections.map((section, index) => {
+        const ids = new Set(section.questions.map((question) => question.id));
+        const partItems = navigatorItems.filter((item) => ids.has(item.questionId));
         return {
-          id: passage.id,
+          id: section.passage?.id ?? `section-${index}`,
           index,
-          title: passage.title || `Part ${index + 1}`,
+          title: section.passage?.title || `Part ${index + 1}`,
           questionCount: partItems.length,
           answeredCount: partItems.filter((item) => item.answered).length,
         };
       }),
-    [sortedPassages, sortedQuestions, navigatorItems]
+    [sections, navigatorItems]
   );
 
-  const initialRemainingSeconds = useMemo(() => {
-    if (durationMinutes == null) return null;
-    const elapsedMs = Date.now() - new Date(startedAt).getTime();
-    return Math.max(0, durationMinutes * 60 - Math.floor(elapsedMs / 1000));
-  }, [durationMinutes, startedAt]);
+  // ---- saving answers -----------------------------------------------------------------------------------------------
+  const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const saveChains = useRef<Map<string, Promise<unknown>>>(new Map());
+  const lastSaveErrorAt = useRef(0);
 
-  function handleAnswerChange(questionId: string, value: unknown) {
-    setAnswers((prev) => ({ ...prev, [questionId]: value }));
-
-    const existing = saveTimers.current.get(questionId);
-    if (existing) clearTimeout(existing);
-
-    setPendingSaves((count) => count + 1);
-    const timer = setTimeout(() => {
-      saveTimers.current.delete(questionId);
-      void saveAnswerAction(resultId, questionId, value as never).finally(() => {
-        setPendingSaves((count) => Math.max(0, count - 1));
-      });
-    }, 600);
-    saveTimers.current.set(questionId, timer);
-  }
-
-  function handleToggleFlag(questionId: string) {
-    setFlags((prev) => {
-      const next = new Set(prev);
-      if (next.has(questionId)) next.delete(questionId);
-      else next.add(questionId);
+  /** Sends the latest value of one question now. Saves of the same question go out strictly in order, so a slow earlier save can never overwrite a newer one. */
+  const sendSave = useCallback(
+    (questionId: string): Promise<unknown> => {
+      const timer = saveTimers.current.get(questionId);
+      if (timer) clearTimeout(timer);
+      const hadPending = saveTimers.current.delete(questionId);
+      const value = latestAnswers.current[questionId];
+      const previous = saveChains.current.get(questionId) ?? Promise.resolve();
+      const next = previous
+        .then(() => saveAnswerAction(resultId, questionId, value as never))
+        .then((result) => {
+          if (!result.success && Date.now() - lastSaveErrorAt.current > 8000) {
+            lastSaveErrorAt.current = Date.now();
+            toast.error(`Your last answer couldn't be saved: ${result.error}`);
+          }
+        })
+        .catch(() => {
+          if (Date.now() - lastSaveErrorAt.current > 8000) {
+            lastSaveErrorAt.current = Date.now();
+            toast.error("Your last answer couldn't be saved. Check your connection.");
+          }
+        })
+        .finally(() => {
+          if (hadPending) setPendingSaves((count) => Math.max(0, count - 1));
+        });
+      saveChains.current.set(questionId, next);
       return next;
-    });
-    void toggleFlagAction(resultId, questionId);
-  }
+    },
+    [resultId]
+  );
 
-  function handleToggleBookmark(questionId: string) {
+  const handleAnswerChange = useCallback(
+    (questionId: string, value: unknown) => {
+      latestAnswers.current = { ...latestAnswers.current, [questionId]: value };
+      setAnswers(latestAnswers.current);
+
+      const existing = saveTimers.current.get(questionId);
+      if (existing) clearTimeout(existing);
+      else setPendingSaves((count) => count + 1); // counted once per question with unsaved changes
+      saveTimers.current.set(
+        questionId,
+        setTimeout(() => void sendSave(questionId), SAVE_DEBOUNCE_MS)
+      );
+    },
+    [sendSave]
+  );
+
+  /** Everything typed or highlighted so far is on the server before the test is graded — the grader only sees saved answers. */
+  const flushPendingWork = useCallback(async () => {
+    try {
+      await Promise.all([...saveTimers.current.keys()].map((questionId) => sendSave(questionId)));
+      await Promise.all([...saveChains.current.values()]);
+      await flushHighlights();
+    } catch {
+      // Whatever could be saved has been; submitting must still go ahead.
+    }
+  }, [sendSave, flushHighlights]);
+
+  const handleToggleFlag = useCallback(
+    (questionId: string) => {
+      setFlags((prev) => {
+        const next = new Set(prev);
+        if (next.has(questionId)) next.delete(questionId);
+        else next.add(questionId);
+        return next;
+      });
+      void toggleFlagAction(resultId, questionId);
+    },
+    [resultId]
+  );
+
+  const handleToggleBookmark = useCallback((questionId: string) => {
     setBookmarks((prev) => {
       const next = new Set(prev);
       if (next.has(questionId)) next.delete(questionId);
@@ -306,76 +419,161 @@ export function ExamRunner({
       return next;
     });
     void toggleQuestionBookmarkAction(questionId);
-  }
+  }, []);
 
-  /** Finds the first real focusable answer control inside a question's container — works generically across every question type (text inputs, selects, radios) without type-specific logic. */
-  function focusQuestionInput(questionId: string, number?: number) {
-    const container = document.getElementById(`question-${questionId}`);
-    // A matching / summary row covers several numbers — jump to that number's own control when one was asked for, else the row's first.
-    const control =
-      (number != null ? container?.querySelector<HTMLElement>(`[data-question-number="${number}"]`) : null) ??
-      container?.querySelector<HTMLElement>('input:not([type="hidden"]), textarea, [role="combobox"], [role="radio"]');
-    control?.focus();
-  }
+  // ---- navigation ---------------------------------------------------------------------------------------------------
+  const lastSeenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPersistedQuestion = useRef<string | null>(initialLastSeenQuestionId);
 
-  /** Phase 41 — Part 14/15: debounced real persistence of "where the student currently is", so a refresh (or a different device) resumes at the exact question, not just the section. */
-  function persistLastSeenQuestion(questionId: string) {
-    if (lastSeenTimer.current) clearTimeout(lastSeenTimer.current);
-    lastSeenTimer.current = setTimeout(() => {
-      void updateLastSeenQuestionAction(resultId, questionId);
-    }, 800);
-  }
+  /** Phase 41 — debounced real persistence of "where the student currently is", so a refresh (or a different device) resumes at the exact question, not just the section. */
+  const persistLastSeenQuestion = useCallback(
+    (questionId: string) => {
+      if (lastPersistedQuestion.current === questionId) return;
+      if (lastSeenTimer.current) clearTimeout(lastSeenTimer.current);
+      lastSeenTimer.current = setTimeout(() => {
+        lastPersistedQuestion.current = questionId;
+        void updateLastSeenQuestionAction(resultId, questionId);
+      }, 800);
+    },
+    [resultId]
+  );
 
-  function goToQuestion(questionId: string, number?: number) {
-    const question = sortedQuestions.find((q) => q.id === questionId);
-    if (!question) return;
-    const targetSection = sortedPassages.findIndex((p) => p.id === question.passageId);
-    if (targetSection >= 0 && targetSection !== sectionIndex) setSectionIndex(targetSection);
-    setActiveQuestionId(questionId);
-    persistLastSeenQuestion(questionId);
-    setNavOpen(false);
-    setReviewOpen(false);
-    requestAnimationFrame(() => {
-      document.getElementById(`question-${questionId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      focusQuestionInput(questionId, number);
+  // A jump is "switch section → wait for it to render → scroll to the question → focus its answer box". Doing the last two in an effect (not straight after setState) is what makes it work when the target is on another passage or another phone tab.
+  const pendingJump = useRef<{ questionId: string; number: number } | null>(null);
+  const [jumpTick, setJumpTick] = useState(0);
+
+  const goToQuestion = useCallback(
+    (questionId: string, number?: number) => {
+      const row = numberedById.get(questionId);
+      if (!row) return;
+      const target = number ?? row.startNumber;
+      setSectionIndex(sectionIndexByQuestionId.get(questionId) ?? 0);
+      setActiveNumber(target);
+      persistLastSeenQuestion(questionId);
+      setNavOpen(false);
+      setReviewOpen(false);
+      setMobileTab("right");
+      pendingJump.current = { questionId, number: target };
+      setJumpTick((tick) => tick + 1);
+    },
+    [numberedById, sectionIndexByQuestionId, persistLastSeenQuestion]
+  );
+
+  useEffect(() => {
+    const job = pendingJump.current;
+    if (!job) return;
+    pendingJump.current = null;
+    const frame = requestAnimationFrame(() => {
+      const row = document.getElementById(`question-${job.questionId}`);
+      if (!row) return;
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      // On a phone, focusing a text box would throw the keyboard up over the page the student just navigated to.
+      if (window.matchMedia("(pointer: coarse)").matches) return;
+      const control = row.querySelector<HTMLElement>(`[data-question-number="${job.number}"]`) ?? row.querySelector<HTMLElement>(FOCUSABLE_ANSWER_CONTROL);
+      control?.focus({ preventScroll: true });
     });
-  }
+    return () => cancelAnimationFrame(frame);
+  }, [jumpTick]);
 
-  /** Section-level navigation (Reading's Prev/Next, Listening's part tabs) also resets the tracked active question to that section's first one, keeping the navigator's "current question" ring accurate. */
-  function goToSection(index: number) {
-    setSectionIndex(index);
-    const passage = sortedPassages[index];
-    const first = sortedQuestions.find((q) => (passage ? q.passageId === passage.id : q.passageId == null));
-    if (first) {
-      setActiveQuestionId(first.id);
-      persistLastSeenQuestion(first.id);
-    }
-  }
+  /** Section-level navigation (a passage label, Listening's part tabs) lands on that section's first question. */
+  const goToSection = useCallback(
+    (index: number) => {
+      const section = sections[index];
+      if (!section) return;
+      setSectionIndex(index);
+      const first = section.questions[0];
+      if (first) {
+        setActiveNumber(first.startNumber);
+        persistLastSeenQuestion(first.id);
+      }
+      setMobileTab("left");
+    },
+    [sections, persistLastSeenQuestion]
+  );
+
+  const handleSelectNavNumber = useCallback((item: NavNumber) => goToQuestion(item.questionId, item.number), [goToQuestion]);
+
+  const handleSelectPassage = useCallback(
+    (group: PassageGroup) => {
+      const index = sections.findIndex((section) => section.passage?.id === group.passageId);
+      goToSection(index >= 0 ? index : 0);
+    },
+    [sections, goToSection]
+  );
+
+  const stepQuestion = useCallback(
+    (delta: 1 | -1) => {
+      const target = adjacentNumber(passageGroups, effectiveActiveNumber, delta);
+      if (target) goToQuestion(target.questionId, target.number);
+    },
+    [passageGroups, effectiveActiveNumber, goToQuestion]
+  );
+  const goToPrevious = useCallback(() => stepQuestion(-1), [stepQuestion]);
+  const goToNext = useCallback(() => stepQuestion(1), [stepQuestion]);
+
+  /** The student's real position follows what they touch: clicking into or tabbing to an answer box makes that number current, so the navigation bar always shows where they actually are. */
+  const handlePanelInteraction = useCallback(
+    (event: SyntheticEvent) => {
+      const target = event.target as HTMLElement;
+      const row = target.closest<HTMLElement>("[data-question-row]");
+      if (!row) return;
+      const number = Number(target.closest<HTMLElement>("[data-question-number]")?.dataset.questionNumber ?? row.dataset.startNumber);
+      if (!Number.isFinite(number)) return;
+      setActiveNumber((previous) => (previous === number ? previous : number));
+      if (row.dataset.questionId) persistLastSeenQuestion(row.dataset.questionId);
+    },
+    [persistLastSeenQuestion]
+  );
+
+  /** Enter / ↓ move to the next answer box, ↑ (or Shift+Enter) to the previous — across the end of a passage they carry on into the next one. */
+  const handleAnswerKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLElement>) => {
+      const target = event.target as HTMLElement;
+      if (!(target instanceof HTMLInputElement) || !target.hasAttribute("data-answer-box")) return;
+      if (event.nativeEvent.isComposing) return;
+      let delta: 1 | -1;
+      if (event.key === "Enter") delta = event.shiftKey ? -1 : 1;
+      else if (event.key === "ArrowDown") delta = 1;
+      else if (event.key === "ArrowUp") delta = -1;
+      else return;
+      event.preventDefault();
+
+      const boxes = [...(questionsPanelRef.current?.querySelectorAll<HTMLInputElement>("input[data-answer-box]") ?? [])];
+      const next = boxes[boxes.indexOf(target) + delta];
+      if (next) {
+        next.scrollIntoView({ behavior: "smooth", block: "center" });
+        next.focus({ preventScroll: true });
+        return;
+      }
+      // Past the first/last box of this passage: continue into the neighbouring one.
+      const neighbour = sections[sectionIndex + delta]?.questions;
+      const row = delta === 1 ? neighbour?.[0] : neighbour?.[neighbour.length - 1];
+      if (row) goToQuestion(row.id, delta === 1 ? row.startNumber : row.endNumber);
+    },
+    [sections, sectionIndex, goToQuestion]
+  );
 
   /** Phase 41 — Part 11's keyboard shortcuts: Left/Right jump to the previous/next question in real test order. Only fires when nothing is specifically focused (no active input, textarea, radio, or combobox), so it never hijacks native arrow-key behavior inside an answer control. */
   useEffect(() => {
-    function handleKeydown(event: KeyboardEvent) {
+    function handleKeydown(event: globalThis.KeyboardEvent) {
       if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
       if (document.activeElement && document.activeElement !== document.body) return;
-      const currentIndex = sortedQuestions.findIndex((q) => q.id === effectiveActiveQuestionId);
-      if (currentIndex === -1) return;
-      const nextIndex = event.key === "ArrowRight" ? currentIndex + 1 : currentIndex - 1;
-      const target = sortedQuestions[nextIndex];
-      if (!target) return;
       event.preventDefault();
-      goToQuestion(target.id);
+      stepQuestion(event.key === "ArrowRight" ? 1 : -1);
     }
     window.addEventListener("keydown", handleKeydown);
     return () => window.removeEventListener("keydown", handleKeydown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- goToQuestion reads fresh state via closure each call; sortedQuestions/effectiveActiveQuestionId are the real reactive deps
-  }, [sortedQuestions, effectiveActiveQuestionId]);
+  }, [stepQuestion]);
 
   // Listening: auto-focus the first answer box of a part the moment it loads (new part navigation, or the very first part on load) — a real IELTS Listening habit, since audio starts before the student has clicked anything.
   useEffect(() => {
     if (testType !== "LISTENING") return;
     const firstQuestion = currentQuestions[0];
     if (!firstQuestion) return;
-    const frame = requestAnimationFrame(() => focusQuestionInput(firstQuestion.id));
+    const frame = requestAnimationFrame(() => {
+      const row = document.getElementById(`question-${firstQuestion.id}`);
+      row?.querySelector<HTMLElement>(FOCUSABLE_ANSWER_CONTROL)?.focus();
+    });
     return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately re-runs only when the part itself changes (sectionIndex), reading currentQuestions fresh via closure each time
   }, [testType, sectionIndex]);
@@ -391,26 +589,11 @@ export function ExamRunner({
     }
   }
 
-  async function handleHighlight(text: string, start: number, end: number, color: HighlightColor) {
-    if (!currentPassage) return;
-    const passageId = currentPassage.id;
-    const result = await addHighlightAction(resultId, { passageId, text, startOffset: start, endOffset: end, color });
-    if (result.success && result.highlightId) {
-      setHighlights((prev) => [...prev, { id: result.highlightId!, passageId, text, startOffset: start, endOffset: end, color }]);
-    } else if (!result.success) {
-      toast.error(result.error);
-    }
-  }
-
-  async function handleRemoveHighlight(highlightId: string) {
-    setHighlights((prev) => prev.filter((h) => h.id !== highlightId));
-    await removeHighlightAction(resultId, highlightId);
-  }
-
-  function handleAddNoteFromSelection(text: string) {
+  // ---- notes --------------------------------------------------------------------------------------------------------
+  const handleAddNoteFromSelection = useCallback((text: string) => {
     setNoteDraft(`"${text}"\n\n`);
     setNotesOpen(true);
-  }
+  }, []);
 
   async function handleSaveNote(content: string) {
     const passageId = currentPassage?.id ?? null;
@@ -426,145 +609,207 @@ export function ExamRunner({
     }
   }
 
+  // ---- finishing ----------------------------------------------------------------------------------------------------
   const handleExpire = useCallback(() => {
     toast.info("Time's up — submitting your test.");
     startSubmitTransition(async () => {
+      await flushPendingWork();
       await submitAttemptAction(resultId);
     });
-  }, [resultId]);
+  }, [resultId, flushPendingWork]);
 
   function handleSubmit() {
     startSubmitTransition(async () => {
+      await flushPendingWork();
       await submitAttemptAction(resultId);
     });
   }
 
-  const currentPassageHighlights = useMemo(
-    () => highlights.filter((h) => h.passageId === currentPassage?.id),
-    [highlights, currentPassage]
+  // ---- Listening transfer time (Full Mock only) -------------------------------------------------------------------
+  // The official 40-minute Listening runs on the main timer; once the RECORDING ends, the exam switches to 2 minutes of transfer time (check answers, nothing new is played) and submits itself when that runs out. The moment the recording ended is stored on the server, so a refresh resumes the same countdown instead of restarting it.
+  const transferTotalSeconds = FULL_MOCK_LISTENING_TRANSFER_MINUTES * 60;
+  const [transferSeconds, setTransferSeconds] = useState<number | null>(fullMock?.transferSecondsRemaining ?? null);
+  const transferStarted = useRef(fullMock?.transferSecondsRemaining != null);
+  const inTransfer = testType === "LISTENING" && fullMock != null && transferSeconds != null;
+  const lastAudioSrc = sortedPassages[sortedPassages.length - 1]?.audioUrl ?? null;
+
+  const handleAudioEnded = useCallback(
+    (src: string) => {
+      if (!fullMock || testType !== "LISTENING" || transferStarted.current) return;
+      // With a separate recording per part only the LAST part's ending counts; with one shared recording every part has the same source, so its ending does.
+      if (lastAudioSrc && src !== lastAudioSrc) return;
+      transferStarted.current = true;
+      setTransferSeconds(transferTotalSeconds);
+      void markListeningAudioEndedAction(fullMock.attemptId).then((reply) => {
+        if (reply.success && Math.abs(reply.transferSecondsRemaining - transferTotalSeconds) > 2) setTransferSeconds(reply.transferSecondsRemaining);
+      });
+    },
+    [fullMock, testType, lastAudioSrc, transferTotalSeconds]
   );
+
+  const handleTransferExpire = useCallback(() => {
+    toast.info("Transfer time is over — submitting your Listening test.");
+    startSubmitTransition(async () => {
+      await flushPendingWork();
+      await submitAttemptAction(resultId);
+    });
+  }, [resultId, flushPendingWork]);
+
   const currentPassageNotes: ExamNote[] = useMemo(
     () => notes.filter((n) => n.passageId === (currentPassage?.id ?? null)),
     [notes, currentPassage]
   );
 
+  // ---- panels -------------------------------------------------------------------------------------------------------
+  const passageHighlights = currentPassage ? (highlightStore.rangesByRegion.get(passageRegion(currentPassage.id)) ?? EMPTY_RANGES) : EMPTY_RANGES;
+
+  const passagePanel = currentPassage ? (
+    <PassagePanel
+      key={currentPassage.id}
+      passageId={currentPassage.id}
+      title={currentPassage.title}
+      sectionLabel={readingSectionLabel}
+      content={currentPassage.content}
+      highlights={passageHighlights}
+      attachments={currentPassage.attachments}
+      getRanges={highlightStore.getRanges}
+      onHighlight={highlightStore.addHighlights}
+      onClear={highlightStore.clearRanges}
+      onRemove={highlightStore.removeHighlights}
+      onAddNote={handleAddNoteFromSelection}
+    />
+  ) : null;
+
   const questionsList = (
-    <div className="space-y-7">
-      {currentQuestions.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No questions in this section.</p>
-      ) : (
-        currentQuestions.map((question) => {
-          const numbered = numberedById.get(question.id);
-          const startNumber = numbered?.startNumber ?? 1;
-          const grouped = (numbered?.span ?? 1) > 1;
-          const number = numbered ? formatNumberRange(numbered.startNumber, numbered.endNumber) : "";
-          const flagged = flags.has(question.id);
-          const bookmarked = bookmarks.has(question.id);
-          return (
-            <div key={question.id} id={`question-${question.id}`} className="scroll-mt-24 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-sm font-medium">
-                  <span className="text-muted-foreground mr-1.5">{grouped ? `Questions ${number}` : `${number}.`}</span>
-                  {question.prompt}
-                </p>
-                <div className="flex shrink-0 items-center gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleBookmark(question.id)}
-                    aria-pressed={bookmarked}
-                    aria-label={bookmarked ? `Remove bookmark from question ${number}` : `Bookmark question ${number} to revisit later`}
-                    className={cn(
-                      "focus-visible:ring-ring/50 rounded-md p-1.5 outline-none focus-visible:ring-2",
-                      bookmarked ? "text-accent" : "text-muted-foreground hover:text-accent"
-                    )}
-                  >
-                    <Bookmark className={cn("size-4", bookmarked && "fill-current")} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleFlag(question.id)}
-                    aria-pressed={flagged}
-                    aria-label={flagged ? `Remove flag from question ${number}` : `Flag question ${number} for review`}
-                    className={cn(
-                      "focus-visible:ring-ring/50 rounded-md p-1.5 outline-none focus-visible:ring-2",
-                      flagged ? "text-accent" : "text-muted-foreground hover:text-accent"
-                    )}
-                  >
-                    <Flag className={cn("size-4", flagged && "fill-current")} />
-                  </button>
-                </div>
-              </div>
-              <QuestionRenderer
-                questionId={question.id}
-                type={question.type}
-                options={question.options}
+    <QuestionHighlightProvider value={highlightStore.rangesByRegion}>
+      <HighlightSurface
+        getRanges={highlightStore.getRanges}
+        onHighlight={highlightStore.addHighlights}
+        onClear={highlightStore.clearRanges}
+        onRemove={highlightStore.removeHighlights}
+      >
+        {/* A <fieldset disabled> locks every answer control at once while the test is being submitted (or has timed out): anything typed after that point could no longer be saved, so it must not look as if it had been. */}
+        <fieldset
+          ref={questionsPanelRef}
+          disabled={submitting}
+          onFocusCapture={handlePanelInteraction}
+          onPointerDownCapture={handlePanelInteraction}
+          onKeyDown={handleAnswerKeyDown}
+          className="m-0 min-w-0 space-y-7 border-0 p-0"
+        >
+          {currentQuestions.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No questions in this section.</p>
+          ) : (
+            currentQuestions.map((question) => (
+              <QuestionBlock
+                key={question.id}
+                question={question}
                 value={answers[question.id]}
-                onChange={(value) => handleAnswerChange(question.id, value)}
-                startNumber={startNumber}
+                flagged={flags.has(question.id)}
+                bookmarked={bookmarks.has(question.id)}
+                activeNumber={effectiveActiveNumber >= question.startNumber && effectiveActiveNumber <= question.endNumber ? effectiveActiveNumber : -1}
+                onAnswer={handleAnswerChange}
+                onToggleFlag={handleToggleFlag}
+                onToggleBookmark={handleToggleBookmark}
+                onSelectNumber={goToQuestion}
               />
-            </div>
-          );
-        })
-      )}
-    </div>
+            ))
+          )}
+        </fieldset>
+      </HighlightSurface>
+    </QuestionHighlightProvider>
+  );
+
+  const questionsKey = currentPassage?.id ?? "questions";
+  const leftPanel =
+    testType === "READING" ? passagePanel : currentPassage && <ListeningLeftPanel passage={currentPassage} sectionLabel={listeningSectionLabel} onAudioEnded={handleAudioEnded} />;
+  const isReading = testType === "READING";
+
+  const navigatorTabs = (
+    <Tabs defaultValue="navigator">
+      <TabsList className="w-full">
+        <TabsTrigger value="navigator">Navigator</TabsTrigger>
+        <TabsTrigger value="answers">Your Answers</TabsTrigger>
+      </TabsList>
+      <TabsContent value="navigator">
+        <QuestionNavigator questions={navigatorItems} currentQuestionId={effectiveActiveQuestionId} currentNumber={effectiveActiveNumber} onSelect={goToQuestion} />
+      </TabsContent>
+      <TabsContent value="answers">
+        <YourAnswersPanel questions={answerSummaryQuestions} currentQuestionId={effectiveActiveQuestionId} onSelect={goToQuestion} />
+      </TabsContent>
+    </Tabs>
   );
 
   return (
     <div ref={examContainerRef} className="bg-background flex h-svh flex-col">
-      <header className="border-border/70 relative flex h-16 shrink-0 items-center gap-2 border-b px-4 sm:gap-3 sm:px-6">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Leave test and go home"
-          onClick={() => setLeaveDialogOpen(true)}
-        >
-          <Home className="size-4.5" />
-        </Button>
-        <h1 className="font-display min-w-0 flex-1 truncate text-base font-medium sm:text-lg">{testTitle}</h1>
-        {pendingSaves > 0 && (
-          <span className="text-muted-foreground hidden items-center gap-1.5 text-xs sm:flex">
-            <Loader2 className="size-3 animate-spin" /> Saving…
-          </span>
-        )}
-        {testType === "LISTENING" ? (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-            <ExamTimer durationSeconds={initialRemainingSeconds} onExpire={handleExpire} />
-          </div>
-        ) : (
-          <ExamTimer durationSeconds={initialRemainingSeconds} onExpire={handleExpire} />
-        )}
-        {testType === "READING" && (
-          <Button variant="outline" size="sm" onClick={() => setNotesOpen(true)}>
-            <NotebookPen className="size-4" />
-            <span className="hidden sm:inline">Notes</span>
+      {/* Phase D — the timer sits in the exact centre of the header on every screen size, large enough to read at a glance and never pushed around by the buttons either side of it. */}
+      <header className="border-border/70 grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b px-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2">
+          <Button variant="ghost" size="icon" aria-label="Leave test and go home" onClick={() => setLeaveDialogOpen(true)}>
+            <Home className="size-4.5" />
           </Button>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          className="hidden lg:inline-flex"
-          onClick={toggleFocusMode}
-          aria-pressed={focusMode}
-          aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
-        >
-          {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-          <span className="hidden xl:inline">{focusMode ? "Exit Focus" : "Focus Mode"}</span>
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => setReviewOpen(true)}>
-          <ClipboardList className="size-4" />
-          <span className="hidden sm:inline">Review</span>
-        </Button>
-        {testType === "READING" && (
-          <Button size="sm" onClick={() => setSubmitDialogOpen(true)}>
-            Submit
+          <h1 className="font-display hidden min-w-0 truncate text-base font-medium sm:block sm:text-lg">{testTitle}</h1>
+          {pendingSaves > 0 && (
+            <span className="text-muted-foreground hidden shrink-0 items-center gap-1.5 text-xs xl:flex">
+              <Loader2 className="size-3 animate-spin" /> Saving…
+            </span>
+          )}
+        </div>
+
+        <div className="justify-self-center">
+          {inTransfer ? (
+            <ExamTimer key="transfer" size="large" label="Transfer time" durationSeconds={transferSeconds} onExpire={handleTransferExpire} />
+          ) : (
+            <ExamTimer key="main" size="large" durationSeconds={initialRemainingSeconds} onExpire={handleExpire} />
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-1.5 sm:gap-2">
+          {/* On a phone Notes / Answers live in the strip under the header (the timer needs the room); from sm: up they sit here. */}
+          {isReading && (
+            <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={() => setNotesOpen(true)} aria-label="Notes" title="Notes">
+              <NotebookPen className="size-4" />
+              <span className="hidden xl:inline">Notes</span>
+            </Button>
+          )}
+          {isReading && (
+            <Button variant="outline" size="sm" className="hidden sm:inline-flex xl:hidden" onClick={() => setNavOpen(true)} aria-label="Your answers" title="Your answers">
+              <List className="size-4" />
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="hidden lg:inline-flex"
+            onClick={toggleFocusMode}
+            aria-pressed={focusMode}
+            aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
+          >
+            {focusMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            <span className="hidden xl:inline">{focusMode ? "Exit Focus" : "Focus Mode"}</span>
           </Button>
-        )}
+          <Button variant="outline" size="sm" onClick={() => setReviewOpen(true)} aria-label="Review answers" title="Review answers">
+            <ClipboardList className="size-4" />
+            <span className="hidden xl:inline">Review</span>
+          </Button>
+          {isReading && (
+            <Button size="sm" onClick={() => setSubmitDialogOpen(true)}>
+              Submit
+            </Button>
+          )}
+        </div>
       </header>
+
+      {inTransfer && (
+        <div role="status" data-testid="transfer-banner" className="bg-accent/10 text-accent border-accent/30 shrink-0 border-b px-4 py-2 text-center text-sm font-medium sm:px-6">
+          The recording has finished. Use this transfer time to check your answers — your Listening test submits automatically when it runs out.
+        </div>
+      )}
 
       {/* Phase 41 — Part 3/12: real current-position tracking + a top progress bar, always visible regardless of skill. */}
       <div className="border-border/70 flex shrink-0 items-center gap-3 border-b px-4 py-1.5 sm:px-6">
         <span className="text-muted-foreground shrink-0 text-xs font-medium tabular-nums">
-          {activeSectionLabel} · Question {activeQuestionLabel} of {totalQuestionCount}
+          {activeSectionLabel} · Question {effectiveActiveNumber} of {totalQuestionCount}
         </span>
         <div className="bg-secondary h-1.5 min-w-0 flex-1 overflow-hidden rounded-full">
           <div className="bg-success h-full rounded-full transition-all duration-500" style={{ width: `${completionPercent}%` }} />
@@ -572,122 +817,87 @@ export function ExamRunner({
         <span className="text-muted-foreground hidden shrink-0 text-xs font-medium tabular-nums sm:inline">
           {answeredCount} / {totalQuestionCount} Answered
         </span>
+        {isReading && (
+          <div className="flex shrink-0 items-center gap-1 sm:hidden">
+            <button type="button" onClick={() => setNotesOpen(true)} aria-label="Notes" className="text-muted-foreground hover:bg-secondary focus-visible:ring-ring/50 flex size-8 items-center justify-center rounded-full outline-none focus-visible:ring-2">
+              <NotebookPen className="size-4" />
+            </button>
+            <button type="button" onClick={() => setNavOpen(true)} aria-label="Your answers" className="text-muted-foreground hover:bg-secondary focus-visible:ring-ring/50 flex size-8 items-center justify-center rounded-full outline-none focus-visible:ring-2">
+              <List className="size-4" />
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        {testType === "READING" ? (
-          <>
-            {/* Phase 48 — Desktop + Tablet: a real split-screen, resizable from md: up (Part 1's independent scrolling still holds — dragging the divider only changes the ratio, not the scroll independence). */}
-            <div className="hidden h-full flex-1 overflow-hidden md:block">
-              <ResizableSplit
-                leftClassName="overflow-hidden border-r border-border/70"
-                rightClassName="overflow-y-auto"
-                left={
-                  currentPassage && (
-                    <PassagePanel
-                      title={currentPassage.title}
-                      sectionLabel={readingSectionLabel}
-                      content={currentPassage.content}
-                      highlights={currentPassageHighlights}
-                      attachments={currentPassage.attachments}
-                      onHighlight={handleHighlight}
-                      onRemoveHighlight={handleRemoveHighlight}
-                      onAddNote={handleAddNoteFromSelection}
-                    />
-                  )
-                }
-                right={<div className="px-6 py-6 sm:px-8 sm:py-8">{questionsList}</div>}
-              />
-            </div>
-
-            {/* Mobile: tabs instead of split screen (Part 9) — no stacked double-scroll. */}
-            <div className="flex flex-1 flex-col overflow-hidden md:hidden">
-              <MobileSplitTabs
-                leftLabel="Passage"
-                left={
-                  currentPassage && (
-                    <PassagePanel
-                      title={currentPassage.title}
-                      sectionLabel={readingSectionLabel}
-                      content={currentPassage.content}
-                      highlights={currentPassageHighlights}
-                      attachments={currentPassage.attachments}
-                      onHighlight={handleHighlight}
-                      onRemoveHighlight={handleRemoveHighlight}
-                      onAddNote={handleAddNoteFromSelection}
-                    />
-                  )
-                }
-                right={<div className="h-full overflow-y-auto px-4 py-5 sm:px-6">{questionsList}</div>}
-              />
-            </div>
-          </>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Only the layout that is on screen is rendered: one passage, one set of questions, one set of element ids. */}
+        {isDesktop ? (
+          <div className="h-full flex-1 overflow-hidden">
+            <ResizableSplit
+              leftClassName="overflow-hidden border-r border-border/70"
+              rightClassName="overflow-hidden"
+              leftLabel={isReading ? "Passage" : "Audio"}
+              left={leftPanel}
+              right={
+                <div key={questionsKey} className="h-full overflow-y-auto">
+                  <div className={isReading ? "px-6 py-6 sm:px-8 sm:py-8" : "mx-auto w-full max-w-3xl px-6 py-6 sm:px-8 sm:py-8"}>{questionsList}</div>
+                </div>
+              }
+            />
+          </div>
         ) : (
-          <>
-            {/* Phase 46 (CBT Listening) — Desktop + Tablet: resizable split, sticky audio area on the left, independent scrolling on both sides. */}
-            <div className="hidden h-full flex-1 overflow-hidden md:block">
-              <ResizableSplit
-                leftClassName="overflow-hidden border-r border-border/70"
-                rightClassName="overflow-y-auto"
-                leftLabel="Audio"
-                left={currentPassage && <ListeningLeftPanel passage={currentPassage} sectionLabel={listeningSectionLabel} />}
-                right={<div className="mx-auto w-full max-w-3xl px-6 py-6 sm:px-8 sm:py-8">{questionsList}</div>}
-              />
-            </div>
-
-            {/* Mobile: tabs (Part 9) — the audio area inside the tab is now itself sticky (real "audio always visible" requirement), so it never scrolls away even within the tab's own scroll region. */}
-            <div className="flex flex-1 flex-col overflow-hidden md:hidden">
-              <MobileSplitTabs
-                leftLabel="Audio & Materials"
-                left={currentPassage && <ListeningLeftPanel passage={currentPassage} sectionLabel={listeningSectionLabel} />}
-                right={<div className="h-full overflow-y-auto px-4 py-5 sm:px-6">{questionsList}</div>}
-              />
-            </div>
-          </>
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <MobileSplitTabs
+              leftLabel={isReading ? "Passage" : "Audio & Materials"}
+              value={mobileTab}
+              onValueChange={setMobileTab}
+              left={leftPanel}
+              right={
+                <div key={questionsKey} className="h-full overflow-y-auto px-4 py-5 sm:px-6">
+                  {questionsList}
+                </div>
+              }
+            />
+          </div>
         )}
 
+        {/* The side panel (Navigator / Your Answers) is unchanged for both skills; Focus Mode hides it, and below lg the header's Answers button opens the same panel. */}
         {!focusMode && (
-          <aside className="border-border/70 hidden w-72 shrink-0 overflow-y-auto border-l p-5 lg:block">
-            <Tabs defaultValue="navigator">
-              <TabsList className="w-full">
-                <TabsTrigger value="navigator">Navigator</TabsTrigger>
-                <TabsTrigger value="answers">Your Answers</TabsTrigger>
-              </TabsList>
-              <TabsContent value="navigator">
-                <QuestionNavigator
-                  questions={navigatorItems}
-                  currentQuestionId={effectiveActiveQuestionId}
-                  onSelect={goToQuestion}
-                />
-              </TabsContent>
-              <TabsContent value="answers">
-                <YourAnswersPanel
-                  questions={answerSummaryQuestions}
-                  currentQuestionId={effectiveActiveQuestionId}
-                  onSelect={goToQuestion}
-                />
-              </TabsContent>
-            </Tabs>
-          </aside>
+          <aside className={cn("border-border/70 hidden w-72 shrink-0 overflow-y-auto border-l p-5", isReading ? "xl:block" : "lg:block")}>{navigatorTabs}</aside>
         )}
       </div>
 
-      {/* Phase 41 — Part 10's mobile floating navigator button. Replaces the old header "Questions" button (header was already crowded), badge shows how many questions still need attention. */}
-      <button
-        type="button"
-        onClick={() => setNavOpen(true)}
-        aria-label="Open question navigator"
-        className="bg-primary text-primary-foreground shadow-soft-lg fixed right-5 bottom-5 z-30 flex size-14 items-center justify-center rounded-full lg:hidden"
-      >
-        <List className="size-5" />
-        {totalQuestionCount - answeredCount > 0 && (
-          <span className="bg-accent text-accent-foreground absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full text-[10px] font-semibold">
-            {totalQuestionCount - answeredCount}
-          </span>
-        )}
-      </button>
+      {/* Phase 41 — Part 10's mobile floating navigator button (Listening; Reading has the passage bar). Badge shows how many questions still need attention. */}
+      {!isReading && (
+        <button
+          type="button"
+          onClick={() => setNavOpen(true)}
+          aria-label="Open question navigator"
+          className="bg-primary text-primary-foreground shadow-soft-lg fixed right-5 bottom-20 z-30 flex size-14 items-center justify-center rounded-full lg:hidden"
+        >
+          <List className="size-5" />
+          {totalQuestionCount - answeredCount > 0 && (
+            <span className="bg-accent text-accent-foreground absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full text-[10px] font-semibold">
+              {totalQuestionCount - answeredCount}
+            </span>
+          )}
+        </button>
+      )}
 
-      {testType === "LISTENING" ? (
+      {isReading ? (
+        <PassageNavBar
+          groups={passageGroups}
+          activeNumber={effectiveActiveNumber}
+          activeGroupKey={activeGroupKey}
+          compact={!isDesktop}
+          onSelectNumber={handleSelectNavNumber}
+          onSelectPassage={handleSelectPassage}
+          onPrevious={goToPrevious}
+          onNext={goToNext}
+          hasPrevious={adjacentNumber(passageGroups, effectiveActiveNumber, -1) !== null}
+          hasNext={adjacentNumber(passageGroups, effectiveActiveNumber, 1) !== null}
+        />
+      ) : (
         <footer className="border-border/70 bg-background/95 flex shrink-0 flex-col gap-2.5 border-t px-4 py-3 backdrop-blur-sm sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <ListeningPartNav parts={listeningParts} currentIndex={sectionIndex} onSelect={goToSection} />
@@ -695,23 +905,6 @@ export function ExamRunner({
               Submit
             </Button>
           </div>
-        </footer>
-      ) : (
-        <footer className="border-border/70 flex h-16 shrink-0 items-center justify-between border-t px-4 sm:px-6">
-          <Button variant="outline" size="sm" onClick={() => goToSection(Math.max(0, sectionIndex - 1))} disabled={sectionIndex === 0}>
-            <ChevronLeft className="size-4" /> Previous
-          </Button>
-          <span className="text-muted-foreground text-sm">
-            Section {sectionIndex + 1} of {sortedPassages.length}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => goToSection(Math.min(sortedPassages.length - 1, sectionIndex + 1))}
-            disabled={sectionIndex >= sortedPassages.length - 1}
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
         </footer>
       )}
 
@@ -721,28 +914,7 @@ export function ExamRunner({
             <SheetTitle>Questions</SheetTitle>
             <SheetDescription className="sr-only">Jump to any question</SheetDescription>
           </SheetHeader>
-          <div className="overflow-y-auto p-5">
-            <Tabs defaultValue="navigator">
-              <TabsList className="w-full">
-                <TabsTrigger value="navigator">Navigator</TabsTrigger>
-                <TabsTrigger value="answers">Your Answers</TabsTrigger>
-              </TabsList>
-              <TabsContent value="navigator">
-                <QuestionNavigator
-                  questions={navigatorItems}
-                  currentQuestionId={effectiveActiveQuestionId}
-                  onSelect={goToQuestion}
-                />
-              </TabsContent>
-              <TabsContent value="answers">
-                <YourAnswersPanel
-                  questions={answerSummaryQuestions}
-                  currentQuestionId={effectiveActiveQuestionId}
-                  onSelect={goToQuestion}
-                />
-              </TabsContent>
-            </Tabs>
-          </div>
+          <div className="overflow-y-auto p-5">{navigatorTabs}</div>
         </SheetContent>
       </Sheet>
 
@@ -760,6 +932,7 @@ export function ExamRunner({
         onOpenChange={setReviewOpen}
         questions={navigatorItems}
         currentQuestionId={effectiveActiveQuestionId}
+        currentNumber={effectiveActiveNumber}
         onSelect={goToQuestion}
         onSubmit={() => {
           setReviewOpen(false);

@@ -62,6 +62,8 @@ export type CompletionFn = <T>(args: CompletionArgs<T>) => Promise<T>;
 
 const EXTRACTION_TIMEOUT_MS = 120_000;
 const BLOCK_TIMEOUT_MS = 90_000;
+/** How many times the gap pass may ask a passage for the numbers still missing — the model sometimes returns only part of what it was asked for (39 of 39–40), and asking again for the remainder recovers it. */
+const GAP_PASS_ROUNDS = 2;
 /** ~25k tokens of headroom for a 128k-context model, leaving plenty of room for a large structured JSON reply — comfortably above a real full-length IELTS test's PDF text. */
 const MAX_PDF_TEXT_CHARS = 100_000;
 const MAX_CONCURRENT_AI_CALLS = 6;
@@ -418,45 +420,50 @@ export function createPdfTestExtractor(complete: CompletionFn) {
       const empties = ranges.map((r, i) => (r === null && i >= lo && i <= hi ? i : -1)).filter((i) => i !== -1);
       const candidates = uniqueBy([containing, ...empties, before, after].filter((i) => i >= 0), (i) => i);
 
-      for (const index of candidates) {
-        const open = stillMissing.filter((n) => !validateImportedTest(toValidationPassages(passages), answerNumbers).passages.some((p) => p.groups.some((g) => g.extractedNumbers.includes(n))));
-        if (open.length === 0) break;
+      const coveredNow = (n: number) => validateImportedTest(toValidationPassages(passages), answerNumbers).passages.some((p) => p.groups.some((g) => g.extractedNumbers.includes(n)));
+      // The model sometimes answers only part of what it was asked (asked for 39–40, returned 39): a second round asks again for just what is still open.
+      for (let round = 0; round < GAP_PASS_ROUNDS; round++) {
+        if (stillMissing.every((n) => coveredNow(n))) break;
+        for (const index of candidates) {
+          const open = stillMissing.filter((n) => !coveredNow(n));
+          if (open.length === 0) break;
 
-        console.log(`[pdf-test-import] gap pass: asking ${segments[index].label} for ${formatNumberRanges(open)}`);
-        const { system, user } = buildMissingQuestionsExtractionPrompt({ testType, passageLabel: segments[index].label, missingNumbers: open, text: segments[index].text });
-        let response;
-        try {
-          response = await call({ system, user, schemaName: "pdf_test_import_missing_questions", jsonSchema: MISSING_QUESTIONS_JSON_SCHEMA, responseSchema: missingQuestionsResponseSchema, temperature: 0.1, timeoutMs: BLOCK_TIMEOUT_MS });
-        } catch (error) {
-          console.log(`[pdf-test-import] gap pass failed for ${segments[index].label}: ${error instanceof Error ? error.message : String(error)}`);
-          continue;
-        }
-
-        const openSet = new Set(open);
-        for (const returned of response.questionGroups) {
-          const numbers = extractedQuestionNumbers(returned).filter((n) => openSet.has(n));
-          if (numbers.length === 0) continue;
-
-          const kept: ExtractedQuestionGroup = {
-            ...returned,
-            startNumber: Math.min(...numbers),
-            endNumber: Math.max(...numbers),
-            items: returned.items.filter((item) => openSet.has(item.number)),
-            matchingPrompts: returned.matchingPrompts.filter((p) => openSet.has(Number(p.id))),
-          };
-          // A summary covers its whole range at once — only accept it if every number in that range is one we still need.
-          if (kept.questionType === "SUMMARY_COMPLETION" && questionNumberRange(returned.startNumber, returned.endNumber).some((n) => !openSet.has(n))) continue;
-          if (kept.questionType === "SUMMARY_COMPLETION") {
-            kept.startNumber = returned.startNumber;
-            kept.endNumber = returned.endNumber;
-          }
-          if (!isGrounded(groupText(kept), segments[index].text)) {
-            console.log(`[pdf-test-import] gap pass: dropped ${kept.questionType} Q${kept.startNumber}-${kept.endNumber} — its text isn't in ${segments[index].label}`);
+          console.log(`[pdf-test-import] gap pass: asking ${segments[index].label} for ${formatNumberRanges(open)}`);
+          const { system, user } = buildMissingQuestionsExtractionPrompt({ testType, passageLabel: segments[index].label, missingNumbers: open, text: segments[index].text });
+          let response;
+          try {
+            response = await call({ system, user, schemaName: "pdf_test_import_missing_questions", jsonSchema: MISSING_QUESTIONS_JSON_SCHEMA, responseSchema: missingQuestionsResponseSchema, temperature: 0.1, timeoutMs: BLOCK_TIMEOUT_MS });
+          } catch (error) {
+            console.log(`[pdf-test-import] gap pass failed for ${segments[index].label}: ${error instanceof Error ? error.message : String(error)}`);
             continue;
           }
 
-          passages[index].questionGroups = [...passages[index].questionGroups, normalizeGroup(kept, kept.startNumber, kept.endNumber)].sort((a, b) => a.startNumber - b.startNumber);
-          console.log(`[pdf-test-import] gap pass: recovered Q${kept.startNumber}-${kept.endNumber} into ${segments[index].label}`);
+          const openSet = new Set(open);
+          for (const returned of response.questionGroups) {
+            const numbers = extractedQuestionNumbers(returned).filter((n) => openSet.has(n));
+            if (numbers.length === 0) continue;
+
+            const kept: ExtractedQuestionGroup = {
+              ...returned,
+              startNumber: Math.min(...numbers),
+              endNumber: Math.max(...numbers),
+              items: returned.items.filter((item) => openSet.has(item.number)),
+              matchingPrompts: returned.matchingPrompts.filter((p) => openSet.has(Number(p.id))),
+            };
+            // A summary covers its whole range at once — only accept it if every number in that range is one we still need.
+            if (kept.questionType === "SUMMARY_COMPLETION" && questionNumberRange(returned.startNumber, returned.endNumber).some((n) => !openSet.has(n))) continue;
+            if (kept.questionType === "SUMMARY_COMPLETION") {
+              kept.startNumber = returned.startNumber;
+              kept.endNumber = returned.endNumber;
+            }
+            if (!isGrounded(groupText(kept), segments[index].text)) {
+              console.log(`[pdf-test-import] gap pass: dropped ${kept.questionType} Q${kept.startNumber}-${kept.endNumber} — its text isn't in ${segments[index].label}`);
+              continue;
+            }
+
+            passages[index].questionGroups = [...passages[index].questionGroups, normalizeGroup(kept, kept.startNumber, kept.endNumber)].sort((a, b) => a.startNumber - b.startNumber);
+            console.log(`[pdf-test-import] gap pass: recovered Q${kept.startNumber}-${kept.endNumber} into ${segments[index].label}`);
+          }
         }
       }
     }
@@ -547,7 +554,9 @@ export function createPdfTestExtractor(complete: CompletionFn) {
       );
 
       const keyText = answerKeyAbsolute != null ? clampedText.slice(answerKeyAbsolute) : clampedText;
-      const answers = await recoverMissingAnswers(testType, passages, titleAndAnswers.answers, keyText);
+      // An entry with no text means the key could not be read at that number; treat it as missing so the by-number recovery below gets a chance, and so the completeness check reports it if it stays missing.
+      const keyedAnswers = titleAndAnswers.answers.filter((a) => a.answer.trim().length > 0);
+      const answers = await recoverMissingAnswers(testType, passages, keyedAnswers, keyText);
 
       result = { title: titleAndAnswers.title, answers, passages };
     }

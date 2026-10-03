@@ -549,6 +549,7 @@ model Question {
   aiExplanations        AiExplanation[]
   aiExplanationRequests AiExplanationRequest[]
   bookmarks             QuestionBookmark[]
+  highlights            QuestionHighlight[]
 
   @@map("questions")
 }
@@ -712,6 +713,7 @@ model Result {
 
   answers               Answer[]
   highlights            Highlight[]
+  questionHighlights    QuestionHighlight[]
   notes                 Note[]
   /// Phase 34 — set only when this attempt was taken as the Reading or
   /// Listening section of a Full Mock Test, not a standalone attempt.
@@ -762,6 +764,33 @@ model Highlight {
   createdAt DateTime @default(now())
 
   @@map("highlights")
+}
+
+/// Phase D — a highlighted span inside the QUESTION panel (a question's
+/// wording / instructions, an answer option, a summary sentence…), scoped to
+/// one attempt. Its own table on purpose: `Highlight` is anchored to a passage
+/// and read as passage text by the review screens, so mixing the two would
+/// make question text show up as passage highlights.
+model QuestionHighlight {
+  id         String   @id @default(cuid())
+  resultId   String
+  result     Result   @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  /// Which piece of the question the offsets are measured in — "prompt",
+  /// "choice:<choiceId>", "text:<n>" (the n-th stretch of a summary's text),
+  /// "item:<promptId>" (a matching row). Offsets are character offsets into
+  /// that one string, so they stay valid however the surrounding UI changes.
+  region      String
+  text        String @db.Text
+  startOffset Int
+  endOffset   Int
+
+  createdAt DateTime @default(now())
+
+  @@index([resultId])
+  @@map("question_highlights")
 }
 
 /// A student's free-text scratch note, scoped to one attempt (Result) and
@@ -1506,6 +1535,15 @@ model FullMockAttempt {
 
   startedAt   DateTime  @default(now())
   completedAt DateTime?
+
+  /// Phase E — when the Listening recording finished playing. That starts the
+  /// 2-minute transfer time; it lives on the server so a refresh can never
+  /// give the student the two minutes again.
+  listeningAudioEndedAt DateTime?
+  /// Phase E — when the student pressed "Start Writing". Anchors the single
+  /// 60-minute Writing countdown on the server (Reading's and Listening's
+  /// countdowns are anchored on their own Result.startedAt). Null until then.
+  writingStartedAt DateTime?
 
   sectionResults FullMockSectionResult[]
 

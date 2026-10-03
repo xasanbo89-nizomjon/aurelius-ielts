@@ -8,6 +8,7 @@ import * as attempts from "@/lib/exam/attempts";
 import * as annotations from "@/lib/exam/annotations";
 import { hasActiveAccess, hasActiveAccessForTest, hasActiveAccessForResult } from "@/lib/subscription";
 import { prisma } from "@/lib/prisma";
+import { findInProgressFullMockLinkForResult, markListeningAudioEnded } from "@/lib/full-mock-attempts";
 import { generateWrongAnswerExplanation } from "@/lib/ai/services/explain-wrong-answer";
 import type { ExplainWrongAnswerResponse } from "@/lib/ai/prompts/explain-wrong-answer";
 import { AIServiceUnavailableError } from "@/lib/ai/errors";
@@ -134,6 +135,43 @@ export async function addHighlightAction(
   }
 }
 
+/** Phase D — one highlighting step (highlight / merge / clear / remove) as a single atomic write. See annotations.applyHighlightChange. */
+export async function applyHighlightChangeAction(
+  resultId: string,
+  change: annotations.HighlightChange
+): Promise<{ success: true; ids: string[] } | { success: false; error: string }> {
+  try {
+    const { profile } = await requireStudentProfile();
+    const ids = await annotations.applyHighlightChange(resultId, profile.id, change);
+    return { success: true, ids };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Could not save highlight." };
+  }
+}
+
+export async function addQuestionHighlightAction(
+  resultId: string,
+  input: { questionId: string; part: string; text: string; startOffset: number; endOffset: number }
+): Promise<ActionResult & { highlightId?: string }> {
+  try {
+    const { profile } = await requireStudentProfile();
+    const highlight = await annotations.addQuestionHighlight(resultId, profile.id, input);
+    return { success: true, highlightId: highlight.id };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Could not save highlight." };
+  }
+}
+
+export async function removeQuestionHighlightAction(resultId: string, highlightId: string): Promise<ActionResult> {
+  try {
+    const { profile } = await requireStudentProfile();
+    await annotations.removeQuestionHighlight(resultId, profile.id, highlightId);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Could not remove highlight." };
+  }
+}
+
 export async function removeHighlightAction(resultId: string, highlightId: string): Promise<ActionResult> {
   try {
     const { profile } = await requireStudentProfile();
@@ -175,5 +213,26 @@ export async function submitAttemptAction(resultId: string) {
   }
 
   await attempts.submitAttempt(resultId, profile.id);
+
+  // Inside a Full Mock the sitting carries straight on: the next screen is the "ready" screen for the next section (Listening finished → Start Reading; Reading completed → Start Writing), not this section's marks.
+  const fullMockAttemptId = await findInProgressFullMockLinkForResult(resultId);
+  if (fullMockAttemptId) redirect(`/student/full-mock/attempt/${fullMockAttemptId}/transition`);
   redirect(`/student/exam/attempt/${resultId}/results`);
+}
+
+/**
+ * Phase E — the Listening recording has finished playing: start the
+ * 2-minute transfer time (recorded once, server-side). Returns the seconds
+ * left so the page can show the right countdown even if this is a repeat call.
+ */
+export async function markListeningAudioEndedAction(
+  attemptId: string
+): Promise<{ success: true; transferSecondsRemaining: number } | { success: false }> {
+  try {
+    const { profile } = await requireStudentProfile();
+    const marked = await markListeningAudioEnded(attemptId, profile.id);
+    return marked ? { success: true, transferSecondsRemaining: marked.transferSecondsRemaining } : { success: false };
+  } catch {
+    return { success: false };
+  }
 }

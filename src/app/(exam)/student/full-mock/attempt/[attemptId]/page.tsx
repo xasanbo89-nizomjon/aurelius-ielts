@@ -9,9 +9,10 @@ export const metadata: Metadata = { title: "Full Mock Test" };
 /**
  * The orchestrator — no UI of its own. Every visit recomputes what's next
  * from real linked rows (never a trusted counter) and redirects straight
- * into the right leg: the existing, unmodified exam runner for Listening/
- * Reading, the existing Writing editor for Writing, or this Full Mock's own
- * Speaking leg page.
+ * into the right place: the exam runner for an open Listening/Reading paper,
+ * the "ready" screen between sections (nothing ever starts by itself), the
+ * single 60-minute Writing session, this Full Mock's own Speaking leg, or the
+ * final results.
  */
 export default async function FullMockAttemptRouterPage({
   params,
@@ -26,8 +27,10 @@ export default async function FullMockAttemptRouterPage({
   switch (step.kind) {
     case "exam":
       redirect(`/student/exam/attempt/${step.resultId}`);
+    case "ready":
+      redirect(`/student/full-mock/attempt/${attemptId}/transition`);
     case "writing":
-      redirect(`/student/writing/new?taskId=${step.taskId}`);
+      redirect(`/student/full-mock/attempt/${attemptId}/writing`);
     case "speaking":
       redirect(`/student/full-mock/attempt/${attemptId}/speaking/${step.taskId}`);
     case "complete":

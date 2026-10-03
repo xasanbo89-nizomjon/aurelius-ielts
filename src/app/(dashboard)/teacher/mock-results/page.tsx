@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Trophy } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
-import { listMockResultsForTeacher } from "@/lib/mock-access-codes";
+import { listMockResultsForTeacher, type MockSectionScore } from "@/lib/mock-access-codes";
+import { formatDateTime, formatTimeUsed } from "@/lib/format";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { SearchInput } from "@/components/ui/search-input";
@@ -17,10 +18,17 @@ function formatBand(band: number | null, included = true): string {
   return band != null ? band.toFixed(1) : "—";
 }
 
-const dateTimeFormat = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-
-function formatDateTime(date: Date | null): string {
-  return date ? dateTimeFormat.format(date) : "—";
+/** "32/40" over "Band 7.5" — the marks and the band they earned, so a teacher reads both without opening the attempt. */
+function SectionScoreCell({ score, band, pendingLabel }: { score: MockSectionScore | null; band: number | null; pendingLabel: string }) {
+  if (!score) return <span className="text-muted-foreground text-xs">{pendingLabel}</span>;
+  return (
+    <>
+      <p className="font-medium tabular-nums">
+        {score.correct}/{score.total}
+      </p>
+      <p className="text-muted-foreground text-xs tabular-nums">Band {formatBand(band)}</p>
+    </>
+  );
 }
 
 export default async function TeacherMockResultsPage({
@@ -39,7 +47,7 @@ export default async function TeacherMockResultsPage({
     <>
       <PageHeader
         title="Mock Results"
-        description="Every student's Full Mock sitting, scored with the official IELTS Overall Band rounding."
+        description="Every student's Full Mock sitting — marks and band per section, scored with the official IELTS conversion table and Overall Band rounding."
         actions={<ExportMockResultsButtons search={q} />}
       />
 
@@ -56,39 +64,65 @@ export default async function TeacherMockResultsPage({
           <TableHeader>
             <TableRow>
               <TableHead>Student</TableHead>
+              <TableHead>Test</TableHead>
               <TableHead>Listening</TableHead>
               <TableHead>Reading</TableHead>
               <TableHead>Writing</TableHead>
               {showSpeaking && <TableHead>Speaking</TableHead>}
               <TableHead>Overall Band</TableHead>
+              <TableHead>Completion Time</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Started At</TableHead>
               <TableHead>Completed At</TableHead>
               <TableHead>Mock Code</TableHead>
-              <TableHead>Mock</TableHead>
-              <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row) => (
-              <TableRow key={row.attemptId}>
+              <TableRow key={row.attemptId} data-testid="mock-result-row">
                 <TableCell>
                   <p className="font-medium">{row.studentName}</p>
                   <p className="text-muted-foreground text-xs">{row.studentEmail}</p>
                 </TableCell>
-                <TableCell>{formatBand(row.listeningBand)}</TableCell>
-                <TableCell>{formatBand(row.readingBand)}</TableCell>
-                <TableCell>{formatBand(row.writingBand, row.includes.writing)}</TableCell>
+                <TableCell className="max-w-32 truncate" title={row.mockTitle}>
+                  {row.mockTitle}
+                </TableCell>
+                <TableCell data-testid="listening-cell">
+                  <SectionScoreCell score={row.listeningScore} band={row.listeningBand} pendingLabel={row.currentSection === "Listening" ? "In progress" : "Not started"} />
+                </TableCell>
+                <TableCell data-testid="reading-cell">
+                  <SectionScoreCell
+                    score={row.readingScore}
+                    band={row.readingBand}
+                    pendingLabel={row.currentSection === "Reading" ? "In progress" : "Not started"}
+                  />
+                </TableCell>
+                <TableCell data-testid="writing-cell">
+                  {row.includes.writing ? (
+                    <>
+                      <p className="font-medium whitespace-nowrap tabular-nums">{row.writingBand != null ? `Band ${formatBand(row.writingBand)}` : "—"}</p>
+                      <p className="text-muted-foreground text-xs">{row.writingStatus}</p>
+                    </>
+                  ) : (
+                    "n/a"
+                  )}
+                </TableCell>
                 {showSpeaking && <TableCell>{formatBand(row.speakingBand, row.includes.speaking)}</TableCell>}
-                <TableCell className="font-medium">{formatBand(row.overallBand)}</TableCell>
-                <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{formatDateTime(row.startedAt)}</TableCell>
-                <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{formatDateTime(row.completedAt)}</TableCell>
-                <TableCell className="font-mono text-xs">{row.accessCode ?? "—"}</TableCell>
-                <TableCell className="max-w-48 truncate">{row.mockTitle}</TableCell>
-                <TableCell>
+                <TableCell className="font-medium" data-testid="overall-cell">
+                  {formatBand(row.overallBand)}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-xs whitespace-nowrap" data-testid="duration-cell">
+                  {formatTimeUsed(row.durationSeconds)}
+                </TableCell>
+                <TableCell data-testid="status-cell">
                   <Badge variant={row.status === "COMPLETED" ? "success" : "outline"}>
                     {row.status === "COMPLETED" ? "Completed" : "In Progress"}
                   </Badge>
+                  {row.currentSection && <p className="text-muted-foreground mt-1 text-xs">{row.currentSection}</p>}
                 </TableCell>
+                <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{formatDateTime(row.startedAt)}</TableCell>
+                <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{formatDateTime(row.completedAt)}</TableCell>
+                <TableCell className="font-mono text-xs">{row.accessCode ?? "—"}</TableCell>
               </TableRow>
             ))}
           </TableBody>

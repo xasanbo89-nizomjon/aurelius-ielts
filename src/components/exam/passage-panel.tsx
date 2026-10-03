@@ -1,141 +1,63 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
-import type { HighlightColor } from "@prisma/client";
 
-import { cn } from "@/lib/utils";
+import { findMatches, paragraphLabelMap, passageRegion, type HighlightRange } from "@/lib/exam/text-highlight";
 import { ReadingSpeedControl } from "@/components/exam/reading-speed-control";
 import { PassageAttachments, type ExamAttachment } from "@/components/exam/passage-attachments";
+import { HighlightableText } from "@/components/exam/highlight/highlightable-text";
+import { HighlightSurface, ToolbarButton, type HighlightTarget } from "@/components/exam/highlight/highlight-surface";
 
-export type PassageHighlight = { id: string; startOffset: number; endOffset: number; color: HighlightColor };
-
-const HIGHLIGHT_COLORS: { value: HighlightColor; swatchClass: string; markClass: string; label: string }[] = [
-  { value: "YELLOW", swatchClass: "bg-yellow-300", markClass: "bg-yellow-300/60 hover:bg-yellow-300/80", label: "Yellow" },
-  { value: "BLUE", swatchClass: "bg-sky-300", markClass: "bg-sky-300/60 hover:bg-sky-300/80", label: "Blue" },
-  { value: "GREEN", swatchClass: "bg-emerald-300", markClass: "bg-emerald-300/60 hover:bg-emerald-300/80", label: "Green" },
-];
-const MARK_CLASS_BY_COLOR: Record<HighlightColor, string> = Object.fromEntries(
-  HIGHLIGHT_COLORS.map((c) => [c.value, c.markClass])
-) as Record<HighlightColor, string>;
-
-function getOffsetsWithinContainer(container: HTMLElement, range: Range) {
-  const preRange = document.createRange();
-  preRange.selectNodeContents(container);
-  preRange.setEnd(range.startContainer, range.startOffset);
-  const start = preRange.toString().length;
-  const end = start + range.toString().length;
-  return { start, end };
-}
-
-type SearchMatch = { start: number; end: number };
-
-/** Every non-overlapping, case-insensitive occurrence of `query` in `content`. */
-function findMatches(content: string, query: string): SearchMatch[] {
-  const trimmed = query.trim();
-  if (!trimmed) return [];
-  const haystack = content.toLowerCase();
-  const needle = trimmed.toLowerCase();
-  const matches: SearchMatch[] = [];
-  let from = 0;
-  while (from <= haystack.length) {
-    const index = haystack.indexOf(needle, from);
-    if (index === -1) break;
-    matches.push({ start: index, end: index + needle.length });
-    from = index + needle.length;
-  }
-  return matches;
-}
-
-export function PassagePanel({
+/**
+ * The reading passage of the exam.
+ *
+ * Text can be selected, highlighted (one colour), cleared, copied (Ctrl+C /
+ * right-click work normally — an answer can be pasted straight from here into a
+ * gap-fill box) and searched. Paragraph labels (A, B, C…) are drawn by CSS, so
+ * they are never part of the text a selection is measured over.
+ *
+ * Memoised: nothing in here depends on the answers, so typing in an answer box
+ * must not re-render the passage.
+ */
+export const PassagePanel = memo(function PassagePanel({
+  passageId,
   title,
   sectionLabel,
   content,
   highlights,
   attachments = [],
+  getRanges,
   onHighlight,
-  onRemoveHighlight,
+  onClear,
+  onRemove,
   onAddNote,
 }: {
+  passageId: string;
   title: string;
-  /** Phase 48 — real "Section information" (e.g. "Passage 1 of 3"), shown in the sticky header above the title. Omitted when there's only one passage. */
+  /** Real "Section information" (e.g. "Passage 1 of 3"), shown in the sticky header above the title. Omitted when there's only one passage. */
   sectionLabel?: string;
   content: string;
-  highlights: PassageHighlight[];
+  highlights: readonly HighlightRange[];
   attachments?: ExamAttachment[];
-  onHighlight: (text: string, start: number, end: number, color: HighlightColor) => void;
-  onRemoveHighlight: (id: string) => void;
+  getRanges: (region: string) => readonly HighlightRange[];
+  onHighlight: (targets: HighlightTarget[]) => void;
+  onClear: (targets: HighlightTarget[]) => void;
+  onRemove: (region: string, ids: string[]) => void;
   onAddNote: (selectedText: string) => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [toolbar, setToolbar] = useState<{ x: number; y: number; text: string; start: number; end: number } | null>(
-    null
-  );
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
 
-  const clearSelection = useCallback(() => {
-    window.getSelection()?.removeAllRanges();
-    setToolbar(null);
-  }, []);
-
-  const handleMouseUp = useCallback(() => {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || !containerRef.current) {
-      setToolbar(null);
-      return;
-    }
-    const range = selection.getRangeAt(0);
-    if (!containerRef.current.contains(range.commonAncestorContainer)) {
-      setToolbar(null);
-      return;
-    }
-    const text = selection.toString();
-    if (!text.trim()) {
-      setToolbar(null);
-      return;
-    }
-    const offsets = getOffsetsWithinContainer(containerRef.current, range);
-    const rect = range.getBoundingClientRect();
-    const containerRect = containerRef.current.getBoundingClientRect();
-    setToolbar({
-      x: rect.left - containerRect.left + rect.width / 2,
-      y: rect.top - containerRect.top,
-      text,
-      start: offsets.start,
-      end: offsets.end,
-    });
-  }, []);
-
-  // Phase 40 — Part 7's paragraph labels (A, B, C…), for skimming and
-  // "which paragraph contains X" style questions. Purely a display overlay:
-  // labels are computed from real paragraph-break offsets in `content` and
-  // rendered as separate elements, never spliced into the text itself — the
-  // character-offset space highlights/notes/search rely on is untouched.
-  const paragraphStarts = useMemo(() => {
-    const starts: number[] = [0];
-    const breakPattern = /\n{2,}/g;
-    let match: RegExpExecArray | null;
-    while ((match = breakPattern.exec(content)) !== null) {
-      starts.push(match.index + match[0].length);
-    }
-    return starts.length > 1 ? starts : [];
-  }, [content]);
-  const paragraphLabelAt = useMemo(() => {
-    const map = new Map<number, string>();
-    paragraphStarts.forEach((offset, i) => map.set(offset, String.fromCharCode(65 + i)));
-    return map;
-  }, [paragraphStarts]);
-
-  // Part 3 — Skimming & Scanning: search within the passage, jump between matches.
+  const labels = useMemo(() => paragraphLabelMap(content), [content]);
   const matches = useMemo(() => findMatches(content, searchQuery), [content, searchQuery]);
   useEffect(() => setCurrentMatchIndex(0), [searchQuery]);
 
   useEffect(() => {
     if (matches.length === 0) return;
-    const el = containerRef.current?.querySelector(`[data-match-index="${currentMatchIndex}"]`);
+    const el = scrollContainerRef.current?.querySelector(`[data-match-index="${currentMatchIndex}"]`);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [currentMatchIndex, matches.length]);
 
@@ -144,49 +66,35 @@ export function PassagePanel({
     setCurrentMatchIndex((prev) => (prev + delta + matches.length) % matches.length);
   }
 
-  // Breakpoint-merge: splits `content` at every highlight AND search-match
-  // boundary, so a segment carries at most one highlight color and at most
-  // one match flag — the two systems can overlap without either breaking.
-  const segments = useMemo(() => {
-    const points = new Set<number>([0, content.length]);
-    for (const h of highlights) {
-      points.add(h.startOffset);
-      points.add(h.endOffset);
-    }
-    for (const m of matches) {
-      points.add(m.start);
-      points.add(m.end);
-    }
-    for (const p of paragraphStarts) {
-      points.add(p);
-    }
-    const sorted = [...points].sort((a, b) => a - b);
-    const pieces: { start: number; text: string; highlight?: PassageHighlight; matchIndex?: number }[] = [];
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const start = sorted[i];
-      const end = sorted[i + 1];
-      if (start >= end) continue;
-      const highlight = highlights.find((h) => h.startOffset <= start && h.endOffset >= end);
-      const matchIndex = matches.findIndex((m) => m.start <= start && m.end >= end);
-      pieces.push({ start, text: content.slice(start, end), highlight, matchIndex: matchIndex >= 0 ? matchIndex : undefined });
-    }
-    return pieces;
-  }, [content, highlights, matches, paragraphStarts]);
+  const renderExtraActions = useCallback(
+    (targets: HighlightTarget[], done: () => void) => (
+      <ToolbarButton
+        label="Add note"
+        onClick={() => {
+          onAddNote(targets.map((target) => target.text).join(" "));
+          done();
+        }}
+      />
+    ),
+    [onAddNote]
+  );
 
-  // Phase 48 — "Copy disabled during exam": blocks Ctrl+C / right-click-copy
-  // on the passage TEXT specifically (not the search input above it, which
-  // must stay copy/paste-able) — selection itself stays fully working, since
-  // making a highlight requires selecting text; only sending it to the OS
-  // clipboard is blocked.
-  function blockCopy(event: React.ClipboardEvent | React.MouseEvent) {
-    event.preventDefault();
-  }
+  const region = passageRegion(passageId);
 
   return (
-    <div ref={scrollContainerRef} className="relative h-full overflow-y-auto scroll-smooth px-6 py-6 sm:px-8 sm:py-8">
+    <HighlightSurface
+      ref={scrollContainerRef}
+      className="relative h-full overflow-y-auto scroll-smooth px-6 py-6 sm:px-8 sm:py-8"
+      getRanges={getRanges}
+      onHighlight={onHighlight}
+      onClear={onClear}
+      onRemove={onRemove}
+      renderExtraActions={renderExtraActions}
+    >
       <div className="bg-background/95 sticky top-0 z-10 -mx-6 mb-4 flex flex-wrap items-center justify-between gap-2 px-6 py-2 backdrop-blur-sm sm:-mx-8 sm:px-8">
-        <div className="min-w-0 flex-1">
-          {sectionLabel && <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">{sectionLabel}</p>}
+        {/* min-w: when the panel is too narrow for title AND tools, the tools drop to their own line instead of squeezing the title to nothing. */}
+        <div className="min-w-[12rem] flex-1">
+          {sectionLabel && <p className="text-muted-foreground text-[11px] font-medium tracking-wide whitespace-nowrap uppercase">{sectionLabel}</p>}
           <h2 className="font-display truncate text-base font-medium sm:text-lg">{title}</h2>
         </div>
         <ReadingSpeedControl containerRef={scrollContainerRef} />
@@ -252,93 +160,22 @@ export function PassagePanel({
         </div>
       </div>
 
-      {toolbar && (
-        <div
-          style={{ left: toolbar.x, top: toolbar.y }}
-          className="absolute z-20 -translate-x-1/2 -translate-y-[calc(100%+8px)]"
-        >
-          <div className="bg-primary text-primary-foreground flex items-center gap-1 rounded-full p-1 shadow-soft-lg">
-            {HIGHLIGHT_COLORS.map((c) => (
-              <button
-                key={c.value}
-                type="button"
-                onClick={() => {
-                  onHighlight(toolbar.text, toolbar.start, toolbar.end, c.value);
-                  clearSelection();
-                }}
-                aria-label={`Highlight in ${c.label.toLowerCase()}`}
-                title={c.label}
-                className="hover:ring-2 hover:ring-white/60 focus-visible:ring-2 focus-visible:ring-white flex size-6 shrink-0 items-center justify-center rounded-full p-0.5 outline-none"
-              >
-                <span className={cn("block size-4 rounded-full", c.swatchClass)} />
-              </button>
-            ))}
-            <span className="bg-white/20 mx-0.5 h-4 w-px" aria-hidden="true" />
-            <button
-              type="button"
-              onClick={() => {
-                onAddNote(toolbar.text);
-                clearSelection();
-              }}
-              className="hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white rounded-full px-3 py-1.5 text-xs font-medium outline-none"
-            >
-              Add note
-            </button>
-          </div>
-        </div>
-      )}
-
       {attachments.length > 0 && (
         <div className="mb-6">
           <PassageAttachments attachments={attachments} />
         </div>
       )}
 
-      <div
-        ref={containerRef}
-        onMouseUp={handleMouseUp}
-        onCopy={blockCopy}
-        onContextMenu={blockCopy}
+      <HighlightableText
+        as="div"
+        region={region}
+        text={content}
+        highlights={highlights}
+        matches={matches}
+        currentMatch={currentMatchIndex}
+        labels={labels}
         className="font-display selection:bg-accent/30 text-[15.5px] leading-[1.8] whitespace-pre-wrap"
-      >
-        {segments.map((segment, index) => {
-          const isCurrentMatch = segment.matchIndex === currentMatchIndex && matches.length > 0;
-          const isMatch = segment.matchIndex != null;
-
-          const inner = segment.highlight ? (
-            <mark
-              className={cn("cursor-pointer rounded-sm px-0.5 transition-colors", MARK_CLASS_BY_COLOR[segment.highlight.color])}
-              onClick={() => onRemoveHighlight(segment.highlight!.id)}
-              title="Click to remove highlight"
-            >
-              {segment.text}
-            </mark>
-          ) : (
-            <>{segment.text}</>
-          );
-
-          const paragraphLabel = paragraphLabelAt.get(segment.start);
-
-          return (
-            <span key={index}>
-              {paragraphLabel && (
-                <span className="text-accent bg-accent/10 mr-2 inline-block rounded px-1.5 font-display text-sm font-semibold align-top" aria-hidden="true">
-                  {paragraphLabel}
-                </span>
-              )}
-              <span
-                data-match-index={isMatch ? segment.matchIndex : undefined}
-                className={cn(
-                  isMatch && "rounded-sm",
-                  isCurrentMatch ? "bg-accent/40 ring-accent ring-2" : isMatch ? "bg-accent/20" : undefined
-                )}
-              >
-                {inner}
-              </span>
-            </span>
-          );
-        })}
-      </div>
-    </div>
+      />
+    </HighlightSurface>
   );
-}
+});

@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { gradeResponses } from "@/lib/exam/grading";
-import { getBandForScore } from "@/lib/analytics/band-conversion";
+import { resolveBandForScore } from "@/lib/analytics/band-conversion";
 import { recordStudentActivity } from "@/lib/study-activity";
 
 /** Types of tests the Phase 3 exam engine can actually run. */
@@ -185,10 +185,11 @@ export async function submitAttempt(resultId: string, studentId: string) {
   const durationSeconds = Math.max(0, Math.round((completedAt.getTime() - result.startedAt.getTime()) / 1000));
   const rawScore = graded.reduce((sum, item) => sum + item.pointsAwarded, 0);
 
-  // Score conversion, not AI: looked up from the test author's own
-  // teacher-maintained table. Null when no table/range covers this score —
-  // never guessed.
-  const bandScore = await getBandForScore(result.skill, rawScore, result.mockTest.createdById);
+  // Score conversion, not AI: the test author's own table when they have set
+  // one that covers the score, otherwise the official IELTS conversion (scaled
+  // onto the 40-mark table when the paper isn't worth 40). Never guessed.
+  const totalPoints = result.mockTest.questions.reduce((sum, question) => sum + question.points, 0);
+  const bandScore = await resolveBandForScore(result.skill, rawScore, totalPoints, result.mockTest.createdById);
 
   await prisma.$transaction([
     ...gradedAnswered.map((item) =>

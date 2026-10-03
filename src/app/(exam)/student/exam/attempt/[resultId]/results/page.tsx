@@ -9,6 +9,7 @@ import { isResponseAnswered } from "@/lib/exam/grading";
 import { formatNumberRange, summarizeAttemptSlots } from "@/lib/exam/question-numbering";
 import { getResultInsights } from "@/lib/exam/result-insights";
 import { findInProgressFullMockLinkForResult } from "@/lib/full-mock-attempts";
+import { isScaledToTable, officialBandForScore } from "@/lib/analytics/band-conversion";
 import { formatDuration } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,6 +34,8 @@ export default async function ExamResultsPage({
     findInProgressFullMockLinkForResult(resultId),
     getResultInsights(resultId, profile.id),
   ]);
+  // Mid-sitting a Full Mock section's answers are not shown (a real exam doesn't mark you between papers): the student goes on to the next screen, and every section's score appears together on the Full Mock results once the sitting is over.
+  if (fullMockAttemptId) redirect(`/student/full-mock/attempt/${fullMockAttemptId}`);
 
   const answerByQuestion = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
   const skillHref = attempt.skill === "LISTENING" ? "/student/listening" : "/student/reading";
@@ -63,6 +66,12 @@ export default async function ExamResultsPage({
   const wrongCount = totals.total - totals.correct;
   const percent = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : null;
 
+  // Raw score = marks earned. The band is the one stored at submission; a paper finished before bands were always produced is converted now with the same official table, so "Not available yet" can no longer appear.
+  const totalPoints = attempt.mockTest.questions.reduce((sum, question) => sum + question.points, 0);
+  const rawScore = attempt.rawScore ?? correctCount;
+  const bandScore = attempt.bandScore ?? officialBandForScore(attempt.skill, rawScore, totalPoints);
+  const bandIsScaled = isScaledToTable(totalPoints);
+
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-12 sm:py-16">
       <div className="space-y-8">
@@ -73,24 +82,33 @@ export default async function ExamResultsPage({
               {skillLabel} Module
             </Badge>
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase">
-              <Gauge className="size-3.5" aria-hidden="true" /> Official Band Score
+              <Gauge className="size-3.5" aria-hidden="true" /> IELTS Band
             </span>
-            {attempt.bandScore != null ? (
-              <p className="font-display text-7xl font-medium">{attempt.bandScore.toFixed(1)}</p>
-            ) : (
-              <p className="font-display text-2xl font-medium">Not available yet</p>
-            )}
-            <p className="text-muted-foreground text-sm">
-              {correctCount}/{totalQuestions} Correct
-              {percent != null && ` · ${percent}%`}
+            <p data-testid="ielts-band" className="font-display text-7xl font-medium">
+              {bandScore != null ? bandScore.toFixed(1) : "—"}
             </p>
-            <Badge variant="success" className="mt-1 flex items-center gap-1">
+            <dl className="mt-3 grid w-full max-w-md grid-cols-2 gap-3">
+              <div className="bg-background/70 rounded-xl px-4 py-3">
+                <dt className="text-muted-foreground text-xs font-medium">Correct Answers</dt>
+                <dd data-testid="correct-answers" className="font-display mt-0.5 text-2xl font-medium tabular-nums">
+                  {correctCount}/{totalQuestions}
+                  {percent != null && <span className="text-muted-foreground ml-1.5 text-sm font-normal">{percent}%</span>}
+                </dd>
+              </div>
+              <div className="bg-background/70 rounded-xl px-4 py-3">
+                <dt className="text-muted-foreground text-xs font-medium">Raw Score</dt>
+                <dd data-testid="raw-score" className="font-display mt-0.5 text-2xl font-medium tabular-nums">
+                  {rawScore}
+                  <span className="text-muted-foreground ml-1 text-sm font-normal">/ {totalPoints}</span>
+                </dd>
+              </div>
+            </dl>
+            <Badge variant="success" className="mt-2 flex items-center gap-1">
               <CheckCircle2 className="size-3" aria-hidden="true" /> Completed Successfully
             </Badge>
-            {attempt.bandScore == null && (
+            {bandIsScaled && (
               <p className="text-muted-foreground max-w-sm text-xs">
-                Your teacher hasn&apos;t set up a band conversion table for this module yet — your real score ({correctCount}/
-                {totalQuestions}) is saved and will show a band the moment one is configured.
+                This paper is worth {totalPoints} marks, so your score is scaled onto the official 40-mark conversion table to give the band.
               </p>
             )}
           </CardContent>
@@ -285,23 +303,15 @@ export default async function ExamResultsPage({
         </div>
 
         <div className="flex flex-wrap justify-center gap-3">
-          {fullMockAttemptId ? (
-            <Button asChild>
-              <Link href={`/student/full-mock/attempt/${fullMockAttemptId}/transition?from=${attempt.skill}`}>Continue to next section</Link>
-            </Button>
-          ) : (
-            <>
-              <Button asChild variant="outline">
-                <Link href={`/student/exam/attempt/${resultId}/review`}>Review answers</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href={skillHref}>Back to {skillLabel}</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/student/dashboard">Go to home</Link>
-              </Button>
-            </>
-          )}
+          <Button asChild variant="outline">
+            <Link href={`/student/exam/attempt/${resultId}/review`}>Review answers</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={skillHref}>Back to {skillLabel}</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/student/dashboard">Go to home</Link>
+          </Button>
         </div>
       </div>
     </div>

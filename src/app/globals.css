@@ -31,6 +31,10 @@
   --muted: #f2ede2;
   --muted-foreground: #726b5d;
 
+  /* Phase D — the ONE highlight colour of the exam (passage and questions alike). */
+  --exam-highlight: #ffe46b;
+  --exam-highlight-ink: #211d17;
+
   /* Muted brass/gold — the single accent color, used sparingly. Deep enough
      to clear WCAG AA (4.5:1) both as text on ivory and as ivory text on a
      solid accent fill — verified, not eyeballed. */
@@ -81,6 +85,9 @@
 
   --muted: #221f18;
   --muted-foreground: #a89d87;
+
+  --exam-highlight: rgb(255 214 10 / 0.38);
+  --exam-highlight-ink: inherit;
 
   --accent: #c7a664;
   --accent-foreground: #16140f;
@@ -204,6 +211,43 @@
 
   .text-balance {
     text-wrap: balance;
+  }
+
+  /* Phase D — exam text highlighting. No horizontal padding on purpose: a highlight must not shift the text it sits on. */
+  .exam-highlight {
+    background-color: var(--exam-highlight);
+    color: var(--exam-highlight-ink);
+    border-radius: 2px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  /* Paragraph labels (A, B, C…) are drawn by CSS so they are never part of the selectable / copyable / measured text. */
+  .exam-para::before {
+    content: attr(data-para-label);
+    display: inline-block;
+    margin-right: 0.5rem;
+    padding: 0 0.375rem;
+    border-radius: 0.25rem;
+    background-color: color-mix(in oklab, var(--accent) 12%, transparent);
+    color: var(--accent);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: inherit;
+    vertical-align: top;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .exam-search-match {
+    border-radius: 2px;
+    background-color: color-mix(in oklab, var(--accent) 22%, transparent);
+  }
+
+  .exam-search-current {
+    border-radius: 2px;
+    background-color: color-mix(in oklab, var(--accent) 42%, transparent);
+    outline: 2px solid var(--accent);
   }
 
   /* Phase 39 — Animated Streak Widget tiers (7+/30+/100+ days). Kept as

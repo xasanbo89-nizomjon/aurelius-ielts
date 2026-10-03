@@ -1,46 +1,61 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { CheckCircle2 } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { BookOpen, CheckCircle2, CircleDashed, Clock, PenLine } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
-import { getFullMockProgressSummary } from "@/lib/full-mock-attempts";
+import { getFullMockProgressSummary, resolveNextFullMockStep } from "@/lib/full-mock-attempts";
+import { startFullMockSectionAction } from "@/actions/full-mock-attempts.actions";
+import { FULL_MOCK_READING_MINUTES, FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { StartSectionButton } from "@/components/student/start-section-button";
 
 export const metadata: Metadata = { title: "Section Complete" };
 
-const SECTION_LABELS = { LISTENING: "Listening", READING: "Reading", WRITING: "Writing", SPEAKING: "Speaking" } as const;
-
 /**
- * Phase 40 — Part 12's section-transition screen. Purely a display step
- * between legs — the actual routing decision (what's really next, side
- * effects included) still happens entirely inside the existing, unmodified
- * resolveNextFullMockStep on the router page this screen's Continue button
- * links to. This page only reads real progress to describe what just
- * happened and what's coming up next; it never mutates attempt state itself.
+ * Phase E — the screen BETWEEN sections. What it shows comes from the real
+ * state of the sitting, not from a query string: if the next section is
+ * waiting for the student it says what just finished and offers the Start
+ * button (the next countdown begins on that press, never before); if a
+ * section is already running it simply sends the student there, so
+ * refreshing or revisiting this page can never start anything by accident.
  */
 export default async function FullMockTransitionPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ attemptId: string }>;
-  searchParams: Promise<{ from?: string }>;
 }) {
   const { attemptId } = await params;
-  const { from } = await searchParams;
   const { profile } = await requireStudentProfile();
 
-  const progress = await getFullMockProgressSummary(attemptId, profile.id);
-  if (!progress) notFound();
+  const [step, progress] = await Promise.all([resolveNextFullMockStep(attemptId, profile.id), getFullMockProgressSummary(attemptId, profile.id)]);
+  if (!progress || step.kind === "error") notFound();
+  if (step.kind !== "ready" && step.kind !== "complete") redirect(`/student/full-mock/attempt/${attemptId}`);
 
-  const fromLabel = from && from in SECTION_LABELS ? SECTION_LABELS[from as keyof typeof SECTION_LABELS] : null;
-  const nextSection = progress.sections.find((s) => !s.done);
-  const allDone = progress.completedCount === progress.totalCount;
-  // Writing/Speaking can have more than one task — "next" can land back on
-  // the same section (e.g. Task 1 -> Task 2). Avoid an odd "Writing Complete
-  // — about to begin Writing" message in that case.
-  const sameSectionContinues = nextSection?.label === fromLabel;
+  const SECTION_COPY = {
+    READING: {
+      finishedTitle: "Listening finished",
+      finishedBody: "Your Listening answers have been saved.",
+      nextLabel: "Reading",
+      button: "Start Reading",
+      Icon: BookOpen,
+      minutes: FULL_MOCK_READING_MINUTES,
+      detail: `${progress.readingPassageCount} ${progress.readingPassageCount === 1 ? "passage" : "passages"} · ${progress.readingQuestionCount} questions`,
+    },
+    WRITING: {
+      finishedTitle: "Reading Completed",
+      finishedBody: "Your Reading answers have been saved.",
+      nextLabel: "Writing",
+      button: "Start Writing",
+      Icon: PenLine,
+      minutes: FULL_MOCK_WRITING_MINUTES,
+      detail: progress.writingTaskCount === 1 ? "1 task" : `Task 1 and Task 2`,
+    },
+  } as const;
+
+  const ready = step.kind === "ready" ? SECTION_COPY[step.section] : null;
+  const boundStart = step.kind === "ready" ? startFullMockSectionAction.bind(null, attemptId, step.section) : null;
 
   return (
     <div className="flex min-h-svh items-center justify-center px-6 py-12">
@@ -51,23 +66,41 @@ export default async function FullMockTransitionPage({
           </span>
 
           <div className="space-y-1.5">
-            <h1 className="font-display text-2xl font-medium tracking-tight">
-              {sameSectionContinues ? "Task Complete" : fromLabel ? `${fromLabel} Complete` : "Section Complete"}
+            <h1 data-testid="transition-title" className="font-display text-2xl font-medium tracking-tight">
+              {ready ? ready.finishedTitle : "Full Mock complete"}
             </h1>
             <p className="text-muted-foreground text-sm">
-              {allDone
-                ? "You've finished every section of this Full Mock Test."
-                : sameSectionContinues
-                  ? `Continue to your next ${nextSection!.label.toLowerCase()} task.`
-                  : nextSection
-                    ? `You are about to begin ${nextSection.label}.`
-                    : "Continue to your next section."}
+              {ready ? ready.finishedBody : "You've finished every section of this Full Mock Test."}
             </p>
           </div>
 
-          <Button asChild size="lg" className="w-full">
-            <Link href={`/student/full-mock/attempt/${attemptId}`}>{allDone ? "View Results" : "Continue"}</Link>
-          </Button>
+          <ul className="space-y-1.5 text-left" aria-label="Sections">
+            {progress.sections.map((section) => (
+              <li key={section.label} className="flex items-center gap-2 text-sm">
+                {section.done ? <CheckCircle2 className="text-success size-4 shrink-0" aria-hidden="true" /> : <CircleDashed className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />}
+                <span className={section.done ? "" : "text-muted-foreground"}>{section.label}</span>
+              </li>
+            ))}
+          </ul>
+
+          {ready && boundStart ? (
+            <>
+              <div className="bg-secondary/50 space-y-1 rounded-xl px-4 py-3.5 text-left">
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <ready.Icon className="size-4" aria-hidden="true" /> Next: {ready.nextLabel}
+                </p>
+                <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                  <Clock className="size-3.5" aria-hidden="true" /> {ready.minutes} minutes · {ready.detail}
+                </p>
+                <p className="text-muted-foreground text-xs">The {ready.minutes}-minute timer starts only when you press the button — take a moment first if you need one.</p>
+              </div>
+              <StartSectionButton action={boundStart} label={ready.button} />
+            </>
+          ) : (
+            <Button asChild size="lg" className="w-full">
+              <Link href={`/student/full-mock/attempt/${attemptId}`}>View Results</Link>
+            </Button>
+          )}
         </CardContent>
       </Card>
     </div>

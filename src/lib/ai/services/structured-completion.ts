@@ -78,6 +78,8 @@ export async function createStructuredCompletion<T>({
 
   const result = responseSchema.safeParse(parsed);
   if (!result.success) {
+    // Which fields were wrong (paths and rules only — never the model's text), so a recurring shape problem can be diagnosed from the log.
+    console.error("[ai] response failed validation:", result.error.issues.slice(0, 5).map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.code}`).join("; "));
     throw new AIServiceUnavailableError("OpenAI returned an unexpected response shape.");
   }
 

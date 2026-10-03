@@ -1,6 +1,7 @@
 import type { QuestionType } from "@prisma/client";
 
 import { gradeItems, isAnswerCorrect, isGroupedQuestionType, isResponseAnswered } from "@/lib/exam/grading";
+import { completeBlankIds, summaryBlankIds } from "@/lib/exam/summary-blanks";
 
 /**
  * Phase A — the single definition of "how many questions is this?".
@@ -17,7 +18,12 @@ import { gradeItems, isAnswerCorrect, isGroupedQuestionType, isResponseAnswered 
  * (no DB, no server-only imports).
  */
 
-export type NumberableQuestion = { type: QuestionType; options: unknown };
+export type NumberableQuestion = {
+  type: QuestionType;
+  options: unknown;
+  /** Phase D — the keys (never the values) of a summary's stored correct answer, passed down by the server so a row whose text has fewer recognisable blanks than numbers still gets one answer box per number. Optional: absent on every other caller. */
+  blankKeys?: readonly string[] | null;
+};
 
 export type NumberedQuestion<T extends NumberableQuestion> = T & {
   /** First IELTS question number this row covers (running position across the whole test, 1-based). */
@@ -43,8 +49,14 @@ export function summaryBlankKeys(text: unknown): string[] {
   return keys;
 }
 
-/** The answer keys a row is graded and displayed under, one per numbered question it covers. */
-export function questionSlotKeys(type: QuestionType, options: unknown): (string | null)[] {
+/**
+ * The answer keys a row is graded and displayed under, one per numbered
+ * question it covers. For a summary the keys are the blanks of its text —
+ * `{{n}}` markers or, for older rows, the PDF's own "37 ……." — and any number
+ * the text has no blank for is completed from `hintKeys` / the running number,
+ * so every number has an answer box (`startNumber` is the row's first number).
+ */
+export function questionSlotKeys(type: QuestionType, options: unknown, hintKeys?: readonly string[] | null, startNumber?: number): (string | null)[] {
   const opts = asRecord(options);
 
   if (type === "MATCHING") {
@@ -54,11 +66,11 @@ export function questionSlotKeys(type: QuestionType, options: unknown): (string 
   }
 
   if (type === "SUMMARY_COMPLETION") {
-    const markers = summaryBlankKeys(opts?.text);
+    const found = summaryBlankIds(opts?.text);
     const declared = typeof opts?.blankCount === "number" && Number.isInteger(opts.blankCount) && opts.blankCount > 0 ? opts.blankCount : 0;
-    // blankCount is what the teacher / importer declared; fall back to the markers actually in the text so a row is never counted as zero.
-    const span = declared > 0 ? declared : Math.max(1, markers.length);
-    return Array.from({ length: span }, (_, index) => markers[index] ?? null);
+    // blankCount is what the teacher / importer declared; fall back to the blanks actually in the text so a row is never counted as zero.
+    const span = declared > 0 ? declared : Math.max(1, found.length);
+    return completeBlankIds(found, span, startNumber, hintKeys);
   }
 
   return [null];
@@ -76,7 +88,7 @@ export function questionSpan(type: QuestionType, options: unknown): number {
 export function numberQuestions<T extends NumberableQuestion>(questions: readonly T[]): NumberedQuestion<T>[] {
   let next = 1;
   return questions.map((question) => {
-    const slotKeys = questionSlotKeys(question.type, question.options);
+    const slotKeys = questionSlotKeys(question.type, question.options, question.blankKeys, next);
     const startNumber = next;
     next += slotKeys.length;
     return { ...question, startNumber, endNumber: next - 1, span: slotKeys.length, slotKeys };

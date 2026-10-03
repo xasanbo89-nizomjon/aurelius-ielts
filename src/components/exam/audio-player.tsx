@@ -14,8 +14,11 @@ function formatTime(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export function AudioPlayer({ src, label }: { src: string; label: string }) {
+export function AudioPlayer({ src, label, onEnded }: { src: string; label: string; onEnded?: (src: string) => void }) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  // Phase E — the Full Mock starts the Listening transfer time when the recording finishes; always call the latest handler.
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -42,7 +45,10 @@ export function AudioPlayer({ src, label }: { src: string; label: string }) {
       setDuration(audio.duration || 0);
       setIsLoading(false);
     };
-    const onEnd = () => setPlaying(false);
+    const onEnd = () => {
+      setPlaying(false);
+      onEndedRef.current?.(src);
+    };
     const onWaiting = () => setIsLoading(true);
     const onCanPlay = () => setIsLoading(false);
 
