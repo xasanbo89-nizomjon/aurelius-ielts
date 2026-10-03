@@ -70,7 +70,9 @@ export default async function TeacherAttemptReviewPage({
     attempt.passages.length > 0
       ? attempt.passages.map((passage, index) => {
           const entry = byPassage.get(passage.id) ?? { correct: 0, total: 0 };
-          return { passageId: passage.id, label: passage.title?.trim() ? passage.title : `Part ${index + 1}`, correct: entry.correct, total: entry.total };
+          const title = passage.title?.trim() ?? "";
+          const generic = title === "" || /^(passage|part|section)\s*\d*$/i.test(title);
+          return { passageId: passage.id, label: `Part ${index + 1}`, subtitle: generic ? null : title, correct: entry.correct, total: entry.total };
         })
       : [];
 

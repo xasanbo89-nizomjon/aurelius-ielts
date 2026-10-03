@@ -3,6 +3,7 @@ import type { QuestionType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META, QUESTION_TYPE_ORDER } from "@/lib/exam/question-types";
 import { summarizeAttemptSlots } from "@/lib/exam/question-numbering";
+import { allowedSecondsFor, endedByTimeLimit, timeUsedSeconds } from "@/lib/exam/timing";
 
 export type WeakArea = { type: QuestionType; label: string; correct: number; total: number; accuracy: number };
 
@@ -10,7 +11,15 @@ export type WeakArea = { type: QuestionType; label: string; correct: number; tot
 export type QuestionTypeStat = { type: QuestionType; label: string; correct: number; wrong: number; total: number; accuracy: number };
 
 /** Phase 44 — Part 2's real per-passage/part breakdown ("Part 1", "Part 2", ...). */
-export type PartBreakdown = { passageId: string | null; label: string; correct: number; total: number };
+export type PartBreakdown = {
+  passageId: string | null;
+  /** Always "Part 1", "Part 2"… — the same labels on every results screen, whatever the passage is called. */
+  label: string;
+  /** The passage's own title as a smaller second line, or null when it is just a generic "Passage 1". */
+  subtitle: string | null;
+  correct: number;
+  total: number;
+};
 
 /** Phase 44 — Part 3's real accuracy/time/answered/skipped block. */
 export type AccuracyStats = {
@@ -22,6 +31,8 @@ export type AccuracyStats = {
 };
 
 export type ResultInsights = {
+  /** True when the attempt ended because its time ran out (a timed test that reached its limit), including attempts left open and submitted on return. */
+  timeExpired: boolean;
   weakAreas: WeakArea[];
   /** Phase 44 — Part 5's symmetric "Strong Areas" (accuracy at or above the real top band among this attempt's own types, never a fabricated universal threshold). */
   strongAreas: WeakArea[];
@@ -47,8 +58,10 @@ export async function getResultInsights(resultId: string, studentId: string): Pr
       startedAt: true,
       completedAt: true,
       durationSeconds: true,
+      fullMockSectionResult: { select: { section: true } },
       mockTest: {
         select: {
+          durationMinutes: true,
           passages: { orderBy: { orderIndex: "asc" }, select: { id: true, title: true, orderIndex: true } },
           questions: { orderBy: { orderIndex: "asc" }, select: { id: true, type: true, passageId: true, options: true, correctAnswer: true } },
         },
@@ -105,7 +118,9 @@ export async function getResultInsights(resultId: string, studentId: string): Pr
     orderedPassages.length > 0
       ? orderedPassages.map((passage, index) => {
           const entry = byPassage.get(passage.id) ?? { correct: 0, total: 0 };
-          return { passageId: passage.id, label: passage.title?.trim() ? passage.title : `Part ${index + 1}`, correct: entry.correct, total: entry.total };
+          const title = passage.title?.trim() ?? "";
+          const generic = title === "" || /^(passage|part|section)\s*\d*$/i.test(title);
+          return { passageId: passage.id, label: `Part ${index + 1}`, subtitle: generic ? null : title, correct: entry.correct, total: entry.total };
         })
       : [];
 
@@ -113,12 +128,18 @@ export async function getResultInsights(resultId: string, studentId: string): Pr
   const totalCorrect = totals.correct;
   const answered = totals.answered;
 
+  // Computed from the stored start and end (the source of truth), so attempts submitted before time used was capped read correctly too.
+  const allowedSeconds = allowedSecondsFor({ durationMinutes: result.mockTest.durationMinutes, fullMockSection: result.fullMockSectionResult?.section });
+  const timeBounds = result.completedAt ? { startedAt: result.startedAt, endedAt: result.completedAt, allowedSeconds } : null;
+  const timeUsedSeconds_ = timeBounds ? timeUsedSeconds(timeBounds) : result.durationSeconds;
+  const timeExpired = timeBounds ? endedByTimeLimit(timeBounds) : false;
+
   const accuracy: AccuracyStats = {
     accuracyPercent: totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : null,
     answered,
     skipped: Math.max(0, totalQuestions - answered),
     total: totalQuestions,
-    timeUsedSeconds: result.durationSeconds,
+    timeUsedSeconds: timeUsedSeconds_,
   };
 
   const skillHref = result.skill === "LISTENING" ? "/student/tests/listening" : "/student/tests/reading";
@@ -128,6 +149,7 @@ export async function getResultInsights(resultId: string, studentId: string): Pr
       : null;
 
   return {
+    timeExpired,
     weakAreas,
     strongAreas,
     questionTypeBreakdown,

@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";
+import { withoutInternalTests } from "@/lib/test-visibility";
 
 export type WhatsNewItemType = "TEST" | "ARTICLE" | "WRITING_TASK" | "ANNOUNCEMENT";
 
@@ -31,7 +32,8 @@ export const getWhatsNewFeed = cache(async function getWhatsNewFeed(
     prisma.mockTest.findMany({
       where: { isPublished: true, isArchived: false, packageFullMockTestId: null },
       orderBy: { createdAt: "desc" },
-      take: FEED_SLICE,
+      // A few more than are shown: temporary tests are dropped below and must not leave the feed short.
+      take: FEED_SLICE * 5,
       select: { id: true, title: true, type: true, createdAt: true },
     }),
     teacherId
@@ -59,14 +61,16 @@ export const getWhatsNewFeed = cache(async function getWhatsNewFeed(
   ]);
 
   const items: WhatsNewItem[] = [
-    ...tests.map((test) => ({
-      id: `test-${test.id}`,
-      type: "TEST" as const,
-      title: test.title,
-      description: `New ${test.type === "FULL_MOCK" ? "full mock" : test.type.toLowerCase()} test`,
-      href: test.type === "FULL_MOCK" ? "/student/mock-test" : `/student/exam/${test.id}`,
-      at: test.createdAt,
-    })),
+    ...withoutInternalTests(tests)
+      .slice(0, FEED_SLICE)
+      .map((test) => ({
+        id: `test-${test.id}`,
+        type: "TEST" as const,
+        title: test.title,
+        description: `New ${test.type === "FULL_MOCK" ? "full mock" : test.type.toLowerCase()} test`,
+        href: test.type === "FULL_MOCK" ? "/student/mock-test" : `/student/exam/${test.id}`,
+        at: test.createdAt,
+      })),
     ...articles.map((article) => ({
       id: `article-${article.id}`,
       type: "ARTICLE" as const,

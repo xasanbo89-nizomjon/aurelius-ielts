@@ -28,7 +28,7 @@ export function TextAnswer({
             id={questionId}
             value={value ?? ""}
             onValueChange={onChange}
-            placeholder="Type your answer, or drop a word here…"
+            placeholder={startNumber != null ? String(startNumber) : undefined}
             className="max-w-sm"
             data-question-number={startNumber}
             aria-label={startNumber != null ? `Answer for question ${startNumber}` : "Your answer"}

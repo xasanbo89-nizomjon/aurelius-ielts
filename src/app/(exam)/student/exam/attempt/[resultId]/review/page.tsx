@@ -90,7 +90,7 @@ export default async function ExamReviewPage({
           correctCount={correctCount}
           incorrectCount={incorrectCount}
           skippedCount={skippedCount}
-          timeUsedSeconds={attempt.durationSeconds}
+          timeUsedSeconds={insights?.accuracy.timeUsedSeconds ?? attempt.durationSeconds}
           accuracyPercent={insights?.accuracy.accuracyPercent ?? null}
         />
 

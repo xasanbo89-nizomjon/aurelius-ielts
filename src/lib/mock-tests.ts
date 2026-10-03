@@ -2,6 +2,7 @@ import type { MockTestCategory, MockTestDifficulty, TestType } from "@prisma/cli
 
 import { prisma } from "@/lib/prisma";
 import { getQuestionNumberCounts } from "@/lib/exam/question-counts";
+import { withoutInternalTests } from "@/lib/test-visibility";
 
 /** Phase A — every list below reports `questionCount` = numbered questions (see getQuestionNumberCounts), never the raw row count. */
 async function withQuestionCounts<T extends { id: string }>(tests: T[]): Promise<(T & { questionCount: number })[]> {
@@ -21,7 +22,7 @@ export async function getPublishedTests(type: TestType) {
       durationMinutes: true,
     },
   });
-  return withQuestionCounts(tests);
+  return withQuestionCounts(withoutInternalTests(tests));
 }
 
 /**
@@ -43,7 +44,7 @@ export async function getPublishedTestsByCategory(category: MockTestCategory) {
       durationMinutes: true,
     },
   });
-  return withQuestionCounts(tests);
+  return withQuestionCounts(withoutInternalTests(tests));
 }
 
 export type GeneralTestRow = {
@@ -88,8 +89,9 @@ export async function getGeneralTestsByType(
     },
   });
 
-  const counts = await getQuestionNumberCounts(tests.map((t) => t.id));
-  return tests.map((t) => ({
+  const visible = withoutInternalTests(tests);
+  const counts = await getQuestionNumberCounts(visible.map((t) => t.id));
+  return visible.map((t) => ({
     id: t.id,
     title: t.title,
     description: t.description,

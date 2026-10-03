@@ -3,6 +3,7 @@ import type { z } from "zod";
 
 import { createStructuredCompletion } from "@/lib/ai/services/structured-completion";
 import { AIServiceUnavailableError } from "@/lib/ai/errors";
+import { normalizePassage } from "@/lib/text/normalizePassage";
 import {
   detectSectionMarkers,
   splitTextByMarkers,
@@ -560,6 +561,9 @@ export function createPdfTestExtractor(complete: CompletionFn) {
 
       result = { title: titleAndAnswers.title, answers, passages };
     }
+
+    // Phase G0 — a PDF keeps the page's own line ends; a Reading passage must read as running text (paragraph breaks, paragraph letters and headings are kept).
+    if (testType === "READING") result.passages = result.passages.map((passage) => ({ ...passage, content: normalizePassage(passage.content) }));
 
     console.log(`[pdf-test-import] extractedPassages=${result.passages.length}`);
     const validation = validateImportedTest(toValidationPassages(result.passages), result.answers.map((a) => a.number));

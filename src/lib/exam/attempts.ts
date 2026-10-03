@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { gradeResponses } from "@/lib/exam/grading";
 import { resolveBandForScore } from "@/lib/analytics/band-conversion";
 import { recordStudentActivity } from "@/lib/study-activity";
+import { allowedSecondsFor, timeUsedSeconds } from "@/lib/exam/timing";
 
 /** Types of tests the Phase 3 exam engine can actually run. */
 export const SIMULATABLE_TEST_TYPES = ["READING", "LISTENING"] as const;
@@ -167,10 +168,12 @@ export async function submitAttempt(resultId: string, studentId: string) {
       mockTest: {
         select: {
           createdById: true,
+          durationMinutes: true,
           questions: { select: { id: true, type: true, correctAnswer: true, points: true } },
         },
       },
       answers: { select: { questionId: true, response: true } },
+      fullMockSectionResult: { select: { section: true } },
     },
   });
   if (!result) throw new Error("Attempt not found or already submitted.");
@@ -182,7 +185,9 @@ export async function submitAttempt(resultId: string, studentId: string) {
   const gradedAnswered = graded.filter((item) => responses.has(item.questionId));
 
   const completedAt = new Date();
-  const durationSeconds = Math.max(0, Math.round((completedAt.getTime() - result.startedAt.getTime()) / 1000));
+  // Time used = the real elapsed time, but never more than the test allows: an attempt left open for 109 minutes on a 60-minute test used 60.
+  const allowedSeconds = allowedSecondsFor({ durationMinutes: result.mockTest.durationMinutes, fullMockSection: result.fullMockSectionResult?.section });
+  const durationSeconds = timeUsedSeconds({ startedAt: result.startedAt, endedAt: completedAt, allowedSeconds });
   const rawScore = graded.reduce((sum, item) => sum + item.pointsAwarded, 0);
 
   // Score conversion, not AI: the test author's own table when they have set

@@ -3,6 +3,7 @@ import type { ArticleDifficulty } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { getAllSkillInsights, getPerformanceOverview } from "@/lib/analytics/student-insights";
+import { withoutInternalTests } from "@/lib/test-visibility";
 
 export type RecommendedArticle = { id: string; title: string; category: string; difficulty: ArticleDifficulty };
 export type RecommendedTest = { id: string; title: string; type: "READING" | "LISTENING"; isFree: boolean };
@@ -63,7 +64,7 @@ export async function getRecommendationsForStudent(studentId: string, teacherId:
   const wantsReading = weakSkills.has("READING") || weakSkills.size === 0;
   const wantsListening = weakSkills.has("LISTENING") || weakSkills.size === 0;
 
-  const tests: RecommendedTest[] = readingListeningTests
+  const tests: RecommendedTest[] = withoutInternalTests(readingListeningTests)
     .filter((t) => !attemptedIds.has(t.id) && ((t.type === "READING" && wantsReading) || (t.type === "LISTENING" && wantsListening)))
     .slice(0, LIMIT)
     .map((t) => ({ id: t.id, title: t.title, type: t.type as "READING" | "LISTENING", isFree: t.category === "CAMBRIDGE" }));

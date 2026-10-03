@@ -3,6 +3,7 @@ import type { MockTestCategory, MockTestDifficulty } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { hasActiveAccess } from "@/lib/subscription";
+import { withoutInternalTests } from "@/lib/test-visibility";
 import { overallBandFromSections, requiredSectionsFor } from "@/lib/full-mock-band-composition";
 import {
   FULL_MOCK_LISTENING_MINUTES,
@@ -95,7 +96,7 @@ export async function getStudentFullMockDashboard(studentId: string): Promise<Fu
   const completed: FullMockCardData[] = [];
   const premiumLocked: FullMockCardData[] = [];
 
-  for (const test of tests) {
+  for (const test of withoutInternalTests(tests)) {
     // Inside a Full Mock every section runs on the real IELTS clock, whatever length the standalone paper was saved with.
     const readingMinutes = test.readingSections.length > 0 ? FULL_MOCK_READING_MINUTES : 0;
     const listeningMinutes = test.listeningSections.length > 0 ? FULL_MOCK_LISTENING_MINUTES + FULL_MOCK_LISTENING_TRANSFER_MINUTES : 0;

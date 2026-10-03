@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Phase G0 — backups written by scripts/normalize-passages.mjs before it changes anything
+/scripts/.backups/

@@ -8,6 +8,7 @@ import { getBookmarkedQuestionIds } from "@/lib/bookmarks";
 import { listQuestionHighlights } from "@/lib/exam/annotations";
 import { getFullMockExamContext } from "@/lib/full-mock-attempts";
 import { answerKeysOf } from "@/lib/exam/summary-blanks";
+import { examDurationSeconds, remainingSeconds } from "@/lib/exam/timing";
 import { ExamRunner } from "@/components/exam/exam-runner";
 
 export const metadata: Metadata = { title: "Exam in progress" };
@@ -46,8 +47,8 @@ export default async function ExamAttemptPage({
 
   // Worked out ONCE, here: computing it in the client component from Date.now() gave the server render and the browser's hydration different numbers (React hydration error #418).
   const durationMinutes = fullMock?.durationMinutes ?? attempt.mockTest.durationMinutes;
-  const initialRemainingSeconds =
-    durationMinutes == null ? null : Math.max(0, durationMinutes * 60 - Math.floor((Date.now() - attempt.startedAt.getTime()) / 1000));
+  // Anchored on the server's start time. No usable duration (null, 0, not a number) = untimed: no countdown, never an auto-submit.
+  const initialRemainingSeconds = remainingSeconds({ startedAt: attempt.startedAt, allowedSeconds: examDurationSeconds(durationMinutes) });
 
   return (
     <ExamRunner

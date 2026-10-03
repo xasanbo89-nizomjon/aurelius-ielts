@@ -103,9 +103,15 @@ export default async function ExamResultsPage({
                 </dd>
               </div>
             </dl>
-            <Badge variant="success" className="mt-2 flex items-center gap-1">
-              <CheckCircle2 className="size-3" aria-hidden="true" /> Completed Successfully
-            </Badge>
+            {insights?.timeExpired ? (
+              <Badge variant="outline" data-testid="submission-status" className="mt-2 flex items-center gap-1">
+                <Clock className="size-3" aria-hidden="true" /> Submitted (time expired)
+              </Badge>
+            ) : (
+              <Badge variant="success" data-testid="submission-status" className="mt-2 flex items-center gap-1">
+                <CheckCircle2 className="size-3" aria-hidden="true" /> Completed Successfully
+              </Badge>
+            )}
             {bandIsScaled && (
               <p className="text-muted-foreground max-w-sm text-xs">
                 This paper is worth {totalPoints} marks, so your score is scaled onto the official 40-mark conversion table to give the band.
@@ -167,6 +173,7 @@ export default async function ExamResultsPage({
                   <Card key={part.passageId ?? part.label} className="py-4">
                     <CardContent className="space-y-1 text-center">
                       <p className="text-muted-foreground text-xs font-medium">{part.label}</p>
+                      {part.subtitle && <p className="text-muted-foreground/80 truncate text-[11px]">{part.subtitle}</p>}
                       <p className="font-display text-xl font-medium">
                         {part.correct}/{part.total}
                       </p>

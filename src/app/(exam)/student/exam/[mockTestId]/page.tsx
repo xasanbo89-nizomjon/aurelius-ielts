@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookOpen, Clock, FileQuestion, Headphones, Lock } from "lucide-react";
 
+import { isInternalTestTitle } from "@/lib/test-visibility";
 import { requireStudentProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hasActiveAccess } from "@/lib/subscription";
@@ -34,7 +35,8 @@ export default async function ExamStartPage({
     },
   });
 
-  if (!test) notFound();
+  // Temporary / internal tests are not for students — not in any list, and not reachable by a direct link either.
+  if (!test || isInternalTestTitle(test.title)) notFound();
   const questionCount = await getQuestionNumberCount(test.id);
 
   const canStart = test.category === "CAMBRIDGE" || (await hasActiveAccess(profile.id));

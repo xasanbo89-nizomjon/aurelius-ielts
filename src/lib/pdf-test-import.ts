@@ -10,6 +10,7 @@ import { AIServiceUnavailableError } from "@/lib/ai/errors";
 import { extractTestStructureFromPdfText } from "@/lib/ai/services/pdf-test-import";
 import * as tm from "@/lib/exam/test-management";
 import { totalQuestionNumbers } from "@/lib/exam/question-numbering";
+import { normalizePassage } from "@/lib/text/normalizePassage";
 import {
   buildQuestionPayloadsFromGroup,
   importedQuestionGroupJsonSchema,
@@ -433,7 +434,9 @@ export async function confirmImport(
   const warnings: ConfirmImportWarning[] = [];
 
   for (const importedPassage of row.passages) {
-    const parsedPassage = passageSchema.parse({ title: importedPassage.title, content: importedPassage.content || " " });
+    // Phase G0 — imports staged before the normaliser existed still reach students as running text (it is idempotent, so already-tidied text is unchanged).
+    const passageText = row.type === "READING" ? normalizePassage(importedPassage.content) : importedPassage.content;
+    const parsedPassage = passageSchema.parse({ title: importedPassage.title, content: passageText || " " });
     const groups: PlannedGroup[] = [];
 
     for (const group of importedPassage.questionGroups) {

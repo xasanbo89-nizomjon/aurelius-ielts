@@ -34,7 +34,9 @@ export function ExamTimer({
   /** Phase E — names what is being counted down when it isn't the whole test (e.g. "Transfer time"). */
   label?: string;
 }) {
-  const [remaining, setRemaining] = useState(durationSeconds);
+  // null, NaN or infinite = untimed. (0 is a real value: the time has already run out.)
+  const usableSeconds = durationSeconds != null && Number.isFinite(durationSeconds) ? Math.max(0, Math.floor(durationSeconds)) : null;
+  const [remaining, setRemaining] = useState(usableSeconds);
   const [announcement, setAnnouncement] = useState("");
   const expiredRef = useRef(false);
   const announcedRef = useRef<Set<number>>(new Set());
@@ -42,8 +44,8 @@ export function ExamTimer({
   onExpireRef.current = onExpire;
 
   useEffect(() => {
-    if (durationSeconds == null) return;
-    const deadline = Date.now() + durationSeconds * 1000;
+    if (usableSeconds == null) return;
+    const deadline = Date.now() + usableSeconds * 1000;
 
     function tick() {
       const next = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
@@ -69,9 +71,9 @@ export function ExamTimer({
       clearInterval(interval);
       document.removeEventListener("visibilitychange", tick);
     };
-  }, [durationSeconds]);
+  }, [usableSeconds]);
 
-  if (durationSeconds == null || remaining == null) {
+  if (usableSeconds == null || remaining == null) {
     return (
       <span className="text-muted-foreground inline-flex items-center gap-1.5 text-sm font-medium">
         <Clock className="size-4" aria-hidden="true" />

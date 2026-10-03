@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
 import { summarizeAttemptSlots } from "@/lib/exam/question-numbering";
+import { allowedSecondsFor, timeUsedSeconds } from "@/lib/exam/timing";
 import type { ExamAttachment } from "@/components/exam/passage-attachments";
 import type { QuestionType, SkillType, VocabularyStatus } from "@prisma/client";
 
@@ -365,12 +366,15 @@ export async function getAttemptReviewForTeacher(teacherId: string, resultId: st
     select: {
       id: true,
       skill: true,
+      startedAt: true,
       completedAt: true,
       durationSeconds: true,
       bandScore: true,
+      fullMockSectionResult: { select: { section: true } },
       mockTest: {
         select: {
           title: true,
+          durationMinutes: true,
           // Phase 46 — real passage text / real Listening transcript (same
           // `content` field), so the teacher's read-only review can show the
           // same split-screen review a student sees.
@@ -404,7 +408,14 @@ export async function getAttemptReviewForTeacher(teacherId: string, resultId: st
     testName: result.mockTest.title,
     testType: result.skill as Extract<SkillType, "READING" | "LISTENING">,
     completedAt: result.completedAt as Date,
-    durationSeconds: result.durationSeconds,
+    // Capped at what the test allows (an attempt left open for hours used the test's time, not the hours) — computed from the stored start and end.
+    durationSeconds: result.completedAt
+      ? timeUsedSeconds({
+          startedAt: result.startedAt,
+          endedAt: result.completedAt,
+          allowedSeconds: allowedSecondsFor({ durationMinutes: result.mockTest.durationMinutes, fullMockSection: result.fullMockSectionResult?.section }),
+        })
+      : result.durationSeconds,
     bandScore: result.bandScore,
     passages: result.mockTest.passages,
     questions: result.mockTest.questions.map((question) => {
