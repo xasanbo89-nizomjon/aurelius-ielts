@@ -2,7 +2,10 @@ import "server-only";
 import type { WritingTaskCategory, WritingTaskNumber, WritingTaskStatus, WritingTrainingType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { recordMediaUsage, removeMediaUsage } from "@/lib/media-library";
+import { recordMediaUsage, removeMediaUsage, uploadMediaFile } from "@/lib/media-library";
+import { WRITING_TASK_IMAGE_MAX_BYTES, validateWritingTaskImageFile } from "@/lib/uploads/image-constraints";
+import { inspectImage } from "@/lib/uploads/image-processing";
+import { taskImageFromRow, type WritingTaskImage } from "@/lib/writing-task-image";
 import type { CreateWritingTaskInput, WritingTaskStatusValue } from "@/lib/validations/writing";
 
 /** Never trusts client-supplied student ids blindly — a teacher may only ever assign their OWN students, same single-tenant rule as everywhere else in this codebase. */
@@ -13,8 +16,80 @@ async function assertOwnStudents(teacherId: string, studentIds: string[]): Promi
   }
 }
 
+/** The picture columns of a task with no picture. */
+const NO_IMAGE = { imageMediaFileId: null, imageUrl: null, imageType: null, imageWidth: null, imageHeight: null } as const;
+
+/**
+ * Phase F — the picture columns a task is saved with. The browser only says WHICH Media Library file; the URL,
+ * MIME type and pixel size are read from that file here, so they can never disagree with it and can't be forged,
+ * and a teacher can only attach a picture from their OWN library. Only Task 1 has a picture (Task 2 is an essay
+ * question): anything sent for a Task 2 is dropped.
+ */
+async function resolveTaskImageColumns(teacherId: string, taskNumber: string, mediaFileId: string | null | undefined) {
+  if (taskNumber !== "TASK_1" || !mediaFileId) return NO_IMAGE;
+  const file = await prisma.mediaFile.findFirst({
+    where: { id: mediaFileId, ownerId: teacherId, type: "IMAGE" },
+    select: { id: true, path: true, mimeType: true, width: true, height: true },
+  });
+  if (!file) throw new Error("That picture isn't in your Media Library any more — upload it again.");
+  return { imageMediaFileId: file.id, imageUrl: file.path, imageType: file.mimeType, imageWidth: file.width, imageHeight: file.height };
+}
+
+/** The longest side a Task 1 picture may have, in pixels — a guard against decompression bombs, far above any real chart. */
+const MAX_IMAGE_SIDE_PX = 10_000;
+
+export type UploadedWritingTaskImage = WritingTaskImage & { reused: boolean };
+
+/**
+ * Phase F — uploads a Task 1 picture (JPG, JPEG, PNG or WEBP, at most 10MB) into the teacher's Media Library — the
+ * one real upload path — and returns the metadata the editor needs. The browser's extension and MIME type are only a
+ * first filter: the BYTES are decoded here, and anything that isn't really a JPEG, PNG or WEBP is refused.
+ */
+export async function uploadWritingTaskImage(
+  teacherId: string,
+  file: { name: string; size: number; type?: string; buffer: Buffer }
+): Promise<UploadedWritingTaskImage> {
+  const validation = validateWritingTaskImageFile({ name: file.name, size: file.buffer.length, type: file.type });
+  if (!validation.valid) throw new Error(validation.error);
+
+  const inspected = await inspectImage(file.buffer);
+  if (!inspected || !["jpeg", "png", "webp"].includes(inspected.format)) {
+    throw new Error("That file isn't a real JPG, PNG or WEBP image — it can't be used for a task.");
+  }
+  if (Math.max(inspected.width, inspected.height) > MAX_IMAGE_SIDE_PX) {
+    throw new Error(`That image is ${inspected.width} × ${inspected.height} px — the longest side can be at most ${MAX_IMAGE_SIDE_PX.toLocaleString("en-US")} px.`);
+  }
+
+  const uploaded = await uploadMediaFile(teacherId, { ...file, size: file.buffer.length }, { kind: "image", maxImageBytes: WRITING_TASK_IMAGE_MAX_BYTES });
+  return {
+    mediaFileId: uploaded.id,
+    url: uploaded.path,
+    type: uploaded.mimeType,
+    width: uploaded.width,
+    height: uploaded.height,
+    sizeBytes: uploaded.size,
+    fileName: uploaded.fileName,
+    reused: uploaded.reused,
+  };
+}
+
+/**
+ * Sets (or, with null, removes) the picture of an existing task of this teacher — columns and reuse tracking
+ * together. A task's picture can be replaced or deleted without touching the library file itself, which stays
+ * in the teacher's Media Library for reuse.
+ */
+export async function setWritingTaskImage(taskId: string, teacherId: string, mediaFileId: string | null): Promise<void> {
+  const task = await prisma.writingTask.findFirst({ where: { id: taskId, createdById: teacherId }, select: { id: true, taskNumber: true } });
+  if (!task) throw new Error("Writing task not found.");
+  const columns = await resolveTaskImageColumns(teacherId, task.taskNumber, mediaFileId);
+  await prisma.writingTask.update({ where: { id: taskId }, data: columns });
+  await removeMediaUsage("WRITING_TASK_VISUAL", taskId);
+  if (columns.imageMediaFileId) await recordMediaUsage(columns.imageMediaFileId, "WRITING_TASK_VISUAL", taskId);
+}
+
 export async function createWritingTask(teacherId: string, input: CreateWritingTaskInput) {
   await assertOwnStudents(teacherId, input.assignedStudentIds);
+  const image = await resolveTaskImageColumns(teacherId, input.taskNumber, input.imageMediaFileId);
   const task = await prisma.writingTask.create({
     data: {
       title: input.title,
@@ -23,7 +98,7 @@ export async function createWritingTask(teacherId: string, input: CreateWritingT
       category: input.category,
       prompt: input.prompt,
       visualDescription: input.visualDescription || null,
-      imageMediaFileId: input.imageMediaFileId || null,
+      ...image,
       coverImagePath: input.coverImagePath || null,
       targetBand: input.targetBand ?? null,
       dueDate: input.dueDate ?? null,
@@ -31,8 +106,8 @@ export async function createWritingTask(teacherId: string, input: CreateWritingT
       assignments: { create: input.assignedStudentIds.map((studentId) => ({ studentId })) },
     },
   });
-  if (input.imageMediaFileId) {
-    await recordMediaUsage(input.imageMediaFileId, "WRITING_TASK_VISUAL", task.id);
+  if (image.imageMediaFileId) {
+    await recordMediaUsage(image.imageMediaFileId, "WRITING_TASK_VISUAL", task.id);
   }
   return task;
 }
@@ -45,6 +120,7 @@ export async function updateWritingTask(taskId: string, teacherId: string, input
     select: { id: true, assignments: { select: { studentId: true } } },
   });
   if (!task) throw new Error("Writing task not found.");
+  const image = await resolveTaskImageColumns(teacherId, input.taskNumber, input.imageMediaFileId);
 
   const currentStudentIds = new Set(task.assignments.map((a) => a.studentId));
   const nextStudentIds = new Set(input.assignedStudentIds);
@@ -61,7 +137,7 @@ export async function updateWritingTask(taskId: string, teacherId: string, input
         category: input.category,
         prompt: input.prompt,
         visualDescription: input.visualDescription || null,
-        imageMediaFileId: input.imageMediaFileId || null,
+        ...image,
         coverImagePath: input.coverImagePath || null,
         targetBand: input.targetBand ?? null,
         dueDate: input.dueDate ?? null,
@@ -78,8 +154,8 @@ export async function updateWritingTask(taskId: string, teacherId: string, input
   // Real reuse-tracking stays correct on every save, not just create: clear
   // the old link (harmless no-op if there wasn't one) and record the new one.
   await removeMediaUsage("WRITING_TASK_VISUAL", taskId);
-  if (input.imageMediaFileId) {
-    await recordMediaUsage(input.imageMediaFileId, "WRITING_TASK_VISUAL", taskId);
+  if (image.imageMediaFileId) {
+    await recordMediaUsage(image.imageMediaFileId, "WRITING_TASK_VISUAL", taskId);
   }
 }
 
@@ -118,7 +194,7 @@ export async function listWritingTasksForTeacher(teacherId: string) {
     include: {
       _count: { select: { submissions: true } },
       assignments: { select: { studentId: true, student: { select: { user: { select: { name: true, email: true } } } } } },
-      imageMediaFile: { select: { id: true, path: true } },
+      imageMediaFile: { select: { id: true, path: true, mimeType: true, width: true, height: true, size: true, fileName: true } },
     },
   });
 }
@@ -128,7 +204,7 @@ export async function getWritingTaskForTeacher(taskId: string, teacherId: string
     where: { id: taskId, createdById: teacherId },
     include: {
       assignments: { select: { studentId: true } },
-      imageMediaFile: { select: { id: true, path: true } },
+      imageMediaFile: { select: { id: true, path: true, mimeType: true, width: true, height: true, size: true, fileName: true } },
     },
   });
 }
@@ -143,6 +219,10 @@ export type AssignedWritingTask = {
   visualDescription: string | null;
   /** Phase 42 — Part 11's real uploaded Task 1 visual, resolved to its real Media Library URL. Null for Task 2 or a task still only using the text description. */
   imageUrl: string | null;
+  /** Phase F — the picture's MIME type and real pixel size, so the page can lay it out at its true proportions. Null together with imageUrl. */
+  imageType: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
   targetBand: number | null;
   dueDate: Date | null;
 };
@@ -166,14 +246,21 @@ export async function getAssignedTaskForStudent(taskId: string, studentId: strin
       category: true,
       prompt: true,
       visualDescription: true,
-      imageMediaFile: { select: { path: true } },
+      imageMediaFileId: true,
+      imageUrl: true,
+      imageType: true,
+      imageWidth: true,
+      imageHeight: true,
+      imageMediaFile: { select: { id: true, path: true, mimeType: true, width: true, height: true } },
       targetBand: true,
       dueDate: true,
     },
   });
   if (!task) return null;
-  const { imageMediaFile, ...rest } = task;
-  return { ...rest, imageUrl: imageMediaFile?.path ?? null };
+  const { imageMediaFile, imageMediaFileId, imageUrl, imageType, imageWidth, imageHeight, ...rest } = task;
+  // The task's own columns first; a task saved before Phase F (link only) falls back to the library file.
+  const image = taskImageFromRow({ imageMediaFileId, imageUrl, imageType, imageWidth, imageHeight, imageMediaFile });
+  return { ...rest, imageUrl: image?.url ?? null, imageType: image?.type ?? null, imageWidth: image?.width ?? null, imageHeight: image?.height ?? null };
 }
 
 // ---------------------------------------------------------------------------

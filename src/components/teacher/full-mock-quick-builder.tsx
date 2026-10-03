@@ -16,6 +16,7 @@ import {
   type ImportReadinessResult,
 } from "@/actions/full-mock-quick-build.actions";
 import { estimateFullMockMinutes, formatMinutes, generateFullMockDescription } from "@/lib/full-mock-metadata";
+import { FULL_MOCK_LISTENING_MINUTES, FULL_MOCK_LISTENING_TRANSFER_MINUTES, FULL_MOCK_READING_MINUTES, FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
 import { AUDIO_INPUT_ACCEPT, MAX_AUDIO_FILE_SIZE_LABEL, validateAudioFile } from "@/lib/uploads/audio-constraints";
 import { DOCUMENT_INPUT_ACCEPT, MAX_DOCUMENT_FILE_SIZE_LABEL, validateDocumentFile } from "@/lib/uploads/document-constraints";
 import { LISTENING_AUDIO_BUCKET, TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
@@ -501,7 +502,7 @@ export function FullMockQuickBuilder() {
               </div>
               <Textarea id="quick-description" rows={3} value={shownDescription} onChange={(event) => setDescription(event.target.value)} />
               <p className="text-muted-foreground text-xs">
-                Total time: about {formatMinutes(estimateFullMockMinutes(summary))} (Listening 30 min, Reading 60 min, Writing 60 min).
+                Total time: about {formatMinutes(estimateFullMockMinutes(summary))} (Listening {FULL_MOCK_LISTENING_MINUTES} min + {FULL_MOCK_LISTENING_TRANSFER_MINUTES} min transfer, Reading {FULL_MOCK_READING_MINUTES} min, Writing {FULL_MOCK_WRITING_MINUTES} min).
               </p>
             </div>
 

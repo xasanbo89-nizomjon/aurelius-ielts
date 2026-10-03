@@ -61,6 +61,10 @@ export type UploadMediaFileResult = {
   path: string;
   thumbnailPath: string | null;
   size: number;
+  /** Phase F — what the stored file really is (after compression), so a caller can keep its type and pixel size without a second lookup. */
+  mimeType: string;
+  width: number | null;
+  height: number | null;
   /** True when this exact file (by content) was already in the teacher's library — the existing row was reused, nothing new was uploaded or created. */
   reused: boolean;
 };
@@ -80,11 +84,11 @@ export type UploadMediaFileResult = {
 export async function uploadMediaFile(
   teacherId: string,
   file: { name: string; size: number; type?: string; buffer: Buffer },
-  options: { folderId?: string; kind: "image" | "audio" | "document"; title?: string; description?: string }
+  options: { folderId?: string; kind: "image" | "audio" | "document"; title?: string; description?: string; /** Phase F — a larger image limit for a caller that needs one (the Writing Task 1 picture: 10MB). Default is the library-wide 5MB. */ maxImageBytes?: number }
 ): Promise<UploadMediaFileResult> {
   const validation =
     options.kind === "image"
-      ? validateImageFile(file)
+      ? validateImageFile(file, { maxBytes: options.maxImageBytes })
       : options.kind === "audio"
         ? validateAudioFile(file)
         : validateDocumentFile(file);
@@ -107,6 +111,9 @@ export async function uploadMediaFile(
       path: existing.path,
       thumbnailPath: existing.thumbnailPath,
       size: existing.size,
+      mimeType: existing.mimeType,
+      width: existing.width,
+      height: existing.height,
       reused: true,
     };
   }
@@ -165,6 +172,9 @@ export async function uploadMediaFile(
     path: created.path,
     thumbnailPath: created.thumbnailPath,
     size: created.size,
+    mimeType: created.mimeType,
+    width: created.width,
+    height: created.height,
     reused: false,
   };
 }
@@ -270,7 +280,7 @@ export async function deleteMediaFile(fileId: string, teacherId: string): Promis
   const file = await prisma.mediaFile.findFirst({ where: { id: fileId, ownerId: teacherId }, include: { _count: { select: { usages: true } } } });
   if (!file) throw new OwnershipError("You don't have access to this file.");
   if (file._count.usages > 0) {
-    throw new Error("This file is still used by a Reading, Listening, or Article item — remove it there first.");
+    throw new Error("This file is still used by a Reading, Listening, Writing, or Article item — remove it there first.");
   }
   await prisma.mediaFile.delete({ where: { id: fileId } });
 }
@@ -341,6 +351,13 @@ export async function replaceMediaFile(
     },
   });
 
+  // Phase F - a Writing task keeps a copy of its picture's URL, type and pixel size (so the student page needs no join). Replacing the library
+  // file in place must still reach every task that uses it, exactly as it reaches passages and articles, so the copies are refreshed here.
+  await prisma.writingTask.updateMany({
+    where: { imageMediaFileId: fileId },
+    data: { imageUrl: updated.path, imageType: updated.mimeType, imageWidth: updated.width, imageHeight: updated.height },
+  });
+
   return {
     id: updated.id,
     fileName: updated.fileName,
@@ -350,6 +367,9 @@ export async function replaceMediaFile(
     path: updated.path,
     thumbnailPath: updated.thumbnailPath,
     size: updated.size,
+    mimeType: updated.mimeType,
+    width: updated.width,
+    height: updated.height,
     reused: false,
   };
 }

@@ -27,6 +27,8 @@ export const fullMockWritingTaskSchema = z
     title: z.string().trim().min(3, "Title must be at least 3 characters.").max(160),
     prompt: z.string().trim().min(10, "Add the task prompt.").max(2000),
     visualDescription: z.string().trim().max(2000).optional(),
+    /** Phase F - the Task 1 picture: a Media Library file id from the teacher's own library, or null to have none. Left out = leave the task's picture as it is. */
+    imageMediaFileId: z.string().trim().min(1).nullish(),
   })
   .refine(
     (data) => {

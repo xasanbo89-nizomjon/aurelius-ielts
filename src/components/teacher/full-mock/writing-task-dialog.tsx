@@ -9,12 +9,14 @@ import { saveFullMockWritingTaskAction } from "@/actions/full-mock-tests.actions
 import { TASK_1_CATEGORIES, TASK_2_CATEGORIES } from "@/lib/validations/writing";
 import { WRITING_TASK_CATEGORY_LABELS } from "@/lib/labels";
 import { TASK_1_MIN_WORDS, TASK_2_MIN_WORDS } from "@/lib/full-mock-constants";
+import type { WritingTaskImage } from "@/lib/writing-task-image";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { WritingTaskImageField } from "@/components/teacher/writing-task-image-field";
 
 export type ExistingFullMockWritingTask = {
   sectionId: string;
@@ -23,6 +25,8 @@ export type ExistingFullMockWritingTask = {
   category: WritingTaskCategory;
   prompt: string;
   visualDescription: string | null;
+  /** Phase F - the Task 1 picture, or null. */
+  image: WritingTaskImage | null;
 };
 
 export function WritingTaskDialog({
@@ -47,6 +51,7 @@ export function WritingTaskDialog({
   const [category, setCategory] = useState<WritingTaskCategory>(categoryOptions[0]);
   const [prompt, setPrompt] = useState("");
   const [visualDescription, setVisualDescription] = useState("");
+  const [image, setImage] = useState<WritingTaskImage | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -55,6 +60,7 @@ export function WritingTaskDialog({
     setCategory(existing?.category ?? categoryOptions[0]);
     setPrompt(existing?.prompt ?? "");
     setVisualDescription(existing?.visualDescription ?? "");
+    setImage(existing?.image ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, existing]);
 
@@ -67,6 +73,7 @@ export function WritingTaskDialog({
       title,
       prompt,
       visualDescription: visualDescription.trim() || undefined,
+      imageMediaFileId: taskNumber === "TASK_1" ? (image?.mediaFileId ?? null) : null,
     });
     setSubmitting(false);
 
@@ -129,7 +136,10 @@ export function WritingTaskDialog({
 
           {taskNumber === "TASK_1" && (
             <div className="space-y-1.5">
-              <Label htmlFor="fm-task-visual">Visual description (optional)</Label>
+              <Label>Picture (chart, graph, table, map, or process)</Label>
+              <WritingTaskImageField value={image} onChange={setImage} disabled={submitting} />
+              <p className="text-muted-foreground text-xs">Optional — shown to students above the task text. A PDF can&apos;t carry the picture, so add it here.</p>
+              <Label htmlFor="fm-task-visual" className="pt-1.5">Visual description (optional)</Label>
               <Textarea
                 id="fm-task-visual"
                 rows={3}

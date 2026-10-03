@@ -6,7 +6,7 @@ import { getQuestionNumberCounts } from "@/lib/exam/question-counts";
 import { collectTestDependencies, deleteStoredFilesIfUnreferenced } from "@/lib/exam/test-management";
 import { deleteBucketObjects } from "@/lib/uploads/storage-cleanup";
 import { TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
-import { createWritingTask, setWritingTaskStatus } from "@/lib/writing-tasks";
+import { createWritingTask, setWritingTaskImage, setWritingTaskStatus } from "@/lib/writing-tasks";
 import { createSpeakingTask, setSpeakingTaskStatus } from "@/lib/speaking";
 import {
   FULL_MOCK_LISTENING_MINUTES,
@@ -329,6 +329,8 @@ export type FullMockWritingTaskInput = {
   title: string;
   prompt: string;
   visualDescription?: string;
+  /** Phase F - the Task 1 picture (a Media Library file id), null to remove it, undefined to leave it as it is. */
+  imageMediaFileId?: string | null;
 };
 
 export async function saveFullMockWritingTask(fullMockTestId: string, teacherId: string, input: FullMockWritingTaskInput): Promise<void> {
@@ -350,6 +352,7 @@ export async function saveFullMockWritingTask(fullMockTestId: string, teacherId:
         visualDescription: input.visualDescription || null,
       },
     });
+    if (input.imageMediaFileId !== undefined) await setWritingTaskImage(section.writingTaskId, teacherId, input.imageMediaFileId);
     return;
   }
 
@@ -360,6 +363,7 @@ export async function saveFullMockWritingTask(fullMockTestId: string, teacherId:
     category: input.category,
     prompt: input.prompt,
     visualDescription: input.visualDescription,
+    imageMediaFileId: input.imageMediaFileId ?? undefined,
     assignedStudentIds: [],
   });
 
@@ -564,7 +568,10 @@ export async function getFullMockTestForEdit(id: string, teacherId: string) {
             _count: { select: { questions: true } },
           }, } },
       },
-      writingSections: { orderBy: { orderIndex: "asc" }, include: { writingTask: true } },
+      writingSections: {
+        orderBy: { orderIndex: "asc" },
+        include: { writingTask: { include: { imageMediaFile: { select: { id: true, path: true, mimeType: true, width: true, height: true, size: true, fileName: true } } } } },
+      },
       speakingSections: { orderBy: { orderIndex: "asc" }, include: { speakingTask: true } },
       _count: { select: { attempts: true } },
     },

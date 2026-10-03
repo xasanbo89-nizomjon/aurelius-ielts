@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { FolderOpen, Loader2, Trash2, Upload } from "lucide-react";
+import { Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { createWritingTaskAction, updateWritingTaskAction, uploadWritingTaskCoverImageAction } from "@/actions/writing-tasks.actions";
-import { uploadMediaFileAction } from "@/actions/media-library.actions";
 import { IMAGE_INPUT_ACCEPT, validateImageFile } from "@/lib/uploads/image-constraints";
 import { TASK_1_CATEGORIES, TASK_2_CATEGORIES, type WritingTaskCategoryValue, type WritingTrainingTypeValue } from "@/lib/validations/writing";
 import { WRITING_TASK_CATEGORY_LABELS } from "@/lib/labels";
+import type { WritingTaskImage } from "@/lib/writing-task-image";
 import type { StudentOption } from "@/lib/teacher-students";
 import {
   Dialog,
@@ -25,7 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { MediaFilePickerDialog } from "@/components/teacher/media-file-picker-dialog";
+import { WritingTaskImageField } from "@/components/teacher/writing-task-image-field";
 import { FallbackImage } from "@/components/ui/fallback-image";
 
 type TaskNumberValue = "TASK_1" | "TASK_2";
@@ -38,8 +38,8 @@ export type ExistingWritingTask = {
   category: WritingTaskCategoryValue;
   prompt: string;
   visualDescription: string | null;
-  imageMediaFileId: string | null;
-  imagePath: string | null;
+  /** Phase F - the Task 1 picture (its Media Library file and stored metadata), or null. */
+  image: WritingTaskImage | null;
   coverImagePath: string | null;
   targetBand: number | null;
   dueDate: Date | null;
@@ -72,10 +72,7 @@ export function WritingTaskEditorDialog({
   const [category, setCategory] = useState<WritingTaskCategoryValue>("OPINION");
   const [prompt, setPrompt] = useState("");
   const [visualDescription, setVisualDescription] = useState("");
-  const [imageMediaFileId, setImageMediaFileId] = useState<string | null>(null);
-  const [imagePath, setImagePath] = useState<string | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [image, setImage] = useState<WritingTaskImage | null>(null);
   const [coverImagePath, setCoverImagePath] = useState<string | null>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
   const coverFileInputRef = useRef<HTMLInputElement>(null);
@@ -83,7 +80,6 @@ export function WritingTaskEditorDialog({
   const [dueDate, setDueDate] = useState("");
   const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const categoryOptions = taskNumber === "TASK_1" ? TASK_1_CATEGORIES : TASK_2_CATEGORIES;
 
@@ -95,38 +91,12 @@ export function WritingTaskEditorDialog({
     setCategory(existingTask?.category ?? "OPINION");
     setPrompt(existingTask?.prompt ?? "");
     setVisualDescription(existingTask?.visualDescription ?? "");
-    setImageMediaFileId(existingTask?.imageMediaFileId ?? null);
-    setImagePath(existingTask?.imagePath ?? null);
+    setImage(existingTask?.image ?? null);
     setCoverImagePath(existingTask?.coverImagePath ?? null);
     setTargetBand(existingTask?.targetBand != null ? String(existingTask.targetBand) : "");
     setDueDate(toDateInputValue(existingTask?.dueDate ?? null));
     setAssignedStudentIds(existingTask?.assignedStudentIds ?? []);
   }, [open, existingTask]);
-
-  async function handleImageFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    const validation = validateImageFile(file);
-    if (!validation.valid) {
-      toast.error(validation.error);
-      return;
-    }
-
-    setUploadingImage(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("kind", "image");
-    const result = await uploadMediaFileAction(formData);
-    setUploadingImage(false);
-    if (!result.success) {
-      toast.error(result.error);
-      return;
-    }
-    setImageMediaFileId(result.file.id);
-    setImagePath(result.file.path);
-  }
 
   async function handleCoverFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -151,21 +121,13 @@ export function WritingTaskEditorDialog({
     setCoverImagePath(result.path ?? null);
   }
 
-  function handlePickFromLibrary(file: { id: string; path: string }) {
-    setImageMediaFileId(file.id);
-    setImagePath(file.path);
-  }
-
   function handleTaskNumberChange(value: TaskNumberValue) {
     setTaskNumber(value);
     const validCategories = value === "TASK_1" ? TASK_1_CATEGORIES : TASK_2_CATEGORIES;
     if (!(validCategories as readonly string[]).includes(category)) {
       setCategory(validCategories[0]);
     }
-    if (value === "TASK_2") {
-      setImageMediaFileId(null);
-      setImagePath(null);
-    }
+    if (value === "TASK_2") setImage(null);
   }
 
   function toggleStudent(studentId: string, checked: boolean) {
@@ -181,7 +143,7 @@ export function WritingTaskEditorDialog({
       category,
       prompt,
       visualDescription: visualDescription.trim() || undefined,
-      imageMediaFileId: taskNumber === "TASK_1" ? (imageMediaFileId ?? undefined) : undefined,
+      imageMediaFileId: taskNumber === "TASK_1" ? (image?.mediaFileId ?? undefined) : undefined,
       coverImagePath: coverImagePath ?? undefined,
       targetBand: targetBand.trim() ? Number(targetBand) : undefined,
       dueDate: dueDate.trim() ? new Date(`${dueDate}T00:00:00`) : undefined,
@@ -311,37 +273,9 @@ export function WritingTaskEditorDialog({
 
           {taskNumber === "TASK_1" && (
             <div className="space-y-1.5">
-              <Label>Visual (chart, graph, table, map, or process)</Label>
-              <input ref={fileInputRef} type="file" accept={IMAGE_INPUT_ACCEPT} className="hidden" onChange={handleImageFileChange} />
-              {imagePath ? (
-                <div className="border-border/70 bg-secondary/20 relative w-full max-w-xs overflow-hidden rounded-xl border">
-                  <div className="bg-secondary relative aspect-video">
-                    <FallbackImage src={imagePath} alt="Task 1 visual" fill sizes="320px" className="object-cover" unoptimized />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImageMediaFileId(null);
-                      setImagePath(null);
-                    }}
-                    aria-label="Remove image"
-                    className="bg-background/90 text-muted-foreground hover:text-destructive absolute top-1.5 right-1.5 rounded-full p-1.5"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" size="sm" disabled={uploadingImage} onClick={() => fileInputRef.current?.click()}>
-                    {uploadingImage ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
-                    Upload image
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
-                    <FolderOpen className="size-3.5" /> Library
-                  </Button>
-                </div>
-              )}
-              <p className="text-muted-foreground text-xs">Optional — a real image is clearer than a text description, but not required.</p>
+              <Label>Picture (chart, graph, table, map, or process)</Label>
+              <WritingTaskImageField value={image} onChange={setImage} disabled={submitting} />
+              <p className="text-muted-foreground text-xs">Optional — shown to students above the task text. A real picture is clearer than a description.</p>
               <Label htmlFor="task-visual" className="pt-1.5">
                 Visual description (optional, shown alongside or instead of the image)
               </Label>
@@ -438,7 +372,6 @@ export function WritingTaskEditorDialog({
         </DialogFooter>
       </DialogContent>
 
-      <MediaFilePickerDialog open={pickerOpen} onOpenChange={setPickerOpen} onSelect={handlePickFromLibrary} />
     </Dialog>
   );
 }

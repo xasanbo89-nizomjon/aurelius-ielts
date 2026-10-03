@@ -11,6 +11,7 @@ import { generateWritingRecommendation } from "@/lib/ai/services/writing-recomme
 import { AIServiceUnavailableError } from "@/lib/ai/errors";
 import { getOpenAIModel } from "@/lib/ai/openai";
 import { WRITING_TASK_CATEGORY_LABELS } from "@/lib/labels";
+import { taskImageFromRow, type WritingTaskImage } from "@/lib/writing-task-image";
 import type { GrammarIssueCategory } from "@/lib/ai/prompts/writing-analysis";
 
 export type { GrammarIssueCategory };
@@ -90,6 +91,8 @@ export type WritingSubmissionReport = {
   reviewedAt: Date | null;
   studentName: string | null;
   createdAt: Date;
+  /** Phase F - the Task 1 picture of the task this essay answers, so a reviewer (or the student reading feedback) sees the chart the essay describes. Null for Task 2, a free-typed prompt, or a task with no picture. */
+  taskImage: WritingTaskImage | null;
   analysis: WritingAnalysisRecord | null;
   rewrites: WritingRewriteRecord[];
   sentenceImprovements: SentenceImprovementRecord[];
@@ -616,6 +619,7 @@ function toReport(submission: {
   reviewedAt: Date | null;
   createdAt: Date;
   student: { user: { name: string | null } };
+  task: Parameters<typeof taskImageFromRow>[0] | null;
   analysis: Parameters<typeof toAnalysisRecord>[0] | null;
   rewrites: Parameters<typeof toRewriteRecord>[0][];
   sentenceImprovements: Parameters<typeof toSentenceRecord>[0][];
@@ -635,6 +639,7 @@ function toReport(submission: {
     reviewedAt: submission.reviewedAt,
     studentName: submission.student.user.name,
     createdAt: submission.createdAt,
+    taskImage: submission.task ? taskImageFromRow(submission.task) : null,
     analysis: submission.analysis ? toAnalysisRecord(submission.analysis) : null,
     rewrites: submission.rewrites.map(toRewriteRecord).sort((a, b) => a.targetBand - b.targetBand),
     sentenceImprovements: submission.sentenceImprovements.map(toSentenceRecord).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
@@ -643,6 +648,16 @@ function toReport(submission: {
 
 const REPORT_INCLUDE = {
   student: { include: { user: { select: { name: true } } } },
+  task: {
+    select: {
+      imageMediaFileId: true,
+      imageUrl: true,
+      imageType: true,
+      imageWidth: true,
+      imageHeight: true,
+      imageMediaFile: { select: { id: true, path: true, mimeType: true, width: true, height: true, size: true, fileName: true } },
+    },
+  },
   analysis: true,
   rewrites: true,
   sentenceImprovements: true,

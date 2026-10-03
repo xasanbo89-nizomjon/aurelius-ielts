@@ -7,6 +7,7 @@ import { requireStudentProfile } from "@/lib/session";
 import { getSubmissionReportForStudent } from "@/lib/ai/writing";
 import { findInProgressFullMockLinkForWritingSubmission } from "@/lib/full-mock-attempts";
 import { Button } from "@/components/ui/button";
+import { WritingTaskImageView } from "@/components/student/writing-task-image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { WritingAnalysisView } from "@/components/student/writing-analysis-view";
@@ -62,7 +63,12 @@ export default async function WritingReportPage({
         <CardHeader>
           <CardTitle className="text-base">Task prompt</CardTitle>
         </CardHeader>
-        <CardContent className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap">{report.prompt}</CardContent>
+        <CardContent className="text-sm leading-relaxed">
+          {report.taskImage && (
+            <WritingTaskImageView url={report.taskImage.url} width={report.taskImage.width} height={report.taskImage.height} alt="Task 1 picture" maxHeightClass="max-h-[60vh]" className="mb-3" />
+          )}
+          <p className="text-muted-foreground whitespace-pre-wrap">{report.prompt}</p>
+        </CardContent>
       </Card>
 
       <Card>

@@ -26,6 +26,26 @@ export async function uploadWritingTaskCoverImageAction(formData: FormData): Pro
   }
 }
 
+export type UploadWritingTaskImageResult = { success: true; image: writingTasks.UploadedWritingTaskImage } | { success: false; error: string };
+
+/**
+ * Phase F — uploads a Task 1 picture (JPG / JPEG / PNG / WEBP, up to 10MB) and returns its stored metadata. Nothing
+ * is attached to a task yet: the editor holds the result until the teacher saves the task, so abandoning the dialog
+ * leaves no task half-changed. The file is checked again here, on the server, down to its actual bytes.
+ */
+export async function uploadWritingTaskImageAction(formData: FormData): Promise<UploadWritingTaskImageResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    const file = formData.get("file");
+    if (!(file instanceof File)) return { success: false, error: "No file was provided." };
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const image = await writingTasks.uploadWritingTaskImage(profile.id, { name: file.name, size: file.size, type: file.type, buffer });
+    return { success: true, image };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not upload the image.") };
+  }
+}
+
 export async function createWritingTaskAction(input: CreateWritingTaskInput): Promise<ActionResult> {
   try {
     const { profile } = await requireTeacherProfile();

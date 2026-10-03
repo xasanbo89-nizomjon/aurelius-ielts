@@ -1002,6 +1002,11 @@ model WritingTask {
   /// tasks still only using the text description above.
   imageMediaFileId  String?
   imageMediaFile    MediaFile?          @relation(fields: [imageMediaFileId], references: [id], onDelete: SetNull)
+  /// Phase F - the Task 1 picture's metadata, copied from the Media Library file at save time (never taken from the browser) so the student pages can show the picture at its real proportions with no join and no layout shift. imageUrl = the served URL, imageType = its MIME type (image/jpeg | image/png | image/webp), width/height = real pixels read from the file. All null when the task has no picture. Tasks saved before Phase F have these null and fall back to imageMediaFile.
+  imageUrl          String?
+  imageType         String?
+  imageWidth        Int?
+  imageHeight       Int?
   /// Phase 14 — supersedes the old `isPublished` boolean with a real
   /// 3-state lifecycle (Create -> Publish -> Archive), matching the Root
   /// Teacher Writing Tasks workflow. Only PUBLISHED tasks are ever visible

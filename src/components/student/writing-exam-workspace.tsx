@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { WritingSubmitReviewDialog } from "@/components/student/writing-submit-review-dialog";
-import { FallbackImage } from "@/components/ui/fallback-image";
+import { WritingTaskImageView } from "@/components/student/writing-task-image";
 
 /** Real IELTS convention: Task 1 = 20 minutes, Task 2 = 40 minutes. Purely a visible countdown — never force-submits, since an essay submission must always be a deliberate student action. */
 const TASK_DURATION_SECONDS: Record<AssignedWritingTask["taskNumber"], number> = {
@@ -206,18 +206,16 @@ export function WritingExamWorkspace({ task, draft }: { task: AssignedWritingTas
           </div>
         )}
 
-        <div className="border-border/70 shrink-0 space-y-2 rounded-lg border p-4">
+        <div className="border-border/70 shrink-0 space-y-3 rounded-lg border p-4" data-testid="writing-task-panel">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-display text-base font-medium tracking-tight">{task.title}</h2>
             <Badge variant="outline">{WRITING_TRAINING_TYPE_LABELS[task.trainingType]}</Badge>
             <Badge variant="outline">{WRITING_TASK_CATEGORY_LABELS[task.category]}</Badge>
           </div>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{task.prompt}</p>
           {task.imageUrl && (
-            <div className="bg-secondary relative aspect-video w-full max-w-md overflow-hidden rounded-lg">
-              <FallbackImage src={task.imageUrl} alt="Task 1 visual" fill sizes="480px" className="object-contain" unoptimized />
-            </div>
+            <WritingTaskImageView url={task.imageUrl} width={task.imageWidth} height={task.imageHeight} alt={`${WRITING_TASK_NUMBER_LABELS[task.taskNumber]} picture`} />
           )}
+          <p className="text-sm leading-relaxed whitespace-pre-wrap" data-testid="writing-task-prompt">{task.prompt}</p>
           {task.visualDescription && <p className="text-muted-foreground text-xs">Visual: {task.visualDescription}</p>}
           <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             {task.dueDate && (
@@ -238,7 +236,7 @@ export function WritingExamWorkspace({ task, draft }: { task: AssignedWritingTas
           placeholder="Write your response here…"
           value={content}
           onChange={(event) => handleContentChange(event.target.value)}
-          className="min-h-0 flex-1 resize-none text-base leading-relaxed"
+          className="min-h-64 flex-1 resize-none text-base leading-relaxed"
         />
         <span className="flex items-center gap-1.5 text-xs tabular-nums sm:hidden">
           <span className="text-muted-foreground">{wordCount} words</span>

@@ -37,6 +37,8 @@ export default async function FullMockWritingPage({ params }: { params: Promise<
     title: task.title,
     prompt: task.prompt,
     imageUrl: task.imageUrl,
+    imageWidth: task.imageWidth,
+    imageHeight: task.imageHeight,
     visualDescription: task.visualDescription,
     minWords: task.taskNumber === "TASK_1" ? TASK_1_MIN_WORDS : TASK_2_MIN_WORDS,
     draftId,

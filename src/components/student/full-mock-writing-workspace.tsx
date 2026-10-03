@@ -12,7 +12,7 @@ import { ExamTimer } from "@/components/exam/exam-timer";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FallbackImage } from "@/components/ui/fallback-image";
+import { WritingTaskImageView } from "@/components/student/writing-task-image";
 
 export type FullMockWritingWorkspaceTask = {
   taskId: string;
@@ -20,6 +20,9 @@ export type FullMockWritingWorkspaceTask = {
   title: string;
   prompt: string;
   imageUrl: string | null;
+  /** Phase F - the picture's real pixel size, for its true proportions. */
+  imageWidth: number | null;
+  imageHeight: number | null;
   visualDescription: string | null;
   minWords: number;
   draftId: string | null;
@@ -209,17 +212,19 @@ export function FullMockWritingWorkspace({
       </div>
 
       <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-4 overflow-hidden p-3 sm:p-5 lg:grid-cols-2 lg:grid-rows-1">
-        <section aria-label={`${active.label} question`} className="border-border/70 max-h-60 space-y-3 overflow-y-auto rounded-xl border p-4 lg:max-h-none">
+        <section
+          aria-label={`${active.label} question`}
+          data-testid="writing-task-panel"
+          className={cn("border-border/70 space-y-3 overflow-y-auto rounded-xl border p-4 lg:max-h-none", active.imageUrl ? "max-h-[46svh]" : "max-h-60")}
+        >
           <h2 className="font-display text-base font-medium tracking-tight">
             {active.label}
             {active.title ? <span className="text-muted-foreground font-normal"> — {active.title}</span> : null}
           </h2>
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{active.prompt}</p>
           {active.imageUrl && (
-            <div className="bg-secondary relative aspect-video w-full max-w-lg overflow-hidden rounded-lg">
-              <FallbackImage src={active.imageUrl} alt={`${active.label} visual`} fill sizes="560px" className="object-contain" unoptimized />
-            </div>
+            <WritingTaskImageView url={active.imageUrl} width={active.imageWidth} height={active.imageHeight} alt={`${active.label} picture`} maxHeightClass="max-h-[60vh]" />
           )}
+          <p className="text-sm leading-relaxed whitespace-pre-wrap" data-testid="writing-task-prompt">{active.prompt}</p>
           {active.visualDescription && <p className="text-muted-foreground text-xs">Visual: {active.visualDescription}</p>}
         </section>
 

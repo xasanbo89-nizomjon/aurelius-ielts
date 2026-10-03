@@ -7,10 +7,12 @@ import type { WritingTaskCategory, WritingTaskNumber } from "@prisma/client";
 
 import { deleteFullMockWritingTaskAction } from "@/actions/full-mock-tests.actions";
 import { WRITING_TASK_CATEGORY_LABELS } from "@/lib/labels";
+import { describeImage, taskImageFromRow } from "@/lib/writing-task-image";
 import { WritingTaskDialog, type ExistingFullMockWritingTask } from "@/components/teacher/full-mock/writing-task-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { FallbackImage } from "@/components/ui/fallback-image";
 
 export type FullMockWritingSectionRow = {
   id: string;
@@ -21,6 +23,13 @@ export type FullMockWritingSectionRow = {
     category: WritingTaskCategory;
     prompt: string;
     visualDescription: string | null;
+    /** Phase F - the Task 1 picture: the task's own stored metadata, or (for a task saved before) its Media Library file. */
+    imageMediaFileId: string | null;
+    imageUrl: string | null;
+    imageType: string | null;
+    imageWidth: number | null;
+    imageHeight: number | null;
+    imageMediaFile: { id: string; path: string; mimeType: string; width: number | null; height: number | null; size: number; fileName: string } | null;
   };
 };
 
@@ -62,6 +71,7 @@ export function WritingStep({
       category: section.writingTask.category,
       prompt: section.writingTask.prompt,
       visualDescription: section.writingTask.visualDescription,
+      image: taskImageFromRow(section.writingTask),
     };
   }
 
@@ -82,6 +92,17 @@ export function WritingStep({
               {section ? (
                 <>
                   <p className="text-sm font-medium">{section.writingTask.title}</p>
+                  {(() => {
+                    const image = taskImageFromRow(section.writingTask);
+                    return image ? (
+                      <div className="flex items-center gap-3" data-testid={`writing-step-image-task-${n}`}>
+                        <span className="bg-secondary relative h-14 w-20 shrink-0 overflow-hidden rounded-md">
+                          <FallbackImage src={image.url} alt={`Task ${n} picture`} fill sizes="80px" className="object-cover" unoptimized />
+                        </span>
+                        <span className="text-muted-foreground text-xs tabular-nums">Picture attached · {describeImage(image)}</span>
+                      </div>
+                    ) : null;
+                  })()}
                   <p className="text-muted-foreground line-clamp-2 text-xs">{section.writingTask.prompt}</p>
                   <div className="flex gap-2 pt-1">
                     <Button type="button" size="sm" variant="outline" onClick={() => setDialogTask(taskNumber)}>

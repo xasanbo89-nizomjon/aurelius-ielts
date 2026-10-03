@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { FileCheck, Gauge, TrendingUp } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
+import { taskImageFromRow } from "@/lib/writing-task-image";
 import { listWritingTasksForTeacher } from "@/lib/writing-tasks";
 import { listStudentsForTeacher } from "@/lib/teacher-students";
 import { getTeacherWritingAnalytics } from "@/lib/teacher-writing-analytics";
@@ -113,8 +114,7 @@ export default async function TeacherWritingPage() {
             category: task.category,
             prompt: task.prompt,
             visualDescription: task.visualDescription,
-            imageMediaFileId: task.imageMediaFile?.id ?? null,
-            imagePath: task.imageMediaFile?.path ?? null,
+            image: taskImageFromRow(task),
             coverImagePath: task.coverImagePath,
             targetBand: task.targetBand,
             dueDate: task.dueDate,

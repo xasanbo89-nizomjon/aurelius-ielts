@@ -7,6 +7,19 @@ const COMPRESS_MAX_DIMENSION = 2000;
 
 export type ImageDimensions = { width: number; height: number };
 
+export type InspectedImage = ImageDimensions & { /** sharp's name for the real format of the bytes: "jpeg" | "png" | "webp" | "gif" | "svg" | … */ format: string };
+
+/** What the BYTES really are — an extension and a MIME type both come from the browser and prove nothing. Null when the bytes aren't an image sharp can read. */
+export async function inspectImage(buffer: Buffer): Promise<InspectedImage | null> {
+  try {
+    const metadata = await sharp(buffer).metadata();
+    if (!metadata.format || !metadata.width || !metadata.height) return null;
+    return { format: metadata.format, width: metadata.width, height: metadata.height };
+  } catch {
+    return null;
+  }
+}
+
 /** Real pixel dimensions read from the file itself — never guessed, never parsed from a filename. */
 export async function readImageDimensions(buffer: Buffer): Promise<ImageDimensions | null> {
   try {
