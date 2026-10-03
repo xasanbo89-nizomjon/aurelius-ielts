@@ -2,22 +2,22 @@
 
 import "./official-exam.css";
 
-import { useCallback, useState, type KeyboardEvent, type RefObject, type SyntheticEvent } from "react";
+import { useCallback, useMemo, useState, type KeyboardEvent, type RefObject, type SyntheticEvent } from "react";
 
 import { formatNumberRange } from "@/lib/exam/question-numbering";
 import type { NavNumber, PassageGroup } from "@/lib/exam/passage-groups";
 import type { QuestionGroupInfo } from "@/lib/exam/question-groups";
 import { examPreferencesCookie, textSizePx, type ExamPreferences } from "@/lib/exam/ui-preferences";
-import { passageRegion, type HighlightRange } from "@/lib/exam/text-highlight";
+import { parseRegion, passageRegion } from "@/lib/exam/text-highlight";
 import type { ExamPassage } from "@/components/exam/exam-runner";
 import type { useExamHighlights } from "@/components/exam/highlight/use-exam-highlights";
-import { HighlightSurface } from "@/components/exam/highlight/highlight-surface";
 import { useMediaQuery } from "@/components/exam/use-media-query";
+import { OfficialAnnotations } from "@/components/exam/official/official-annotations";
 import { OfficialHeader } from "@/components/exam/official/official-header";
 import { OfficialFooter, partLabelOf } from "@/components/exam/official/official-footer";
 import { OfficialPassage } from "@/components/exam/official/official-passage";
 import { OfficialQuestionGroups, type OfficialRow } from "@/components/exam/official/official-questions";
-import { OfficialRangesContext } from "@/components/exam/official/official-text";
+import { OfficialRangesContext, type DrawnHighlight } from "@/components/exam/official/official-text";
 import { OfficialSplit } from "@/components/exam/official/official-split";
 import { OfficialSubmitDialog } from "@/components/exam/official/official-submit-dialog";
 
@@ -71,7 +71,7 @@ export type OfficialExamSession = {
   totalQuestionCount: number;
 };
 
-const EMPTY: readonly HighlightRange[] = [];
+const EMPTY: readonly DrawnHighlight[] = [];
 
 export function OfficialReadingExam({ session }: { session: OfficialExamSession }) {
   const [preferences, setPreferences] = useState(session.initialPreferences);
@@ -102,6 +102,17 @@ export function OfficialReadingExam({ session }: { session: OfficialExamSession 
 
   const selectNumber = useCallback((item: NavNumber) => session.goToQuestion(item.questionId, item.number), [session]);
 
+  // "Clear all" and the menu only act on the part on screen: its passage and the questions below it.
+  const partQuestionIds = useMemo(() => new Set((section?.questions ?? []).map((row) => row.id)), [section]);
+  const inCurrentPart = useCallback(
+    (region: string) => {
+      const parsed = parseRegion(region);
+      if (!parsed) return false;
+      return parsed.kind === "passage" ? parsed.passageId === passage?.id : partQuestionIds.has(parsed.questionId);
+    },
+    [passage?.id, partQuestionIds]
+  );
+
   const passagePane = passage ? (
     <OfficialPassage
       key={passage.id}
@@ -110,11 +121,6 @@ export function OfficialReadingExam({ session }: { session: OfficialExamSession 
       content={passage.content}
       attachments={passage.attachments}
       highlights={highlights.rangesByRegion.get(passageRegion(passage.id)) ?? EMPTY}
-      getRanges={highlights.getRanges}
-      onHighlight={highlights.addHighlights}
-      onClear={highlights.clearRanges}
-      onRemove={highlights.removeHighlights}
-      toolbarContainer={root}
     />
   ) : (
     <div className="ex-pane">
@@ -124,20 +130,12 @@ export function OfficialReadingExam({ session }: { session: OfficialExamSession 
 
   const questionsPane = (
     <OfficialRangesContext.Provider value={highlights.rangesByRegion}>
-      <HighlightSurface
-        key={passage?.id ?? "questions"}
-        className="ex-pane"
-        getRanges={highlights.getRanges}
-        onHighlight={highlights.addHighlights}
-        onClear={highlights.clearRanges}
-        onRemove={highlights.removeHighlights}
-        portalContainer={root}
-      >
+      <div key={passage?.id ?? "questions"} className="ex-pane">
         {/* A <fieldset disabled> locks every answer at once while the test is being handed in: anything typed after that could no longer be saved, so it must not look as if it had been. */}
         <fieldset ref={session.panelRef} disabled={session.submitting} className="ex-questions" onFocusCapture={session.onPanelInteraction} onPointerDownCapture={session.onPanelInteraction} onKeyDown={session.onAnswerKeyDown}>
           <OfficialQuestionGroups rows={section?.questions ?? []} groups={session.groups} answers={session.answers} onAnswer={session.onAnswer} />
         </fieldset>
-      </HighlightSurface>
+      </div>
     </OfficialRangesContext.Provider>
   );
 
@@ -198,6 +196,18 @@ export function OfficialReadingExam({ session }: { session: OfficialExamSession 
         flaggedCount={session.flaggedCount}
         submitting={session.submitting}
         onConfirm={session.onSubmit}
+      />
+
+      {/* Select text, then right-click (or use the small button above the selection): Highlight | Notes | Clear | Clear all. */}
+      <OfficialAnnotations
+        root={root}
+        highlights={highlights.highlights}
+        onHighlight={highlights.addHighlights}
+        onClear={highlights.clearRanges}
+        onRemove={highlights.removeHighlights}
+        onSetNote={highlights.setNote}
+        onRemoveWhere={highlights.removeWhere}
+        inCurrentPart={inCurrentPart}
       />
     </div>
   );

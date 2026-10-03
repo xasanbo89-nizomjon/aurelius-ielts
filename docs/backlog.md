@@ -2,18 +2,6 @@
 
 Planned work that is not built yet. When a phase ships, delete its section.
 
-## Phase H - highlighting and notes on the official exam screen
-
-- **Highlight colour schema.** `HighlightColor` gains `RED` and `QuestionHighlight` gets a `color` column (default
-  `YELLOW`). The change is parked on the branch `phase-h-wip` and is **already applied to the Neon database**
-  (additive; nothing in the app reads it yet). Merge the branch together with the menu below.
-- **Right-click menu** on the passage and on the questions: *Highlight*, *Notes*, *Clear*, *Clear all*. It replaces
-  the small toolbar that appears after a selection today (kept as the minimal way to highlight in Phase G).
-- **Notes.** Opened from the menu and saved per attempt. The `Note` model and the save / delete actions already
-  exist (the old screen's Notes drawer uses them); the official screen has no way in yet.
-- **Mobile long-press.** Select text with a long press on a phone or tablet and get the same menu. Today the
-  selection toolbar works with a mouse and the keyboard; a real touch device has not been tested.
-
 ## Phase L - teacher preview
 
 - **"Preview as student".** A button on a test in the teacher panel that opens the official exam screen on a
@@ -21,7 +9,12 @@ Planned work that is not built yet. When a phase ships, delete its section.
 
 ## Later phases
 
-- The Listening and Writing screens in the same official style (Listening still uses the old layout).
+- The Listening and Writing screens in the same official style (Listening still uses the old layout, so it keeps the
+  old highlight toolbar; the highlight / notes menu of Phase H is only on the official Reading screen).
+- Show a student's highlight notes after the test is handed in (the review page and the teacher's result page draw the
+  highlights but not the notes).
+- Red highlights: `HighlightColor.RED` exists in the database (Postgres cannot drop an enum value) but nothing draws or
+  stores it; the menu has one highlight colour, yellow.
 - Retire the old Reading screen (`NEXT_PUBLIC_EXAM_UI=legacy`) once the official one has had a release cycle.
 
 ## Known items from earlier phases
@@ -34,6 +27,9 @@ Planned work that is not built yet. When a phase ships, delete its section.
 - An internal-titled ("_...") Full Mock is hidden from lists but can still be opened by its direct address.
 - `npm run attempts:repair-time` lists one completed attempt whose stored time used is longer than the test allowed.
 - The matching drag-and-drop uses click-to-place on touch screens (HTML5 drag does not work there).
+- The highlight menu on a touch screen was tested with Chrome's touch emulation only. Headless Chrome does not select
+  text on a synthesized long-press, so the test makes the selection by script (which is what the system's selection
+  handles do as far as the page can tell); a real phone or tablet has not been tried.
 
 ## Checks you can run
 

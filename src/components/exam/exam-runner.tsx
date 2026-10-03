@@ -71,8 +71,8 @@ export type ExamPassage = {
   attachments: ExamAttachment[];
 };
 
-export type ExamHighlight = { id: string; passageId: string; text: string; startOffset: number; endOffset: number; color: HighlightColor };
-export type ExamQuestionHighlight = { id: string; questionId: string; region: string; text: string; startOffset: number; endOffset: number };
+export type ExamHighlight = { id: string; passageId: string; text: string; startOffset: number; endOffset: number; color: HighlightColor; note?: string | null };
+export type ExamQuestionHighlight = { id: string; questionId: string; region: string; text: string; startOffset: number; endOffset: number; note?: string | null };
 export type ExamNoteRecord = { id: string; passageId: string | null; content: string };
 
 type NumberedExamQuestion = NumberedQuestion<ExamQuestion>;
@@ -267,10 +267,10 @@ export function ExamRunner({
       // Highlights saved by the old engine were shifted by the paragraph labels — put them back on the words they were made on.
       const range = reanchorHighlight(content, highlight);
       if (!range) continue;
-      stored.push({ id: highlight.id, region: passageRegion(highlight.passageId), start: range.start, end: range.end, text: content.slice(range.start, range.end) });
+      stored.push({ id: highlight.id, region: passageRegion(highlight.passageId), start: range.start, end: range.end, text: content.slice(range.start, range.end), note: highlight.note ?? null });
     }
     for (const highlight of initialQuestionHighlights) {
-      stored.push({ id: highlight.id, region: questionRegion(highlight.questionId, highlight.region), start: highlight.startOffset, end: highlight.endOffset, text: highlight.text });
+      stored.push({ id: highlight.id, region: questionRegion(highlight.questionId, highlight.region), start: highlight.startOffset, end: highlight.endOffset, text: highlight.text, note: highlight.note ?? null });
     }
     return stored;
   });
@@ -577,6 +577,9 @@ export function ExamRunner({
     function handleKeydown(event: globalThis.KeyboardEvent) {
       if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
       if (document.activeElement && document.activeElement !== document.body) return;
+      // Phase H: Shift+arrows (and every other combination) belong to the text selection / the browser, and while text is selected the arrows move that selection - they never step to another question.
+      if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+      if (window.getSelection()?.isCollapsed === false) return;
       event.preventDefault();
       stepQuestion(event.key === "ArrowRight" ? 1 : -1);
     }

@@ -888,7 +888,7 @@
   }
 }
 
-/* ---------------------------------------------------------------- type and the highlight toolbar */
+/* ---------------------------------------------------------------- type */
 
 /* Headings use the exam's own face; the app's display font belongs to the dashboards. */
 .official-exam h1,
@@ -900,38 +900,148 @@
   letter-spacing: normal;
 }
 
+/* ---------------------------------------------------------------- highlight, notes and the menu (Phase H) */
+
 /*
- * The Highlight / Clear toolbar is drawn INSIDE the exam root (HighlightSurface portalContainer), so it follows
- * the contrast setting and the text size, and a plain rule here is enough to make it flat: this stylesheet is
- * not in a cascade layer, so it wins over the toolbar's own utility classes without any !important.
+ * The highlight itself is `.exam-highlight` (globals.css): yellow with black ink, the same in all three contrast
+ * settings. On the two black screens a thin rule above and below keeps its edge visible against the page.
  */
-.official-exam [data-exam-text-toolbar] {
-  gap: 0;
-  padding: 0;
-  border: 1px solid var(--ex-fg);
-  border-radius: 0;
-  background: var(--ex-bg);
-  color: var(--ex-fg);
-  box-shadow: none;
-  font-family: Arial, Helvetica, sans-serif;
+.official-exam[data-contrast="white-on-black"] .exam-highlight,
+.official-exam[data-contrast="yellow-on-black"] .exam-highlight {
+  box-shadow: 0 0 0 1px var(--exam-highlight);
 }
 
-.official-exam [data-exam-text-toolbar] button {
-  padding: 0.4em 0.85em;
-  border-radius: 0;
+/* The little "this highlight has a note" button after a highlight. It holds no text, so it can never be copied with the passage. */
+.ex-note-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2em;
+  height: 1.2em;
+  margin: 0 0.1em 0 0.2em;
+  padding: 0.12em;
+  border: 1px solid var(--ex-fg);
+  background: var(--exam-highlight);
+  color: var(--exam-highlight-ink);
+  line-height: 1;
+  vertical-align: -0.25em;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ex-note-marker svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ex-note-marker:hover {
+  outline: 2px solid var(--ex-accent);
+  outline-offset: 1px;
+}
+
+/* The menu, the small button above a selection and the note box are drawn inside the exam root, so they follow its contrast and text size. */
+.ex-ctx,
+.ex-opener,
+.ex-note {
+  position: fixed;
+  z-index: 40;
+  border: 1px solid var(--ex-fg);
+  background: var(--ex-bg);
+  color: var(--ex-fg);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.ex-ctx {
+  min-width: 11em;
+  padding: 0.25em 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ex-ctx:focus-visible {
+  outline: none;
+}
+
+.ex-ctx button {
+  display: block;
+  width: 100%;
+  padding: 0.45em 1.1em;
+  border: 0;
   background: transparent;
-  box-shadow: none;
-  font-size: 0.875em;
-  font-weight: 400;
+  text-align: left;
   cursor: pointer;
 }
 
-.official-exam [data-exam-text-toolbar] button:hover {
+.ex-ctx button:hover:not(:disabled),
+.ex-ctx button:focus-visible {
+  background: var(--ex-accent);
+  color: var(--ex-accent-ink);
+  outline: none;
+}
+
+.ex-ctx button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ex-ctx hr {
+  margin: 0.25em 0;
+  border: 0;
+  border-top: 1px solid var(--ex-border);
+}
+
+.ex-opener {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4em;
+  height: 1.8em;
+  padding: 0;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Three dots, drawn here so the button holds no text. */
+.ex-opener span::before {
+  content: "\2022\2022\2022";
+  letter-spacing: 0.08em;
+}
+
+.ex-opener:hover {
   background: var(--ex-bar);
 }
 
-.official-exam [data-exam-text-toolbar] button + button {
-  border-left: 1px solid var(--ex-border);
+.ex-note {
+  width: min(19em, calc(100vw - 1em));
+  padding: 0.55em;
+}
+
+.ex-note textarea {
+  display: block;
+  width: 100%;
+  min-height: 5.5em;
+  padding: 0.4em 0.5em;
+  border: 1px solid var(--ex-control);
+  background: var(--ex-bg);
+  color: var(--ex-fg);
+  font: inherit;
+  resize: vertical;
+}
+
+.ex-note-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5em;
+  margin-top: 0.5em;
+}
+
+.ex-note-actions .ex-button {
+  padding: 0.3em 0.8em;
 }
 
 /* ---------------------------------------------------------------- matching: drag an option onto an item */

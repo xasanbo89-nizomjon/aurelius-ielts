@@ -49,10 +49,8 @@ export const HighlightSurface = forwardRef<
     onRemove: (region: string, ids: string[]) => void;
     /** Extra toolbar buttons for the current selection (the passage adds "Add note"). Call `done` to close the toolbar. */
     renderExtraActions?: (targets: HighlightTarget[], done: () => void) => ReactNode;
-    /** Phase G — where the floating toolbar is drawn. Default: <body>. The official exam screen passes its own root so the toolbar follows that screen's contrast and text-size settings. */
-    portalContainer?: HTMLElement | null;
   }
->(function HighlightSurface({ children, className, getRanges, onHighlight, onClear, onRemove, renderExtraActions, portalContainer }, forwardedRef) {
+>(function HighlightSurface({ children, className, getRanges, onHighlight, onClear, onRemove, renderExtraActions }, forwardedRef) {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const [toolbar, setToolbar] = useState<ToolbarState | null>(null);
   const pointerIsDown = useRef(false);
@@ -214,7 +212,7 @@ export const HighlightSurface = forwardRef<
   return (
     <div ref={setRefs} className={className} onPointerDown={handlePointerDown} onClick={handleClick}>
       {children}
-      {toolbarNode && typeof document !== "undefined" ? createPortal(toolbarNode, portalContainer ?? document.body) : null}
+      {toolbarNode && typeof document !== "undefined" ? createPortal(toolbarNode, document.body) : null}
     </div>
   );
 });

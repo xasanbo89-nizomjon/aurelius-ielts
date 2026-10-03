@@ -165,3 +165,30 @@ export function buildOfficialPieces(
   }
   return pieces;
 }
+
+// ---------------------------------------------------------------------------
+// Highlights across paragraphs
+// ---------------------------------------------------------------------------
+
+export type TextRun = { start: number; end: number; lineBreak: boolean };
+
+/**
+ * Cuts a piece of text into the runs a highlight is drawn on and the line breaks between them. A
+ * highlight that runs from one paragraph into the next is stored as ONE range (so it keeps one note
+ * and merges like any other), but it is drawn per paragraph: the yellow never fills the blank line
+ * between the paragraphs. The text itself is untouched - every character stays in the DOM, so
+ * offsets, copying and selecting behave exactly as before.
+ */
+export function splitAtLineBreaks(text: string): TextRun[] {
+  const runs: TextRun[] = [];
+  const breaks = /\n+/g;
+  let from = 0;
+  let match: RegExpExecArray | null;
+  while ((match = breaks.exec(text)) !== null) {
+    if (match.index > from) runs.push({ start: from, end: match.index, lineBreak: false });
+    runs.push({ start: match.index, end: match.index + match[0].length, lineBreak: true });
+    from = match.index + match[0].length;
+  }
+  if (from < text.length) runs.push({ start: from, end: text.length, lineBreak: false });
+  return runs;
+}

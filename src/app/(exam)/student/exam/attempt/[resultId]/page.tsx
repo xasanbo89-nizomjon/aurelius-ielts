@@ -114,6 +114,7 @@ export default async function ExamAttemptPage({
         startOffset: highlight.startOffset,
         endOffset: highlight.endOffset,
         color: highlight.color,
+        note: highlight.note,
       }))}
       initialQuestionHighlights={questionHighlights.map((highlight) => ({
         id: highlight.id,
@@ -122,6 +123,7 @@ export default async function ExamAttemptPage({
         text: highlight.text,
         startOffset: highlight.startOffset,
         endOffset: highlight.endOffset,
+        note: highlight.note,
       }))}
       initialNotes={attempt.notes.map((note) => ({
         id: note.id,

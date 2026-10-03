@@ -3,17 +3,16 @@
 import { memo, useMemo } from "react";
 
 import { analyzePassage } from "@/lib/exam/passage-layout";
-import { passageRegion, type HighlightRange } from "@/lib/exam/text-highlight";
+import { passageRegion } from "@/lib/exam/text-highlight";
 import { FallbackImage } from "@/components/ui/fallback-image";
-import { HighlightSurface, type HighlightTarget } from "@/components/exam/highlight/highlight-surface";
 import type { ExamAttachment } from "@/components/exam/passage-attachments";
-import { OfficialText } from "@/components/exam/official/official-text";
+import { OfficialText, type DrawnHighlight } from "@/components/exam/official/official-text";
 
 /**
  * The passage of the official exam screen: its heading, then the paragraphs with their letters —
  * the text itself is exactly what is stored (highlights are offsets into it), the layout is an
- * overlay (see lib/exam/passage-layout). Selecting text offers Highlight / Clear; clicking a
- * highlight offers to remove it — the same engine as the legacy screen, nothing more.
+ * overlay (see lib/exam/passage-layout). Highlighting and notes are not done here: the exam
+ * screen's annotation layer (official-annotations) reads the selection and draws the menu.
  *
  * Memoised: nothing in here depends on the answers, so typing in an answer box never re-renders it.
  */
@@ -23,28 +22,17 @@ export const OfficialPassage = memo(function OfficialPassage({
   content,
   attachments,
   highlights,
-  getRanges,
-  onHighlight,
-  onClear,
-  onRemove,
-  toolbarContainer,
 }: {
   passageId: string;
   title: string;
   content: string;
   attachments: ExamAttachment[];
-  highlights: readonly HighlightRange[];
-  getRanges: (region: string) => readonly HighlightRange[];
-  onHighlight: (targets: HighlightTarget[]) => void;
-  onClear: (targets: HighlightTarget[]) => void;
-  onRemove: (region: string, ids: string[]) => void;
-  /** The exam screen's root: the floating toolbar is drawn inside it, so it follows the screen's own theme. */
-  toolbarContainer: HTMLElement | null;
+  highlights: readonly DrawnHighlight[];
 }) {
   const layout = useMemo(() => analyzePassage(content, title), [content, title]);
 
   return (
-    <HighlightSurface className="ex-pane" getRanges={getRanges} onHighlight={onHighlight} onClear={onClear} onRemove={onRemove} portalContainer={toolbarContainer}>
+    <div className="ex-pane">
       {layout.title && <h2 className="ex-passage-title">{layout.title}</h2>}
       {attachments.map((attachment) => (
         <figure key={attachment.id} className="ex-figure">
@@ -62,6 +50,6 @@ export const OfficialPassage = memo(function OfficialPassage({
         heading={layout.heading}
         className="ex-passage-text"
       />
-    </HighlightSurface>
+    </div>
   );
 });

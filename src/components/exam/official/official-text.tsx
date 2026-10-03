@@ -2,8 +2,11 @@
 
 import { Fragment, createContext, memo, useContext, useMemo, type ElementType, type ReactNode } from "react";
 
-import { buildOfficialPieces } from "@/lib/exam/passage-layout";
+import { buildOfficialPieces, splitAtLineBreaks } from "@/lib/exam/passage-layout";
 import { questionRegion, type HighlightRange, type TextRange } from "@/lib/exam/text-highlight";
+
+/** A highlight as the screen draws it; `note` (Phase H) puts a small marker after the highlighted text. */
+export type DrawnHighlight = HighlightRange & { note?: string | null };
 
 /**
  * One highlightable string of the official exam screen — a passage, a question's wording, an
@@ -15,7 +18,12 @@ import { questionRegion, type HighlightRange, type TextRange } from "@/lib/exam/
  *  - hide stretches of the string (a letter the label replaces, the dots an answer box replaces) —
  *    hidden text stays in the DOM, so every offset, and every highlight made on the old screen, is unchanged,
  *  - style a heading in place,
- *  - put a node (an answer box) in front of an offset.
+ *  - put a node (an answer box) in front of an offset,
+ *  - draw a highlight PER PARAGRAPH (never over the blank line between two) and, when the highlight
+ *    has a note, a small marker button right after its last character.
+ *
+ * Nothing is added to the text: the marker is an empty button (its picture is an inline SVG, its
+ * name an aria-label) and the labels are CSS, so copying a sentence copies exactly the original words.
  */
 export const OfficialText = memo(function OfficialText({
   region,
@@ -30,7 +38,7 @@ export const OfficialText = memo(function OfficialText({
 }: {
   region: string;
   text: string;
-  highlights: readonly HighlightRange[];
+  highlights: readonly DrawnHighlight[];
   labels?: ReadonlyMap<number, string> | null;
   hidden?: readonly TextRange[];
   heading?: TextRange | null;
@@ -45,14 +53,32 @@ export const OfficialText = memo(function OfficialText({
     [text, highlights, labels, hidden, heading, insertOffsets]
   );
 
+  /** Highlights with a note, by the offset where they end: the marker goes right after that character. */
+  const noteMarkers = useMemo(() => {
+    const byEnd = new Map<number, DrawnHighlight[]>();
+    for (const h of highlights) {
+      if (!h.note) continue;
+      const end = Math.min(h.end, text.length);
+      byEnd.set(end, [...(byEnd.get(end) ?? []), h]);
+    }
+    return byEnd;
+  }, [highlights, text.length]);
+
   const children: ReactNode[] = pieces.map((piece) => {
-    let node: ReactNode = text.slice(piece.start, piece.end);
+    const slice = text.slice(piece.start, piece.end);
+    let node: ReactNode = slice;
     if (piece.highlightIds.length > 0) {
-      node = (
-        <mark data-hl-ids={piece.highlightIds.join(" ")} className="exam-highlight cursor-pointer" title="Highlighted — click to remove">
-          {node}
-        </mark>
-      );
+      const ids = piece.highlightIds.join(" ");
+      node = splitAtLineBreaks(slice).map((run, index) => {
+        const part = slice.slice(run.start, run.end);
+        return run.lineBreak ? (
+          part
+        ) : (
+          <mark key={index} data-hl-ids={ids} className="exam-highlight">
+            {part}
+          </mark>
+        );
+      });
     }
     if (piece.hidden) node = <span className="ex-hidden">{node}</span>;
     if (piece.heading) node = <span className="ex-passage-heading">{node}</span>;
@@ -67,6 +93,7 @@ export const OfficialText = memo(function OfficialText({
       <Fragment key={piece.start}>
         {inserts?.get(piece.start)}
         {node}
+        {noteMarkers.get(piece.end)?.map((h) => <NoteMarker key={h.id} region={region} id={h.id} />)}
       </Fragment>
     );
   });
@@ -79,12 +106,24 @@ export const OfficialText = memo(function OfficialText({
   );
 });
 
-const EMPTY: readonly HighlightRange[] = [];
+/** The small "this highlight has a note" button after a highlight. Empty of text on purpose; the annotation layer opens the note when it is clicked or hovered. */
+function NoteMarker({ region, id }: { region: string; id: string }) {
+  return (
+    <button type="button" className="ex-note-marker" data-note-for={id} data-note-region={region} aria-label="Open the note on this highlight">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true" focusable="false">
+        <path d="M3 2h7l3 3v9H3z" />
+        <path d="M5.5 8h5M5.5 10.5h5" />
+      </svg>
+    </button>
+  );
+}
+
+const EMPTY: readonly DrawnHighlight[] = [];
 
 /** region → highlight ranges, provided to everything inside the question pane (the official screen's counterpart of the legacy context). */
-export const OfficialRangesContext = createContext<ReadonlyMap<string, readonly HighlightRange[]> | null>(null);
+export const OfficialRangesContext = createContext<ReadonlyMap<string, readonly DrawnHighlight[]> | null>(null);
 
-/** A piece of a question's text that can be highlighted. `part` is part of how the highlight is stored ("prompt", "choice:<id>", "text:<n>", "item:<id>") and must stay the same as on the legacy screen. */
+/** A piece of a question's text that can be highlighted. `part` is part of how the highlight is stored ("prompt", "choice:<id>", "text:<n>", "item:<id>", "instructions") and must stay the same as on the legacy screen. */
 export function OfficialQuestionText({
   questionId,
   part,

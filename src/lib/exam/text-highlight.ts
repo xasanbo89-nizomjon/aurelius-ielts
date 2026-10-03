@@ -139,6 +139,22 @@ export function subtractRange(range: TextRange, cut: TextRange): TextRange[] {
   return pieces;
 }
 
+/**
+ * What is left of a highlight after "Clear" cuts `cuts` out of it. A cleared word must not leave a
+ * highlighted space behind, so blank stretches at the edges of the pieces are dropped (and a piece that
+ * is only blank is no piece). Empty when nothing worth highlighting remains.
+ */
+export function remainingAfterClear(range: TextRange, cuts: readonly TextRange[], text: string): TextRange[] {
+  let pieces: TextRange[] = [{ start: range.start, end: range.end }];
+  for (const cut of cuts) pieces = pieces.flatMap((piece) => subtractRange(piece, cut));
+  return pieces.flatMap((piece) => {
+    let { start, end } = piece;
+    while (start < end && /\s/.test(text[start] ?? "")) start++;
+    while (end > start && /\s/.test(text[end - 1] ?? "")) end--;
+    return end > start ? [{ start, end }] : [];
+  });
+}
+
 /** Whether every character of `target` is already inside some highlight. */
 export function isFullyCovered(ranges: readonly TextRange[], target: TextRange): boolean {
   return mergeRanges(ranges).some((r) => r.start <= target.start && r.end >= target.end);

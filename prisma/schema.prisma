@@ -743,6 +743,8 @@ enum HighlightColor {
   YELLOW
   BLUE
   GREEN
+  /// Added with the colour choice (Yellow / Blue / Red) in the exam highlighter. GREEN is no longer offered but old attempts still carry it.
+  RED
 }
 
 /// A student's highlighted span of passage text, scoped to one attempt
@@ -760,6 +762,9 @@ model Highlight {
   /// Phase 35 — Part 2's 3-color highlight tool. Defaulted for every
   /// pre-Phase-35 row, which only ever had one implicit color.
   color       HighlightColor @default(YELLOW)
+  /// Phase H — the student's note on this highlight (the official exam screen's "Notes").
+  /// Null for every row saved before Phase H and for any highlight without a note.
+  note        String?        @db.Text
 
   createdAt DateTime @default(now())
 
@@ -786,6 +791,10 @@ model QuestionHighlight {
   text        String @db.Text
   startOffset Int
   endOffset   Int
+  /// The colour the student chose (Yellow by default), same choice as passage highlights.
+  color       HighlightColor @default(YELLOW)
+  /// Phase H — the student's note on this highlight; null when it has none (and for every earlier row).
+  note        String?        @db.Text
 
   createdAt DateTime @default(now())
 

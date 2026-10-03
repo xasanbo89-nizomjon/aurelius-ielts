@@ -121,7 +121,7 @@ export function OfficialPreTest({
       <ul>
         <li>Read the text on the left of each part and answer its questions on the right.</li>
         <li>Use the numbers at the bottom of the screen to move around. Tick &ldquo;Review&rdquo; to mark a question you want to come back to.</li>
-        <li>To highlight text, select it and choose &ldquo;Highlight&rdquo;.</li>
+        <li>To highlight text or add a note, select it, then right-click (or use the small button above the selection) and choose &ldquo;Highlight&rdquo; or &ldquo;Notes&rdquo;. &ldquo;Clear&rdquo; removes a highlight.</li>
         <li>Your answers are saved as you go. {minutes ? "When the time is up they are handed in automatically." : "There is no time limit."}</li>
         <li>When you have finished, click the tick at the bottom right.</li>
       </ul>

@@ -2,6 +2,7 @@ import type { HighlightColor } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { HIGHLIGHT_MAX_OFFSET, HIGHLIGHT_MAX_TEXT_LENGTH, QUESTION_REGION_PART_PATTERN } from "@/lib/exam/text-highlight";
+import { NOTE_MAX_LENGTH, cleanNote } from "@/lib/exam/highlight-notes";
 
 /** One attempt never needs more than this; it only stops a runaway client from filling the table. */
 const MAX_HIGHLIGHTS_PER_ATTEMPT = 800;
@@ -95,17 +96,20 @@ export async function removeQuestionHighlight(resultId: string, studentId: strin
 }
 
 export type HighlightChange = {
-  /** New highlights to store, in order — the result lists their ids in the same order. */
+  /** New highlights to store, in order — the result lists their ids in the same order. A highlight may carry its note (Phase H). */
   adds: (
-    | { kind: "passage"; passageId: string; text: string; startOffset: number; endOffset: number }
-    | { kind: "question"; questionId: string; part: string; text: string; startOffset: number; endOffset: number }
+    | { kind: "passage"; passageId: string; text: string; startOffset: number; endOffset: number; note?: string | null }
+    | { kind: "question"; questionId: string; part: string; text: string; startOffset: number; endOffset: number; note?: string | null }
   )[];
   removePassageIds: string[];
   removeQuestionIds: string[];
+  /** Phase H — set (or clear, with null) the note of highlights that already exist. */
+  notes?: { kind: "passage" | "question"; id: string; note: string | null }[];
 };
 
 const MAX_ADDS_PER_CHANGE = 12;
 const MAX_REMOVES_PER_CHANGE = 40;
+const MAX_NOTE_UPDATES_PER_CHANGE = 12;
 
 /**
  * Phase D — ONE highlighting action (highlight, merge, clear, remove) as ONE
@@ -115,10 +119,19 @@ const MAX_REMOVES_PER_CHANGE = 40;
  * Here either everything in the change happens or nothing does.
  */
 export async function applyHighlightChange(resultId: string, studentId: string, change: HighlightChange): Promise<string[]> {
-  if (change.adds.length > MAX_ADDS_PER_CHANGE || change.removePassageIds.length + change.removeQuestionIds.length > MAX_REMOVES_PER_CHANGE) {
+  const noteUpdates = change.notes ?? [];
+  if (
+    change.adds.length > MAX_ADDS_PER_CHANGE ||
+    change.removePassageIds.length + change.removeQuestionIds.length > MAX_REMOVES_PER_CHANGE ||
+    noteUpdates.length > MAX_NOTE_UPDATES_PER_CHANGE
+  ) {
     throw new Error("That highlight isn't valid.");
   }
+  for (const update of noteUpdates) {
+    if (typeof update.id !== "string" || !update.id || (update.note !== null && (typeof update.note !== "string" || update.note.length > NOTE_MAX_LENGTH))) throw new Error("That note isn't valid.");
+  }
   for (const add of change.adds) {
+    if (add.note != null && (typeof add.note !== "string" || add.note.length > NOTE_MAX_LENGTH)) throw new Error("That note isn't valid.");
     assertValidRange(add.text, add.startOffset, add.endOffset);
     if (add.kind === "question") {
       if (add.text.length !== add.endOffset - add.startOffset || !QUESTION_REGION_PART_PATTERN.test(add.part)) throw new Error("That highlight isn't valid.");
@@ -145,11 +158,17 @@ export async function applyHighlightChange(resultId: string, studentId: string, 
   const writes = [
     ...change.adds.map((add) =>
       add.kind === "passage"
-        ? prisma.highlight.create({ data: { resultId, passageId: add.passageId, text: add.text, startOffset: add.startOffset, endOffset: add.endOffset, color: "YELLOW" }, select: { id: true } })
-        : prisma.questionHighlight.create({ data: { resultId, questionId: add.questionId, region: add.part, text: add.text, startOffset: add.startOffset, endOffset: add.endOffset }, select: { id: true } })
+        ? prisma.highlight.create({ data: { resultId, passageId: add.passageId, text: add.text, startOffset: add.startOffset, endOffset: add.endOffset, color: "YELLOW", note: cleanNote(add.note) }, select: { id: true } })
+        : prisma.questionHighlight.create({ data: { resultId, questionId: add.questionId, region: add.part, text: add.text, startOffset: add.startOffset, endOffset: add.endOffset, color: "YELLOW", note: cleanNote(add.note) }, select: { id: true } })
     ),
     ...(change.removePassageIds.length ? [prisma.highlight.deleteMany({ where: { id: { in: change.removePassageIds }, resultId } })] : []),
     ...(change.removeQuestionIds.length ? [prisma.questionHighlight.deleteMany({ where: { id: { in: change.removeQuestionIds }, resultId } })] : []),
+    // Phase H — notes on highlights that already exist (scoped to this attempt, so another student's row can never be touched).
+    ...noteUpdates.map((update) =>
+      update.kind === "passage"
+        ? prisma.highlight.updateMany({ where: { id: update.id, resultId }, data: { note: cleanNote(update.note) } })
+        : prisma.questionHighlight.updateMany({ where: { id: update.id, resultId }, data: { note: cleanNote(update.note) } })
+    ),
   ];
   if (writes.length === 0) return [];
   const outcome = await prisma.$transaction(writes);
@@ -162,7 +181,7 @@ export async function listQuestionHighlights(resultId: string) {
     return await prisma.questionHighlight.findMany({
       where: { resultId },
       orderBy: { createdAt: "asc" },
-      select: { id: true, questionId: true, region: true, text: true, startOffset: true, endOffset: true },
+      select: { id: true, questionId: true, region: true, text: true, startOffset: true, endOffset: true, note: true },
     });
   } catch (error) {
     console.error("[exam] could not load question highlights", error instanceof Error ? error.message : error);
