@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CalendarClock, Home, Loader2, Maximize2, Minimize2, Target } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +42,8 @@ const AUTOSAVE_DEBOUNCE_MS = 1200;
  */
 export function WritingExamWorkspace({ task, draft }: { task: AssignedWritingTask; draft: DraftForEdit | null }) {
   const router = useRouter();
+  // Phase J - `?ui=legacy` / `?ui=official` picks the screen for a visit; the first autosave moves the address to ?draftId=..., so the choice is carried along or the page would switch screens in the middle of typing.
+  const uiOverride = useSearchParams().get("ui");
   useStudyHeartbeat("WRITING");
 
   const [content, setContent] = useState(draft?.content ?? "");
@@ -101,7 +103,7 @@ export function WritingExamWorkspace({ task, draft }: { task: AssignedWritingTas
       setSaveState("saved");
       if (!submissionIdRef.current) {
         setSubmissionId(result.submissionId);
-        router.replace(`/student/writing/new?draftId=${result.submissionId}`, { scroll: false });
+        router.replace(`/student/writing/new?draftId=${result.submissionId}${uiOverride === "legacy" || uiOverride === "official" ? `&ui=${uiOverride}` : ""}`, { scroll: false });
       }
     }, AUTOSAVE_DEBOUNCE_MS);
   }

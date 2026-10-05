@@ -67,6 +67,7 @@ export function OfficialPreTest({
   module = "Reading",
   soundHref,
   audioSources = [],
+  writing,
 }: Common & {
   step: OfficialPreTestStep;
   description: string | null;
@@ -78,9 +79,11 @@ export function OfficialPreTest({
   instructionsHref: string;
   startAction: () => Promise<void>;
   /** Phase I - a Listening test has a sound check between the details and the instructions, and its recordings are loaded before it can be started. */
-  module?: "Reading" | "Listening";
+  module?: "Reading" | "Listening" | "Writing";
   soundHref?: string;
   audioSources?: readonly string[];
+  /** Phase J - a Writing task taken on its own: which part it is and the length the test asks for. */
+  writing?: { partLabel: string; minWords: number };
 }) {
   if (step === "details") {
     return (
@@ -149,6 +152,48 @@ export function OfficialPreTest({
         </ul>
 
         {canStart ? <ListeningStartForm action={startAction} sources={audioSources} /> : <UpgradeNotice />}
+      </Shell>
+    );
+  }
+
+  if (module === "Writing" && writing) {
+    return (
+      <Shell candidateName={candidateName} title={title} preferences={preferences}>
+        <h1 data-testid="pretest-module">Writing</h1>
+        <dl className="ex-start-facts">
+          <div>
+            <dt>Time allowed</dt>
+            <dd data-testid="pretest-time">{minutes ? `${minutes} minutes` : "No time limit"}</dd>
+          </div>
+          <div>
+            <dt>Task</dt>
+            <dd data-testid="pretest-questions">
+              {writing.partLabel} · at least {writing.minWords} words
+            </dd>
+          </div>
+        </dl>
+
+        <h2 style={{ margin: "0 0 0.25em", fontSize: "1.1em" }}>Instructions</h2>
+        <ul>
+          <li>Read the task on the left of the screen and write your answer in the box on the right. Drag the line between them to give either side more room.</li>
+          <li>
+            You should spend about {minutes} minutes on this task and write at least {writing.minWords} words. The number of words you have written is shown under the box.
+          </li>
+          <li>Your writing is saved as you type, and a small &ldquo;Saved&rdquo; appears under the box. If the connection is lost, keep writing: it is saved again when the connection returns.</li>
+          <li>Spell check and suggestions are switched off, as in the real test. You can cut, copy, paste and undo.</li>
+          <li>To highlight text in the task or add a note, select it, then right-click (or use the small button above the selection) and choose &ldquo;Highlight&rdquo; or &ldquo;Notes&rdquo;.</li>
+          <li>{minutes ? "When the time is up your writing is handed in automatically." : "There is no time limit."} When you have finished, click the tick at the bottom right.</li>
+        </ul>
+
+        {canStart ? (
+          <form action={startAction}>
+            <button type="submit" className="ex-button ex-button-primary" style={{ padding: "0.7em 1.8em", fontSize: "1.05em" }} data-testid="start-test">
+              Start test
+            </button>
+          </form>
+        ) : (
+          <UpgradeNotice />
+        )}
       </Shell>
     );
   }

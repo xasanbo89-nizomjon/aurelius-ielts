@@ -15,6 +15,7 @@
     "tests:temp": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/list-temp-tests.mjs",
     "check:parity": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-question-parity.mjs",
     "check:papers": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-reading-papers.mjs",
+    "check:writing": "node --import ./scripts/register-ts.mjs scripts/check-writing.mjs",
     "attempts:repair-time": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/repair-time-used.mjs"
   },
   "dependencies": {

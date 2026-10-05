@@ -4,7 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
 import { getAssignedTaskForStudent, type AssignedWritingTask } from "@/lib/writing-tasks";
 import { ensureWritingAssignment } from "@/lib/full-mock-attempts";
-import { runAnalysis, saveDraft, submitFullMockEssay } from "@/lib/ai/writing";
+import { getOrCreateOpenDraft, runAnalysis, saveDraftVersioned, submitFullMockEssay } from "@/lib/ai/writing";
+import { WRITING_SAVE_GRACE_SECONDS } from "@/lib/writing/constants";
+import type { DraftSaveResult, HandInDraft } from "@/lib/writing/save-types";
 
 // ---------------------------------------------------------------------------
 // Phase E — the Full Mock Writing section. Both tasks live in ONE 60-minute
@@ -17,7 +19,7 @@ import { runAnalysis, saveDraft, submitFullMockEssay } from "@/lib/ai/writing";
 // ---------------------------------------------------------------------------
 
 /** Late keystrokes / the auto-submit request may arrive a moment after the clock hits zero (network, a tab that was asleep); this much is tolerated, nothing more. */
-const SUBMIT_GRACE_SECONDS = 90;
+const SUBMIT_GRACE_SECONDS = WRITING_SAVE_GRACE_SECONDS;
 /** Upper bound on how long the hand-in waits for the AI marker before returning; an essay still unmarked is simply marked later. */
 const ANALYSIS_TIMEOUT_MS = 45_000;
 
@@ -26,6 +28,8 @@ export type FullMockWritingTask = {
   /** The student's saved draft for this task in THIS sitting, if any. */
   draftId: string | null;
   content: string;
+  /** Phase J - the draft's version (its updatedAt). A save says which version it is based on, so a window that is behind is refused. */
+  updatedAt: string | null;
 };
 
 export type FullMockWritingSession =
@@ -67,7 +71,11 @@ async function submittedTaskIds(context: Context, studentId: string): Promise<Se
   return new Set(rows.map((r) => r.taskId).filter((id): id is string => id != null));
 }
 
-export async function getFullMockWritingSession(attemptId: string, studentId: string): Promise<FullMockWritingSession> {
+/**
+ * `ensureDrafts` (Phase J, the official screen): a task with no draft yet gets an empty one right here, so every part has a
+ * draft - and a version - from the first moment, and two windows opened together cannot each create their own.
+ */
+export async function getFullMockWritingSession(attemptId: string, studentId: string, options: { ensureDrafts?: boolean } = {}): Promise<FullMockWritingSession> {
   const context = await loadContext(attemptId, studentId);
   if (!context || context.fullMockTest.writingSections.length === 0) return { kind: "not-found" };
   const deadline = deadlineOf(context);
@@ -83,25 +91,33 @@ export async function getFullMockWritingSession(attemptId: string, studentId: st
     const task = await getAssignedTaskForStudent(taskId, studentId);
     if (!task) return { kind: "not-found" };
     // Only a draft started inside this Writing session: an old one from a previous try must not be carried in.
-    const draft = await prisma.writingSubmission.findFirst({
+    let draft: { id: string; content: string; updatedAt: Date } | null = await prisma.writingSubmission.findFirst({
       where: { studentId, taskId, status: "DRAFT", createdAt: { gte: context.writingStartedAt } },
       orderBy: { updatedAt: "desc" },
-      select: { id: true, content: true },
+      select: { id: true, content: true, updatedAt: true },
     });
-    tasks.push({ task, draftId: draft?.id ?? null, content: draft?.content ?? "" });
+    if (!draft && options.ensureDrafts && deadline.getTime() > Date.now()) {
+      // Two windows opening the Writing paper at the same moment must share one draft per task (see getOrCreateOpenDraft).
+      const opened = await getOrCreateOpenDraft(studentId, taskId, { since: context.writingStartedAt });
+      if (opened.success) draft = opened.draft;
+    }
+    tasks.push({ task, draftId: draft?.id ?? null, content: draft?.content ?? "", updatedAt: draft?.updatedAt.toISOString() ?? null });
   }
 
   const remainingSeconds = Math.max(0, Math.floor((deadline.getTime() - Date.now()) / 1000));
   return { kind: remainingSeconds > 0 ? "open" : "expired", fullMockTitle: context.fullMockTest.title, deadline, remainingSeconds, tasks };
 }
 
-export type SaveFullMockDraftResult = { success: true; submissionId: string } | { success: false; error: string; timeUp?: boolean };
+export type SaveFullMockDraftResult = DraftSaveResult;
 
-/** Autosave of one task's text. Refused (with `timeUp`) once the hour and its small grace are over — the text saved by then is what gets marked. */
+/**
+ * Autosave of one task's text. Refused (with `timeUp`) once the hour and its small grace are over — the text saved by then is what gets marked.
+ * Phase J: with `baseUpdatedAt` the save is also refused (`conflict`) when the draft has moved on since that version.
+ */
 export async function saveFullMockWritingDraft(
   attemptId: string,
   studentId: string,
-  input: { taskId: string; content: string; submissionId?: string | null }
+  input: { taskId: string; content: string; submissionId?: string | null; baseUpdatedAt?: string | null }
 ): Promise<SaveFullMockDraftResult> {
   const context = await loadContext(attemptId, studentId);
   const deadline = context ? deadlineOf(context) : null;
@@ -109,11 +125,13 @@ export async function saveFullMockWritingDraft(
   if (!context.fullMockTest.writingSections.some((s) => s.writingTaskId === input.taskId)) return { success: false, error: "That task isn't part of this mock." };
   if (Date.now() > deadline.getTime() + SUBMIT_GRACE_SECONDS * 1000) return { success: false, error: "Time is up.", timeUp: true };
 
-  const saved = await saveDraft(studentId, { taskId: input.taskId, content: input.content.slice(0, 8000), submissionId: input.submissionId ?? undefined });
-  return saved.success ? { success: true, submissionId: saved.submissionId } : { success: false, error: saved.error };
+  return saveDraftVersioned(studentId, { taskId: input.taskId, content: input.content, submissionId: input.submissionId ?? null, baseUpdatedAt: input.baseUpdatedAt ?? null });
 }
 
-export type FinalizeFullMockWritingResult = { success: true; handedIn: number; analysed: number } | { success: false; error: string };
+export type FinalizeFullMockWritingResult =
+  | { success: true; handedIn: number; analysed: number }
+  /** `conflicts` (Phase J): tasks whose draft was changed in another window - nothing was handed in. */
+  | { success: false; error: string; conflicts?: string[] };
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -139,7 +157,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null
 export async function finalizeFullMockWriting(
   attemptId: string,
   studentId: string,
-  drafts: { taskId: string; content: string }[]
+  drafts: HandInDraft[]
 ): Promise<FinalizeFullMockWritingResult> {
   const context = await loadContext(attemptId, studentId);
   const deadline = context ? deadlineOf(context) : null;
@@ -150,21 +168,33 @@ export async function finalizeFullMockWriting(
   const toAnalyse: string[] = [];
   let handedIn = 0;
 
+  // Phase J - look at every task BEFORE handing anything in. A window that names the version it is handing in (`baseUpdatedAt`)
+  // is refused when the saved draft has moved on since (another tab or device saved newer text): its older text never goes in over
+  // the newer, and the sitting is not left half handed in. A hand-in without `content` (or without a version) uses the saved draft.
+  const waiting: { taskId: string; draft: { id: string; content: string; updatedAt: Date } | null; browser: HandInDraft | undefined }[] = [];
   for (const section of context.fullMockTest.writingSections) {
     const taskId = section.writingTaskId;
     if (alreadyHandedIn.has(taskId)) continue;
     await ensureWritingAssignment(studentId, taskId);
-
     const draft = await prisma.writingSubmission.findFirst({
       where: { studentId, taskId, status: "DRAFT", createdAt: { gte: context.writingStartedAt ?? context.startedAt } },
       orderBy: { updatedAt: "desc" },
-      select: { id: true, content: true },
+      select: { id: true, content: true, updatedAt: true },
     });
-    const fromBrowser = drafts.find((d) => d.taskId === taskId)?.content;
-    const content = late || fromBrowser === undefined ? (draft?.content ?? "") : fromBrowser;
+    waiting.push({ taskId, draft, browser: drafts.find((d) => d.taskId === taskId) });
+  }
+  const behind = late
+    ? []
+    : waiting.filter(({ draft, browser }) => draft && browser?.content !== undefined && browser.baseUpdatedAt && new Date(browser.baseUpdatedAt).getTime() !== draft.updatedAt.getTime()).map(({ taskId }) => taskId);
+  if (behind.length > 0) return { success: false, error: "Some of your writing was changed in another window.", conflicts: behind };
 
-    const submitted = await submitFullMockEssay(studentId, { taskId, content, submissionId: draft?.id ?? null });
-    if (!submitted.success) return { success: false, error: submitted.error };
+  for (const { taskId, draft, browser } of waiting) {
+    const fromBrowser = browser?.content;
+    const useBrowser = !late && fromBrowser !== undefined;
+    const content = !late && fromBrowser !== undefined ? fromBrowser : (draft?.content ?? "");
+
+    const submitted = await submitFullMockEssay(studentId, { taskId, content, submissionId: draft?.id ?? null, baseUpdatedAt: useBrowser ? (browser?.baseUpdatedAt ?? null) : null });
+    if (!submitted.success) return { success: false, error: submitted.error, conflicts: submitted.conflict ? [taskId] : undefined };
     handedIn++;
     if (!submitted.blank) toAnalyse.push(submitted.submissionId);
 

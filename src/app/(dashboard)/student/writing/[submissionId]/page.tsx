@@ -75,7 +75,14 @@ export default async function WritingReportPage({
         <CardHeader>
           <CardTitle className="text-base">Your response</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm leading-relaxed whitespace-pre-wrap">{report.content}</CardContent>
+        {report.content.trim().length === 0 ? (
+          // Phase J - an empty answer handed in on the exam screen: said plainly, not an empty box.
+          <CardContent className="text-muted-foreground text-sm italic" data-testid="writing-no-response">
+            No response
+          </CardContent>
+        ) : (
+          <CardContent className="text-sm leading-relaxed whitespace-pre-wrap">{report.content}</CardContent>
+        )}
       </Card>
 
       {report.status === "REVIEWED" && report.feedback && (
@@ -106,6 +113,8 @@ export default async function WritingReportPage({
           <WritingRewrites submissionId={report.id} initialRewrites={report.rewrites} hasAnalysis />
           <SentenceImprover submissionId={report.id} content={report.content} initialImprovements={report.sentenceImprovements} />
         </>
+      ) : report.content.trim().length === 0 ? (
+        <p className="text-muted-foreground text-sm">Nothing was written for this task, so there is nothing to analyse.</p>
       ) : (
         <AnalysisRetry submissionId={report.id} />
       )}

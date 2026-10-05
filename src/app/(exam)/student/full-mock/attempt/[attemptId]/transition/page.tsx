@@ -42,6 +42,7 @@ export default async function FullMockTransitionPage({
       Icon: BookOpen,
       minutes: FULL_MOCK_READING_MINUTES,
       detail: `${progress.readingPassageCount} ${progress.readingPassageCount === 1 ? "passage" : "passages"} · ${progress.readingQuestionCount} questions`,
+      notes: [] as readonly string[],
     },
     WRITING: {
       finishedTitle: "Reading Completed",
@@ -51,6 +52,12 @@ export default async function FullMockTransitionPage({
       Icon: PenLine,
       minutes: FULL_MOCK_WRITING_MINUTES,
       detail: progress.writingTaskCount === 1 ? "1 task" : `Task 1 and Task 2`,
+      // Phase J - how the Writing screen works, on the card that starts it.
+      notes: [
+        "Part 1 (about 20 minutes, at least 150 words) and Part 2 (about 40 minutes, at least 250 words) share this one clock; you decide how to divide it.",
+        "Your writing is saved as you type. Spell check and suggestions are switched off, as in the real test; cut, copy, paste and undo work.",
+        "When the time is up both parts are handed in automatically.",
+      ] as readonly string[],
     },
   } as const;
 
@@ -93,6 +100,13 @@ export default async function FullMockTransitionPage({
                   <Clock className="size-3.5" aria-hidden="true" /> {ready.minutes} minutes · {ready.detail}
                 </p>
                 <p className="text-muted-foreground text-xs">The {ready.minutes}-minute timer starts only when you press the button — take a moment first if you need one.</p>
+                {ready.notes.length > 0 && (
+                  <ul className="text-muted-foreground list-disc space-y-1 pt-1 pl-4 text-xs" data-testid="section-notes">
+                    {ready.notes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <StartSectionButton action={boundStart} label={ready.button} />
             </>

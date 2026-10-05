@@ -862,7 +862,14 @@ model WritingSubmission {
   /// "is this submitted" signal, this is purely a display/analytics timestamp.
   submittedAt DateTime?
 
+  /// Phase J - when the student pressed "Start test" on the official Writing screen: the server's own start of the
+  /// sitting, which the clock (20 min for Task 1, 40 for Task 2) is counted from. Null for every older draft and
+  /// for essays written on the legacy screen: no start recorded = no clock = never handed in by itself.
+  startedAt DateTime?
+
   createdAt DateTime @default(now())
+  /// Doubles as the draft's VERSION (Phase J): a save says which updatedAt it was based on and is refused when the
+  /// draft has moved on since (another tab or device saved newer text), so an older window can never overwrite newer text.
   updatedAt DateTime @updatedAt
 
   analysis              WritingAnalysis?

@@ -70,7 +70,14 @@ export default async function TeacherWritingReviewPage({
         <CardHeader>
           <CardTitle className="text-base">Student&apos;s response</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm leading-relaxed whitespace-pre-wrap">{report.content}</CardContent>
+        {report.content.trim().length === 0 ? (
+          // Phase J - a part left empty in the exam is handed in empty (nothing is required to hand in); it is shown as what it is.
+          <CardContent className="text-muted-foreground text-sm italic" data-testid="writing-no-response">
+            No response
+          </CardContent>
+        ) : (
+          <CardContent className="text-sm leading-relaxed whitespace-pre-wrap">{report.content}</CardContent>
+        )}
       </Card>
 
       {report.analysis && <WritingAnalysisView analysis={report.analysis} content={report.content} />}

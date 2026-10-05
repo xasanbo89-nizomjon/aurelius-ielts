@@ -12,6 +12,10 @@ import { AIServiceUnavailableError } from "@/lib/ai/errors";
 import { getOpenAIModel } from "@/lib/ai/openai";
 import { WRITING_TASK_CATEGORY_LABELS } from "@/lib/labels";
 import { taskImageFromRow, type WritingTaskImage } from "@/lib/writing-task-image";
+// Phase J - the one word counter, shared with the exam screen: the count stored here is the count the student saw.
+import { countWords } from "@/lib/writing/word-count";
+import { WRITING_DRAFT_MAX_CHARS } from "@/lib/writing/constants";
+import type { DraftSaveResult } from "@/lib/writing/save-types";
 import type { GrammarIssueCategory } from "@/lib/ai/prompts/writing-analysis";
 
 export type { GrammarIssueCategory };
@@ -156,10 +160,6 @@ function toSentenceRecord(row: {
   };
 }
 
-function countWords(text: string): number {
-  return text.trim().length === 0 ? 0 : text.trim().split(/\s+/).filter(Boolean).length;
-}
-
 function hashText(text: string): string {
   return createHash("sha256").update(text.trim()).digest("hex");
 }
@@ -254,6 +254,97 @@ export async function saveDraft(studentId: string, input: WritingDraftInput): Pr
   return { success: true, submissionId: created.id };
 }
 
+/**
+ * Phase J - the save behind the official Writing screen: `saveDraft` plus a VERSION check, and the exact text (no trimming -
+ * what the student typed is what comes back after a reload, cursor and all).
+ *
+ * `baseUpdatedAt` is the version of the draft the caller last saw. When the draft has moved on since (another tab or device
+ * saved newer text) nothing is written and the newer text comes back as `conflict`, so an older window can never overwrite
+ * a newer one. The new version is chosen here (now, and later than the base), never by the browser. `startedAt` is only used
+ * when this call creates the draft: it is the moment a standalone sitting began (the clock counts from it).
+ */
+export async function saveDraftVersioned(
+  studentId: string,
+  input: { taskId: string; content: string; submissionId?: string | null; baseUpdatedAt?: string | null; startedAt?: Date | null }
+): Promise<DraftSaveResult> {
+  const content = input.content.slice(0, WRITING_DRAFT_MAX_CHARS);
+  const wordCount = countWords(content);
+
+  if (!input.submissionId) {
+    const task = await getAssignedTaskForStudent(input.taskId, studentId);
+    if (!task) return { success: false, error: "This assignment isn't available to you." };
+    const { taskType, category, prompt } = taskFields(task);
+    const created = await prisma.writingSubmission.create({
+      data: { studentId, taskId: task.id, taskType, category, prompt, content, wordCount, status: "DRAFT", startedAt: input.startedAt ?? null },
+    });
+    return { success: true, submissionId: created.id, updatedAt: created.updatedAt.toISOString() };
+  }
+
+  // A draft that already exists is updated in ONE statement: it must be this student's, still a draft, of this task (and, when a version
+  // is named, still at that version). The task's wording was copied onto it when it was created and is refreshed when it is handed in,
+  // so an autosave - the most frequent call of the whole exam - touches nothing but the text.
+  const base = input.baseUpdatedAt ? new Date(input.baseUpdatedAt) : null;
+  if (base && Number.isNaN(base.getTime())) return { success: false, error: "Could not save your draft." };
+  const next = new Date(Math.max(Date.now(), (base?.getTime() ?? 0) + 1));
+  const written = await prisma.writingSubmission.updateMany({
+    where: { id: input.submissionId, studentId, taskId: input.taskId, status: "DRAFT", ...(base ? { updatedAt: base } : {}) },
+    data: { content, wordCount, updatedAt: next },
+  });
+  if (written.count === 1) return { success: true, submissionId: input.submissionId, updatedAt: next.toISOString() };
+
+  const current = await prisma.writingSubmission.findFirst({ where: { id: input.submissionId, studentId }, select: { taskId: true, status: true, content: true, updatedAt: true } });
+  if (!current || current.taskId !== input.taskId) return { success: false, error: "Draft not found." };
+  if (current.status !== "DRAFT") return { success: false, error: "This essay has already been submitted and can't be edited.", submitted: true };
+  return { success: false, error: "This writing was changed in another window.", conflict: { content: current.content, updatedAt: current.updatedAt.toISOString() } };
+}
+
+export type OpenDraft = { id: string; content: string; updatedAt: Date; startedAt: Date | null };
+
+/**
+ * Phase J - the student's open draft of a task, created if there is none, SAFE against two requests at the same moment (two tabs
+ * opening the same sitting, a double click on "Start test"): they end up with ONE draft. A plain "look, then create" would let each
+ * request create its own and the two windows would then be saving to different drafts, each taking the other for an older window.
+ * The second request waits on a per-student, per-task lock until the first has committed, then finds its draft.
+ *
+ * `since` narrows "open draft" to one made inside the current Full Mock Writing session; `startedAt` is written only when this call
+ * creates the draft (the moment a standalone sitting began).
+ */
+export async function getOrCreateOpenDraft(
+  studentId: string,
+  taskId: string,
+  options: { since?: Date; startedAt?: Date | null } = {}
+): Promise<{ success: true; draft: OpenDraft; created: boolean } | { success: false; error: string }> {
+  const select = { id: true, content: true, updatedAt: true, startedAt: true } as const;
+  const find = (client: { writingSubmission: typeof prisma.writingSubmission }) =>
+    client.writingSubmission.findFirst({
+      where: { studentId, taskId, status: "DRAFT", ...(options.since ? { createdAt: { gte: options.since } } : {}) },
+      orderBy: { updatedAt: "desc" },
+      select,
+    });
+
+  const existing = await find(prisma);
+  if (existing) return { success: true, draft: existing, created: false };
+
+  const task = await getAssignedTaskForStudent(taskId, studentId);
+  if (!task) return { success: false, error: "This assignment isn't available to you." };
+  const { taskType, category, prompt } = taskFields(task);
+
+  const outcome = await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`writing-draft:${studentId}:${taskId}`}, 0))`;
+      const again = await find(tx);
+      if (again) return { draft: again, created: false };
+      const draft = await tx.writingSubmission.create({
+        data: { studentId, taskId: task.id, taskType, category, prompt, content: "", wordCount: 0, status: "DRAFT", startedAt: options.startedAt ?? null },
+        select,
+      });
+      return { draft, created: true };
+    },
+    { maxWait: 10_000, timeout: 20_000 }
+  );
+  return { success: true, ...outcome };
+}
+
 export type SubmitEssayResult = { success: true; submissionId: string; analysisWarning?: string } | { success: false; error: string };
 
 /** Submits a brand-new essay OR promotes an existing draft to PENDING, then immediately runs AI analysis. Same server-derived task fields as saveDraft — never trusts client-supplied assignment metadata. */
@@ -304,7 +395,10 @@ export async function submitEssay(studentId: string, input: SubmitEssayInput): P
   return { success: true, submissionId, analysisWarning: analysisResult.success ? undefined : analysisResult.error };
 }
 
-export type SubmitFullMockEssayResult = { success: true; submissionId: string; blank: boolean } | { success: false; error: string };
+export type SubmitFullMockEssayResult =
+  | { success: true; submissionId: string; blank: boolean }
+  /** `conflict` (Phase J): the draft was changed in another window after `baseUpdatedAt` - nothing was handed in. */
+  | { success: false; error: string; conflict?: { content: string; updatedAt: string } };
 
 /**
  * Phase E — hands in one task of a Full Mock Writing session. Same storage as
@@ -322,7 +416,7 @@ export type SubmitFullMockEssayResult = { success: true; submissionId: string; b
  */
 export async function submitFullMockEssay(
   studentId: string,
-  input: { taskId: string; content: string; submissionId?: string | null }
+  input: { taskId: string; content: string; submissionId?: string | null; baseUpdatedAt?: string | null }
 ): Promise<SubmitFullMockEssayResult> {
   const task = await getAssignedTaskForStudent(input.taskId, studentId);
   if (!task) return { success: false, error: "This assignment isn't available to you." };
@@ -348,8 +442,14 @@ export async function submitFullMockEssay(
     const existing = await prisma.writingSubmission.findFirst({ where: { id: input.submissionId, studentId } });
     if (!existing) return { success: false, error: "Draft not found." };
     if (existing.status !== "DRAFT") return { success: true, submissionId: existing.id, blank: existing.content.trim().length === 0 };
-    await prisma.writingSubmission.update({ where: { id: existing.id }, data });
-    return { success: true, submissionId: existing.id, blank };
+    // Phase J - when the caller names the version it is handing in, the draft is only promoted if it is STILL that version
+    // (checked in the same statement that writes it): a window that is behind cannot hand in over newer text.
+    const base = input.baseUpdatedAt ? new Date(input.baseUpdatedAt) : null;
+    const written = await prisma.writingSubmission.updateMany({ where: { id: existing.id, status: "DRAFT", ...(base ? { updatedAt: base } : {}) }, data });
+    if (written.count === 1) return { success: true, submissionId: existing.id, blank };
+    const now = await prisma.writingSubmission.findFirst({ where: { id: existing.id, studentId }, select: { status: true, content: true, updatedAt: true } });
+    if (now && now.status !== "DRAFT") return { success: true, submissionId: existing.id, blank: now.content.trim().length === 0 };
+    return { success: false, error: "This writing was changed in another window.", conflict: now ? { content: now.content, updatedAt: now.updatedAt.toISOString() } : undefined };
   }
 
   const created = await prisma.writingSubmission.create({ data: { studentId, ...data } });
