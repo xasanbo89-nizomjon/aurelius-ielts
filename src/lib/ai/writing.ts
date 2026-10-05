@@ -687,7 +687,8 @@ export async function addTeacherFeedback(submissionId: string, teacherId: string
 
 export async function getStudentSubmissions(studentId: string): Promise<WritingSubmissionSummary[]> {
   const submissions = await prisma.writingSubmission.findMany({
-    where: { studentId },
+    // Phase K - the unfinished drafts of a Full Mock's Writing paper are not the student's own writing tasks and never show in their lists.
+    where: { studentId, NOT: { status: "DRAFT", task: { is: { fullMockUse: { isNot: null } } } } },
     orderBy: { createdAt: "desc" },
     include: { analysis: { select: { estimatedBand: true } } },
   });

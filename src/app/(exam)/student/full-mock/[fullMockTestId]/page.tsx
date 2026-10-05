@@ -26,9 +26,11 @@ export default async function FullMockStartPage({
   params: Promise<{ fullMockTestId: string }>;
 }) {
   const { fullMockTestId } = await params;
-  const { profile } = await requireStudentProfile();
+  const { user, profile } = await requireStudentProfile();
 
   const test = await getPublishedFullMockTestDetail(fullMockTestId);
+  // Phase K - a draft mock never reaches a student (getPublishedFullMockTestDetail only returns PUBLISHED). A temporary ("_...") mock is kept out of every list
+  // (getStudentFullMockDashboard) but stays reachable by its address: the access code is what lets a student in, and a teacher rehearsing a mock uses that address.
   if (!test) notFound();
 
   if (!(await hasActiveAccessForFullMockTest(profile.id, fullMockTestId))) {
@@ -121,6 +123,20 @@ export default async function FullMockStartPage({
               </Badge>
             ))}
           </div>
+
+          {!progress && (
+            <dl className="bg-secondary/50 space-y-1.5 rounded-xl px-4 py-3.5 text-left text-sm" data-testid="confirm-details">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Candidate</dt>
+                <dd className="font-medium" data-testid="confirm-candidate">{user.name ?? user.email}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Test</dt>
+                <dd className="font-medium">{test.title}</dd>
+              </div>
+              <p className="text-muted-foreground pt-1 text-xs">Check that your name and the test are correct. If your name is wrong, tell your teacher before you begin.</p>
+            </dl>
+          )}
 
           {progress ? (
             <div className="space-y-1.5 text-left">

@@ -439,6 +439,9 @@ model Passage {
   audioFileName String?
   audioMimeType String?
   audioSize     Int?
+  /// Phase K - the recording's length in whole seconds, measured ON THE SERVER from the file itself (never taken from the browser).
+  /// The Listening deadline of a sitting is the sum of its distinct recordings plus the 2 minutes of review time. Null = not measured yet.
+  audioDurationSeconds Int?
   orderIndex    Int     @default(0)
 
   createdAt DateTime @default(now())
@@ -708,6 +711,13 @@ model Result {
   /// just an id the UI falls back past if it no longer resolves.
   lastSeenQuestionId String?
 
+  /// Phase K - the SERVER deadline of this attempt: when its time (and, for Listening, the review time) is over. Null = untimed, which
+  /// never expires. Written when the attempt is created; an attempt past it is finalised by the server (lazily on any read and by the
+  /// scheduled job) with the answers that were saved, so an abandoned attempt can no longer stay "in progress" forever.
+  deadlineAt DateTime?
+  /// Phase K - how the attempt ended. Null while it is open and for attempts finished before this existed.
+  endReason  SectionEndReason?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -719,6 +729,7 @@ model Result {
   /// Listening section of a Full Mock Test, not a standalone attempt.
   fullMockSectionResult FullMockSectionResult?
 
+  @@index([completedAt, deadlineAt])
   @@map("results")
 }
 
@@ -734,9 +745,21 @@ model Answer {
   pointsAwarded Int?
 
   createdAt DateTime @default(now())
+  /// Phase K - moves on every save of the answer: the teacher's live table reads "last activity" from the latest autosave, not from a heartbeat.
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@unique([resultId, questionId])
   @@map("answers")
+}
+
+/// Phase K - how a section (a Reading / Listening attempt, the Writing paper of a Full Mock) was ended.
+enum SectionEndReason {
+  /// The student handed it in.
+  SUBMITTED
+  /// The server's deadline passed and the server finalised it with what was saved.
+  TIME_EXPIRED
+  /// The teacher ended it early.
+  TEACHER_ENDED
 }
 
 enum HighlightColor {
@@ -875,11 +898,35 @@ model WritingSubmission {
   analysis              WritingAnalysis?
   rewrites              WritingRewrite[]
   sentenceImprovements  SentenceImprovement[]
+  /// Phase K - text the student's browser still held after the essay was handed in (it was offline at the time): kept beside the
+  /// submission, never part of it.
+  lateTexts             WritingLateText[]
   /// Phase 34 — set only when this submission was made as the Writing
   /// section of a Full Mock Test attempt.
   fullMockSectionResult FullMockSectionResult?
 
   @@map("writing_submissions")
+}
+
+/// Phase K - "late text": words the browser still held when the essay had already been handed in (the student was offline; the server
+/// finalised the paper with the last saved draft). Uploaded when the connection returns, with the moment the browser last held it.
+/// The submission's own content is never changed by it; a teacher is told it exists and can read it.
+model WritingLateText {
+  id           String            @id @default(cuid())
+  submissionId String
+  submission   WritingSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  content     String @db.Text
+  /// sha-256 of the text, so the same words uploaded twice (a retry) are stored once.
+  contentHash String
+  wordCount   Int
+  /// When the browser last held this text (the browser's own clock - informational only).
+  clientSavedAt DateTime
+  receivedAt    DateTime @default(now())
+
+  @@unique([submissionId, contentHash])
+  @@index([submissionId])
+  @@map("writing_late_texts")
 }
 
 // ---------------------------------------------------------------------------
@@ -1412,6 +1459,9 @@ model FullMockTest {
   status           FullMockTestStatus  @default(DRAFT)
   /// A real, teacher-set guidance range shown on the card (e.g. 6.0-7.5) —
   /// never computed/invented; null until the teacher sets it in Step 1/6.
+  /// Phase K - how long a student may stay on the "Section finished - Continue" screen before the next section starts by itself (it then
+  /// starts as of the moment the wait ended, so nothing is gained by waiting). 5 minutes unless a teacher sets otherwise.
+  transitionLimitMinutes Int @default(5)
   estimatedBandMin Float?
   estimatedBandMax Float?
   /// Phase 47 — Mock Exam Center card's "Exam Number" (e.g. "Cambridge Mock 1").
@@ -1565,6 +1615,10 @@ model FullMockAttempt {
   /// 60-minute Writing countdown on the server (Reading's and Listening's
   /// countdowns are anchored on their own Result.startedAt). Null until then.
   writingStartedAt DateTime?
+  /// Phase K - when the Writing paper ended (handed in, expired or ended by the teacher) and how. Time used for Writing is
+  /// min(writingEndedAt - writingStartedAt, 60 min); the sitting's total time is the SUM of its sections, not wall-clock.
+  writingEndedAt   DateTime?
+  writingEndReason SectionEndReason?
 
   sectionResults FullMockSectionResult[]
 
@@ -1574,6 +1628,7 @@ model FullMockAttempt {
   @@index([studentId])
   @@index([fullMockTestId])
   @@index([accessCodeId])
+  @@index([status])
   @@map("full_mock_attempts")
 }
 

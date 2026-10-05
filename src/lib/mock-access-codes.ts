@@ -2,7 +2,9 @@ import "server-only";
 import { randomInt } from "crypto";
 
 import { prisma } from "@/lib/prisma";
-import { bandForSection, overallBandFromSections, requiredSectionsFor, writingProgressLabel } from "@/lib/full-mock-band-composition";
+import { bandForSection, overallBandFromSections, overallBandLabel, requiredSectionsFor, writingProgressLabel } from "@/lib/full-mock-band-composition";
+import { fullMockTimeUsed, type FullMockTimeUsed } from "@/lib/exam/section-deadline";
+import { settleOverdueAttempts } from "@/lib/full-mock-attempts";
 
 export class OwnershipError extends Error {
   constructor(message = "You don't have access to this resource.") {
@@ -321,19 +323,26 @@ export type MockResultRow = {
   /** "Not started" / "In progress" / "Submitted — AI estimate" / "Graded" … — null when the mock has no Writing section. */
   writingStatus: string | null;
   overallBand: number | null;
+  /** "Overall (L/R/W, unofficial)": which skills the combined figure is made of. */
+  overallLabel: string;
   status: "IN_PROGRESS" | "COMPLETED";
+  /** Phase K - true when any section of the sitting ended because its time ran out (finalised by the browser at the deadline or by the server). */
+  hadTimeExpiry: boolean;
   /** The section the student is sitting right now ("Listening", "Reading", "Writing", "Speaking"); null once the sitting is over. */
   currentSection: string | null;
   startedAt: Date;
   /** null while the sitting is still in progress. */
   completedAt: Date | null;
-  /** Start to finish of the whole sitting, null while in progress. */
+  /** Phase K - the sum of the sections' time used (not the clock time from first click to last); null while in progress. */
   durationSeconds: number | null;
+  timeUsed: FullMockTimeUsed;
   /** Which skills this mock actually contains — a column for a skill it doesn't test shows "n/a" instead of an empty cell that looks like a missing score. */
   includes: { writing: boolean; speaking: boolean };
 };
 
 export async function listMockResultsForTeacher(teacherId: string, search?: string): Promise<MockResultRow[]> {
+  // Phase K - a section whose time ended while nobody was looking is finalised before the table is drawn.
+  await settleOverdueAttempts({ fullMockTest: { createdById: teacherId } }).catch(() => undefined);
   const attempts = await prisma.fullMockAttempt.findMany({
     where: { fullMockTest: { createdById: teacherId } },
     orderBy: { startedAt: "desc" },
@@ -343,6 +352,8 @@ export async function listMockResultsForTeacher(teacherId: string, search?: stri
       startedAt: true,
       completedAt: true,
       writingStartedAt: true,
+      writingEndedAt: true,
+      writingEndReason: true,
       fullMockTestId: true,
       fullMockTest: { select: { title: true, _count: { select: { writingSections: true, speakingSections: true } } } },
       student: { select: { user: { select: { name: true, email: true } } } },
@@ -351,9 +362,9 @@ export async function listMockResultsForTeacher(teacherId: string, search?: stri
         select: {
           section: true,
           result: {
-            select: { bandScore: true, rawScore: true, completedAt: true, mockTest: { select: { questions: { select: { points: true } } } } },
+            select: { bandScore: true, rawScore: true, completedAt: true, durationSeconds: true, endReason: true, mockTest: { select: { questions: { select: { points: true } } } } },
           },
-          writingSubmission: { select: { status: true, bandScore: true, taskType: true, analysis: { select: { estimatedBand: true } } } },
+          writingSubmission: { select: { status: true, bandScore: true, taskType: true, submittedAt: true, analysis: { select: { estimatedBand: true } } } },
           speakingSubmission: { select: { bandScore: true } },
         },
       },
@@ -374,6 +385,15 @@ export async function listMockResultsForTeacher(teacherId: string, search?: stri
     const writingStatus = writingProgressLabel({ taskCount: writingSectionCount, started: attempt.writingStartedAt != null, rows: attempt.sectionResults });
     const writingDone =
       attempt.sectionResults.filter((r) => r.section === "WRITING" && r.writingSubmission && r.writingSubmission.status !== "DRAFT").length >= writingSectionCount;
+
+    const lastWritingHandIn = attempt.sectionResults.map((r) => r.writingSubmission?.submittedAt).filter((d): d is Date => d != null).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+    const timeUsed = fullMockTimeUsed({
+      listeningSeconds: attempt.sectionResults.find((r) => r.section === "LISTENING")?.result?.durationSeconds,
+      readingSeconds: attempt.sectionResults.find((r) => r.section === "READING")?.result?.durationSeconds,
+      hasWriting: writingSectionCount > 0,
+      writingStartedAt: attempt.writingStartedAt,
+      writingEndedAt: attempt.writingEndedAt ?? lastWritingHandIn,
+    });
 
     let currentSection: string | null = null;
     if (attempt.status === "IN_PROGRESS") {
@@ -398,11 +418,14 @@ export async function listMockResultsForTeacher(teacherId: string, search?: stri
       readingScore: scoreOf("READING"),
       writingStatus,
       overallBand: overallBandFromSections(attempt.sectionResults, requiredSectionsFor({ writingSectionCount, speakingSectionCount })),
+      overallLabel: overallBandLabel(requiredSectionsFor({ writingSectionCount, speakingSectionCount })),
       status: attempt.status,
+      hadTimeExpiry: attempt.writingEndReason === "TIME_EXPIRED" || attempt.sectionResults.some((r) => r.result?.endReason === "TIME_EXPIRED"),
       currentSection,
       startedAt: attempt.startedAt,
       completedAt: attempt.completedAt,
-      durationSeconds: attempt.completedAt ? Math.max(0, Math.round((attempt.completedAt.getTime() - attempt.startedAt.getTime()) / 1000)) : null,
+      durationSeconds: attempt.completedAt ? timeUsed.total : null,
+      timeUsed,
       includes: { writing: writingSectionCount > 0, speaking: speakingSectionCount > 0 },
     };
   });

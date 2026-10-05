@@ -11,6 +11,7 @@ import { extractPdfText } from "@/lib/pdf-text-extraction";
 import { parseWritingTasksFromText, type ParsedWritingTask } from "@/lib/writing-task-pdf";
 import { confirmImport, getImportedTestForReview, validateImportedTestRows } from "@/lib/pdf-test-import";
 import * as tm from "@/lib/exam/test-management";
+import { scheduleRecordingMeasure } from "@/lib/exam/recording-length";
 import { createWritingTask } from "@/lib/writing-tasks";
 import { createFullMockTest, publishFullMockTest } from "@/lib/full-mock-tests";
 import { QUICK_BUILD_LISTENING_MINUTES, QUICK_BUILD_READING_MINUTES } from "@/lib/full-mock-metadata";
@@ -65,9 +66,11 @@ export async function attachListeningAudio(mockTestId: string, teacherId: string
 
   const updated = await prisma.passage.updateMany({
     where: { mockTestId },
-    data: { audioPath: audio.url, audioFileName: audio.fileName.slice(0, 255), audioMimeType: audio.mimeType, audioSize: audio.size },
+    data: { audioPath: audio.url, audioFileName: audio.fileName.slice(0, 255), audioMimeType: audio.mimeType, audioSize: audio.size, audioDurationSeconds: null },
   });
   if (updated.count === 0) throw new Error("The Listening test has no sections to attach the audio to.");
+  // Phase K - the recording's length is measured on the server once the response is out.
+  scheduleRecordingMeasure(mockTestId);
   return updated.count;
 }
 

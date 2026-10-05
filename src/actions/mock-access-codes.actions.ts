@@ -142,7 +142,7 @@ export async function exportMockResultsAction(format: ExportFormat, search?: str
       "Writing Band",
       "Writing Status",
       ...(showSpeaking ? ["Speaking"] : []),
-      "Overall Band",
+      "Overall (unofficial)",
       "Completion Time (min)",
       "Started At",
       "Completed At",

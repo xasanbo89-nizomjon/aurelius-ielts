@@ -18,13 +18,14 @@ this page is the map. When a phase ships, move it to "Done".
 | I | The official computer-delivered **Listening** screen: sound check, a recording that plays once by itself and cannot be paused or moved, the screen following it from part to part, 2 minutes to check the answers, then the test is handed in. Same header, footer, question types and highlight / notes menu as Reading |
 | J | The official computer-delivered **Writing** screen, for a task taken on its own and inside a Full Mock: task text and Task 1 picture on the left (click to enlarge), a plain answer box on the right with a live word count, Part 1 / Part 2 in the footer. Built so no text is ever lost: a copy in the browser on every keystroke, autosave, retry while offline, an older tab or computer can never overwrite newer text, the clock is counted on the server and hands the writing in when it runs out |
 
+| K | **The Full Mock sitting, server-side expiry and teacher monitoring**: Listening → Reading → Writing with a "Continue" screen between sections (the next clock starts on Continue, or by itself after a wait limit); every timed section has a deadline kept on the server and is handed in by the server when it passes - on any read and from a scheduled job; time used per section and as a sum; words typed while offline reach the teacher as "late text"; a live table of who is sitting what with "End section"; results where Writing waits for the teacher's mark |
+
 ## Next
 
 - **Phase L - teacher preview**: "Preview as student" on a test (see the backlog).
 - **Phase N - practice mode**: hints and warnings that the exam screens deliberately do not have (for Writing: the
   minimum-length and word-count notices; the exam screen never blocks or warns).
-- **Listening follow-ups**: part switching with one shared recording needs a start time per part; the recording's
-  length stored when the audio is uploaded (see the backlog).
+- **Listening follow-ups**: part switching with one shared recording needs a start time per part (see the backlog).
 - **Retire the legacy screens** (`NEXT_PUBLIC_EXAM_UI=legacy`, `?ui=legacy`) after a release cycle on the official ones.
 - **Notes after the test**: show a student's highlight notes on the review page and the teacher's result page.
 
@@ -70,3 +71,34 @@ this page is the map. When a phase ships, move it to "Done".
    "No response". A draft begun on the old screen has no start time, so it has no clock: "Untimed", never handed in by itself.
 7. Highlight and notes work on the task text (the same right-click menu as Reading and Listening); they are kept in the browser
    for this sitting. The old screens stay behind `NEXT_PUBLIC_EXAM_UI=legacy` / `?ui=legacy`.
+
+## How a Full Mock sitting runs (Phase K)
+
+1. **Start.** The student enters the access code, then the start card shows **Confirm your details** (their name and the test), the sound
+   check and the instructions. "Start Full Mock" opens the sitting (`FullMockAttempt`) and Listening begins. One active sitting per student
+   per mock, even if the button is pressed twice.
+2. **Listening → Reading → Writing**, each on its own official screen with its own clock, each deadline kept on the server
+   (see `docs/server-expiry.md`): Listening = the recording + 2 minutes, Reading 60 minutes, Writing 60 minutes.
+3. **Between sections** a screen says "Listening finished" / "Reading finished" with a **Continue** button. The next clock starts on
+   Continue. If the student does not press it within the mock's wait limit (5 minutes by default,
+   `FullMockTest.transitionLimitMinutes`) the server starts the next section by itself - counted from the end of the wait, not from when
+   the student came back. A finished section never reopens; a student who comes back lands on the right screen (the running section, the
+   Continue screen, or the results).
+4. **When a section's time passes** and nobody hands it in, the server does it: scored with the saved answers, "time expired", the sitting
+   moves on. A browser that was closed mid-Reading finds its Reading handed in at the deadline.
+5. **The teacher's Live Monitor** (`/teacher/mock-monitor`) shows each sitting: section, status (not started / in progress /
+   submitted / expired), answers counted out of 40 (Writing: words), the time left on the server's clock, and when the work was last saved
+   (the last autosave, not a heartbeat). It refreshes by itself every 20 seconds. **End section** (with a confirmation) hands the student's
+   running section in like an expiry, marked "ended by the teacher". A normal teacher sees their own students and the sittings of their own
+   mocks; a Root Teacher sees everyone.
+6. **Time used** is per section, `min(end - start, the section's time)`; the Full Mock total is the sum of its sections.
+7. **Writing and the teacher.** Both Writing tasks wait for the teacher's mark: until then the results say "Awaiting teacher review"
+   and there is no combined figure (the AI estimate is feedback, not a band). Once both are marked the Writing band is
+   (Task 1 + 2 x Task 2) / 3 and the combined figure, labelled **Overall (L/R/W, unofficial)**, is the mean of Listening, Reading and
+   Writing rounded to the nearest half band (6.25 → 6.5, 6.75 → 7.0, 6.125 → 6.0). The teacher's table shows the same numbers.
+8. **Late text.** If the connection was down when Writing ended, the server hands in the last saved draft. When the browser is back online
+   the words it still holds are uploaded as *late text*, linked to the submission with the moment the browser last held them. The
+   submission is never changed; the teacher's review page shows "Late text available (not part of the submission)" and can read it.
+9. **Access codes** keep their rules (expiry date, number of students, active / inactive, assigned student, the teacher who issued them);
+   a code that is used up, expired or switched off gives the same two messages as before. Draft and temporary ("_...") Full Mocks are never
+   listed for students.

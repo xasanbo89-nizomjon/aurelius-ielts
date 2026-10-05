@@ -7,6 +7,7 @@ import { examDurationSeconds, remainingSeconds, timeUsedSeconds } from "@/lib/ex
 import { recordStudentActivity } from "@/lib/study-activity";
 import { getAssignedTaskForStudent, type AssignedWritingTask } from "@/lib/writing-tasks";
 import { getOrCreateOpenDraft, runAnalysis, saveDraftVersioned, submitFullMockEssay } from "@/lib/ai/writing";
+import { recordLateText } from "@/lib/writing-late-text";
 import { WRITING_PART_MINUTES, WRITING_SAVE_GRACE_SECONDS, type WritingTaskKey } from "@/lib/writing/constants";
 import type { DraftSaveResult } from "@/lib/writing/save-types";
 
@@ -56,6 +57,8 @@ export type StartWritingSittingResult = { success: true; submissionId: string; r
 export async function startWritingSitting(studentId: string, taskId: string): Promise<StartWritingSittingResult> {
   const task = await getAssignedTaskForStudent(taskId, studentId);
   if (!task) return { success: false, error: "This assignment isn't available to you." };
+  // Phase K - a task written for a Full Mock is sat inside that mock only.
+  if (await prisma.fullMockWritingSection.findUnique({ where: { writingTaskId: task.id }, select: { id: true } })) return { success: false, error: "This task belongs to a Full Mock test." };
 
   // One open draft per task, even when "Start test" is pressed twice or in two tabs at the same moment (getOrCreateOpenDraft).
   const opened = await getOrCreateOpenDraft(studentId, task.id, { startedAt: new Date() });
@@ -82,6 +85,8 @@ export async function getWritingSitting(studentId: string, submissionId: string)
   if (!draft?.taskId) return null;
   const task = await getAssignedTaskForStudent(draft.taskId, studentId);
   if (!task) return null;
+  // Phase K - the draft of a Full Mock's Writing paper is only ever opened inside that sitting.
+  if (await prisma.fullMockWritingSection.findUnique({ where: { writingTaskId: task.id }, select: { id: true } })) return null;
   const allowed = sittingAllowedSeconds(draft.startedAt, task.taskNumber);
   return {
     submissionId: draft.id,
@@ -126,11 +131,17 @@ export type SubmitWritingSittingResult =
  */
 export async function submitWritingSitting(
   studentId: string,
-  input: { submissionId: string; content?: string; baseUpdatedAt?: string | null }
+  input: { submissionId: string; content?: string; baseUpdatedAt?: string | null },
+  /** `serverExpiry`: the server hands in a sitting nobody is attending - no AI marker call (the scheduled job stays light) and no study time credited. */
+  options: { serverExpiry?: boolean } = {}
 ): Promise<SubmitWritingSittingResult> {
   const draft = await prisma.writingSubmission.findFirst({ where: { id: input.submissionId, studentId }, select: sittingRow });
   if (!draft || !draft.taskId || !draft.task) return { success: false, error: "Draft not found." };
-  if (draft.status !== "DRAFT") return { success: true, submissionId: draft.id, blank: draft.content.trim().length === 0 };
+  if (draft.status !== "DRAFT") {
+    // Already handed in (by the server's expiry while this window was offline, or by another window): words this window still holds are kept as late text (Phase K).
+    if (input.content !== undefined) await recordLateText(studentId, { submissionId: draft.id, content: input.content }).catch(() => undefined);
+    return { success: true, submissionId: draft.id, blank: draft.content.trim().length === 0 };
+  }
 
   const useBrowser = input.content !== undefined && !isLate(draft.startedAt, draft.task.taskNumber);
   if (useBrowser && input.baseUpdatedAt && new Date(input.baseUpdatedAt).getTime() !== draft.updatedAt.getTime()) {
@@ -144,13 +155,15 @@ export async function submitWritingSitting(
     baseUpdatedAt: useBrowser ? (input.baseUpdatedAt ?? null) : null,
   });
   if (!submitted.success) return submitted;
+  // Phase K - the browser's words arrived after the clock (+ grace): the saved draft was handed in; these are kept for the teacher, never in the submission.
+  if (input.content !== undefined && !useBrowser) await recordLateText(studentId, { submissionId: submitted.submissionId, content: input.content }).catch(() => undefined);
 
   // Study time. The old screen counted Writing minutes with a "heartbeat" request every 30 seconds, but the exam screen must have NO
   // request that can hold up a save (a page's server actions run one at a time, and the heartbeat's streak / achievement work takes
   // seconds). So the sitting is credited once, here, from the server's own clock: the time between "Start test" and the hand-in, never
   // more than the time allowed - the same way a Reading or Listening attempt is credited when it is completed. It runs after the response.
   const allowed = sittingAllowedSeconds(draft.startedAt, draft.task.taskNumber);
-  if (draft.startedAt && allowed != null) {
+  if (draft.startedAt && allowed != null && !options.serverExpiry) {
     const seconds = timeUsedSeconds({ startedAt: draft.startedAt, endedAt: new Date(), allowedSeconds: allowed });
     try {
       after(async () => {
@@ -166,6 +179,34 @@ export async function submitWritingSitting(
   }
 
   // The hand-in is already safe; the marker only adds the report, so a slow or unavailable marker never holds the student up for long.
-  if (!submitted.blank) await withTimeout(runAnalysis(submitted.submissionId, studentId).catch(() => null), ANALYSIS_TIMEOUT_MS);
+  if (!submitted.blank && !options.serverExpiry) await withTimeout(runAnalysis(submitted.submissionId, studentId).catch(() => null), ANALYSIS_TIMEOUT_MS);
   return { success: true, submissionId: submitted.submissionId, blank: submitted.blank };
+}
+
+/**
+ * Phase K - the scheduled job's part for a Writing task taken on its own: a sitting whose clock (and grace) ran out and was never handed in is
+ * handed in with the draft that was saved, exactly as when its student next opens it. Sittings with no start time (the old screen's drafts) have no
+ * clock and are never touched. Returns how many were handed in.
+ */
+export async function settleExpiredWritingSittings(options: { now?: Date; limit?: number } = {}): Promise<number> {
+  const now = options.now ?? new Date();
+  // Cheap pre-filter: nothing started less than the shortest allowance (+ grace) ago can be over yet.
+  const shortest = Math.min(...Object.values(WRITING_PART_MINUTES)) * 60 + WRITING_SAVE_GRACE_SECONDS;
+  const candidates = await prisma.writingSubmission.findMany({
+    where: { status: "DRAFT", startedAt: { not: null, lt: new Date(now.getTime() - shortest * 1000) } },
+    select: { id: true, studentId: true, startedAt: true, task: { select: { taskNumber: true } } },
+    orderBy: { startedAt: "asc" },
+    take: options.limit ?? 100,
+  });
+  let handedIn = 0;
+  for (const draft of candidates) {
+    if (!draft.task || !isLate(draft.startedAt, draft.task.taskNumber, now.getTime())) continue;
+    try {
+      const done = await submitWritingSitting(draft.studentId, { submissionId: draft.id }, { serverExpiry: true });
+      if (done.success) handedIn++;
+    } catch (error) {
+      console.error("[cron] could not hand in writing sitting", draft.id, error);
+    }
+  }
+  return handedIn;
 }

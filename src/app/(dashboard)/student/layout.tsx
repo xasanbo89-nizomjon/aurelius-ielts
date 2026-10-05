@@ -4,6 +4,7 @@ import { requireStudentProfile } from "@/lib/session";
 import { recordLoginAndGetStreak } from "@/lib/login-streak";
 import { getSubscriptionSummary } from "@/lib/subscription";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { LateTextUploader } from "@/components/student/late-text-uploader";
 import { STUDENT_NAV_ITEMS, STUDENT_SECONDARY_NAV_ITEMS } from "@/lib/nav-config";
 
 // Every page under this layout renders per-user, real-time data — never
@@ -28,6 +29,8 @@ export default async function StudentLayout({ children }: { children: ReactNode 
       secondaryNavItems={STUDENT_SECONDARY_NAV_ITEMS}
     >
       {children}
+      {/* Phase K - words a Writing paper missed because the student was offline when it ended go to the teacher as "late text". */}
+      <LateTextUploader />
     </DashboardShell>
   );
 }

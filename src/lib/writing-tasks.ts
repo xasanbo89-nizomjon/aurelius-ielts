@@ -302,7 +302,8 @@ export type StudentTaskWithProgress = {
  */
 export async function listWritingTasksForStudentWithProgress(studentId: string): Promise<StudentTaskWithProgress[]> {
   const tasks = await prisma.writingTask.findMany({
-    where: { status: "PUBLISHED", assignments: { some: { studentId } } },
+    // Phase K - a task written for a Full Mock is sat inside that mock's Writing paper, never as a task of its own: it (and its drafts) never appear in this list.
+    where: { status: "PUBLISHED", assignments: { some: { studentId } }, fullMockUse: { is: null } },
     orderBy: [{ dueDate: "asc" }, { taskNumber: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,

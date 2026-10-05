@@ -3,6 +3,7 @@ import type { MockTestCategory, PassageAttachmentType, Prisma, QuestionType, Tes
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
 import { summaryBlankKeys } from "@/lib/exam/question-numbering";
+import { scheduleRecordingMeasure } from "@/lib/exam/recording-length";
 import { deleteBucketObjects, deleteStoredFiles } from "@/lib/uploads/storage-cleanup";
 import { TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
 
@@ -285,7 +286,7 @@ export async function addPassage(
     _max: { orderIndex: true },
   });
 
-  return prisma.passage.create({
+  const created = await prisma.passage.create({
     data: {
       mockTestId: testId,
       title: input.title,
@@ -298,6 +299,9 @@ export async function addPassage(
       orderIndex: (maxOrder._max.orderIndex ?? -1) + 1,
     },
   });
+  // Phase K - a new recording gets its length measured on the server (the Listening deadline is built from it).
+  if (input.audioPath || input.audioUrl) scheduleRecordingMeasure(testId);
+  return created;
 }
 
 export async function updatePassage(
@@ -309,7 +313,10 @@ export async function updatePassage(
   // Audio fields are only ever included by the caller when a fresh upload
   // just happened (see PassageEditorDialog) — otherwise they're omitted
   // entirely so an existing passage's audio is left untouched, not cleared.
-  const updated = await prisma.passage.update({ where: { id: passageId }, data: input });
+  const audioChanged = input.audioPath !== undefined || input.audioUrl !== undefined;
+  // A new recording invalidates the stored length of the old one (Phase K).
+  const updated = await prisma.passage.update({ where: { id: passageId }, data: audioChanged ? { ...input, audioDurationSeconds: null } : input });
+  if (audioChanged && (input.audioPath || input.audioUrl)) scheduleRecordingMeasure(existing.mockTestId);
 
   // Phase A — replacing the audio must not strand the old file in storage.
   const replacedFiles = [
@@ -370,7 +377,7 @@ async function assertAudioCanBeRemoved(testId: string) {
   if (test.isPublished) throw new Error("This test is published — unpublish it before removing its audio, or upload a replacement instead.");
 }
 
-const NO_AUDIO = { audioPath: null, audioUrl: null, audioFileName: null, audioMimeType: null, audioSize: null } as const;
+const NO_AUDIO = { audioPath: null, audioUrl: null, audioFileName: null, audioMimeType: null, audioSize: null, audioDurationSeconds: null } as const;
 
 export async function removePassageAudio(passageId: string, teacherId: string) {
   const passage = await assertOwnsPassage(passageId, teacherId);

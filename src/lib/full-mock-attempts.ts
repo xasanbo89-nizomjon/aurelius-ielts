@@ -1,8 +1,13 @@
 import "server-only";
 
+import type { Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
-import { getOrCreateAttempt } from "@/lib/exam/attempts";
+import { finalizeAttempt, getOrCreateAttempt } from "@/lib/exam/attempts";
 import { getQuestionNumberCounts } from "@/lib/exam/question-counts";
+import { EXPIRY_GRACE_SECONDS, WRITING_ALLOWED_SECONDS, deadlineFrom, isPastDeadline, sectionAllowedSeconds, writingDeadline } from "@/lib/exam/section-deadline";
+import { ensureWritingAssignment } from "@/lib/full-mock-assignments";
+import { finalizeFullMockWriting } from "@/lib/full-mock-writing";
 import {
   FULL_MOCK_LISTENING_MINUTES,
   FULL_MOCK_LISTENING_TRANSFER_MINUTES,
@@ -42,13 +47,20 @@ export async function getOrCreateFullMockAttempt(studentId: string, fullMockTest
   const test = await prisma.fullMockTest.findFirst({ where: { id: fullMockTestId, status: "PUBLISHED" } });
   if (!test) return null;
 
-  const existing = await prisma.fullMockAttempt.findFirst({
-    where: { studentId, fullMockTestId, status: "IN_PROGRESS" },
-    orderBy: { startedAt: "desc" },
-  });
+  const find = (db: Pick<typeof prisma, "fullMockAttempt">) =>
+    db.fullMockAttempt.findFirst({ where: { studentId, fullMockTestId, status: "IN_PROGRESS" }, orderBy: { startedAt: "desc" } });
+  const existing = await find(prisma);
   if (existing) return existing;
 
-  return prisma.fullMockAttempt.create({ data: { studentId, fullMockTestId, accessCodeId } });
+  // Phase K - one active attempt per student per mock (so per access code), even when "Start" is pressed twice or in two tabs at the same moment:
+  // the second request waits for the first one's transaction and then finds its attempt instead of creating another.
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`full-mock-attempt:${studentId}:${fullMockTestId}`}, 0))`;
+      return (await find(tx)) ?? tx.fullMockAttempt.create({ data: { studentId, fullMockTestId, accessCodeId } });
+    },
+    { maxWait: 10_000, timeout: 20_000 }
+  );
 }
 
 async function loadAttemptContext(attemptId: string, studentId: string) {
@@ -74,10 +86,8 @@ async function loadAttemptContext(attemptId: string, studentId: string) {
   });
 }
 
-export async function ensureWritingAssignment(studentId: string, taskId: string): Promise<void> {
-  // INSERT … ON CONFLICT DO NOTHING: two requests assigning the same task at the same moment (two tabs, a replayed press) must not collide on the unique key the way two upserts can.
-  await prisma.writingTaskAssignment.createMany({ data: [{ taskId, studentId }], skipDuplicates: true });
-}
+// Phase K - lives in full-mock-assignments (shared with full-mock-writing without a circular import); re-exported so existing imports keep working.
+export { ensureWritingAssignment };
 
 export type FullMockStartableSection = "READING" | "WRITING";
 
@@ -97,9 +107,20 @@ export type FullMockNextStep =
  * always recomputed from real linked rows, never from a trusted counter.
  * The only side effects are the ones needed to START the sitting (creating
  * the Listening Result) and to record finished essays/recordings against it;
- * it NEVER starts Reading or Writing by itself — see `startFullMockSection`.
+ * it starts Reading or Writing only on the student's "Continue" (see
+ * `startFullMockSection`) - or, Phase K, when the student has left the
+ * "Continue" screen waiting longer than the mock's limit (`settleFullMockAttempt`).
+ *
+ * Phase K - every visit first lets the server finalise whatever has run past
+ * its deadline (a section whose time is over is handed in with its saved
+ * answers, the next one moves on), so what is returned is always the real state.
  */
 export async function resolveNextFullMockStep(attemptId: string, studentId: string): Promise<FullMockNextStep> {
+  await settleFullMockAttempt(attemptId, { studentId }).catch((error) => console.error("[full-mock] settle failed:", error));
+  return resolveStep(attemptId, studentId);
+}
+
+async function resolveStep(attemptId: string, studentId: string): Promise<FullMockNextStep> {
   const attempt = await loadAttemptContext(attemptId, studentId);
   if (!attempt) return { kind: "error", message: "Attempt not found." };
   if (attempt.status === "COMPLETED") return { kind: "complete" };
@@ -173,9 +194,16 @@ export async function resolveNextFullMockStep(attemptId: string, studentId: stri
     }
   }
 
+  // The sitting ended when its last section did - not when someone next looked at it (a finished sitting may be opened hours later).
+  const sectionEnds = [
+    attempt.sectionResults.find((r) => r.section === "LISTENING")?.result?.completedAt,
+    attempt.sectionResults.find((r) => r.section === "READING")?.result?.completedAt,
+    attempt.writingEndedAt,
+  ].filter((d): d is Date => d != null);
+  const completedAt = sectionEnds.length > 0 ? new Date(Math.max(...sectionEnds.map((d) => d.getTime()))) : new Date();
   await prisma.fullMockAttempt.update({
     where: { id: attemptId },
-    data: { status: "COMPLETED", completedAt: new Date(), currentSection: attempt.fullMockTest.speakingSections.length > 0 ? "SPEAKING" : attempt.fullMockTest.writingSections.length > 0 ? "WRITING" : "READING" },
+    data: { status: "COMPLETED", completedAt, currentSection: attempt.fullMockTest.speakingSections.length > 0 ? "SPEAKING" : attempt.fullMockTest.writingSections.length > 0 ? "WRITING" : "READING" },
   });
   return { kind: "complete" };
 }
@@ -190,7 +218,15 @@ export async function resolveNextFullMockStep(attemptId: string, studentId: stri
 export async function startFullMockSection(attemptId: string, studentId: string, section: FullMockStartableSection): Promise<FullMockNextStep> {
   const step = await resolveNextFullMockStep(attemptId, studentId);
   if (step.kind !== "ready" || step.section !== section) return step;
+  return performSectionStart(attemptId, studentId, section, new Date());
+}
 
+/**
+ * Starts a section whose turn it is, with its clock counted from `startedAt` (the moment of the student's "Continue", or - when the server
+ * starts it for a student who did not continue in time - the moment the wait ran out, so waiting longer gains nothing). Claims the step first,
+ * so any number of simultaneous callers (two tabs, a double request, the scheduled job) start it exactly once.
+ */
+async function performSectionStart(attemptId: string, studentId: string, section: FullMockStartableSection, startedAt: Date): Promise<FullMockNextStep> {
   const attempt = await loadAttemptContext(attemptId, studentId);
   if (!attempt) return { kind: "error", message: "Attempt not found." };
 
@@ -202,11 +238,11 @@ export async function startFullMockSection(attemptId: string, studentId: string,
     if (claimed.count === 0) {
       // Another request is starting Reading right now (or stopped half-way): give it a moment, then either follow it or finish the job.
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      const now = await resolveNextFullMockStep(attemptId, studentId);
+      const now = await resolveStep(attemptId, studentId);
       if (now.kind !== "ready" || now.section !== "READING") return now;
     }
     try {
-      const result = await getOrCreateAttempt(studentId, readingMockTestId, { viaFullMock: true });
+      const result = await getOrCreateAttempt(studentId, readingMockTestId, { viaFullMock: true, startedAt });
       if (!result) {
         await prisma.fullMockAttempt.update({ where: { id: attemptId }, data: { currentSection: "LISTENING" } });
         return { kind: "error", message: "The linked reading test is no longer available." };
@@ -223,10 +259,10 @@ export async function startFullMockSection(attemptId: string, studentId: string,
   } else {
     await Promise.all(attempt.fullMockTest.writingSections.map((s) => ensureWritingAssignment(studentId, s.writingTaskId)));
     // Conditional on "not started yet": two quick presses cannot move the anchor and hand out extra minutes.
-    await prisma.fullMockAttempt.updateMany({ where: { id: attemptId, writingStartedAt: null }, data: { writingStartedAt: new Date(), currentSection: "WRITING" } });
+    await prisma.fullMockAttempt.updateMany({ where: { id: attemptId, writingStartedAt: null }, data: { writingStartedAt: startedAt, currentSection: "WRITING" } });
   }
 
-  return resolveNextFullMockStep(attemptId, studentId);
+  return resolveStep(attemptId, studentId);
 }
 
 // ---------------------------------------------------------------------------
@@ -391,4 +427,249 @@ export async function findInProgressFullMockLinkForWritingSubmission(writingSubm
   });
   if (!link || link.attempt.status !== "IN_PROGRESS") return null;
   return link.attempt.id;
+}
+
+// ---------------------------------------------------------------------------
+// Phase K - the server finalises what has run past its deadline.
+//
+// Until now only the student's own browser ended a section: close the tab and the
+// attempt stayed "in progress" for ever. Now every section has a server deadline
+// (Result.deadlineAt, FullMockAttempt.writingStartedAt + 60 min) and `settleFullMockAttempt`
+// carries the sitting forward exactly as the student's own clicks would have:
+//
+//   a section past its deadline (+ a short grace, so the browser's own hand-in wins)
+//       -> scored with the answers that were SAVED (never changed), marked handed in as of its
+//          deadline ("time expired"), and the sitting moves on;
+//   a "Continue" screen left waiting longer than the mock's limit (default 5 minutes)
+//       -> the next section starts by itself, with its clock counted from the moment the wait
+//          ran out - so waiting longer gains nothing; and that section may itself already be over.
+//
+// It runs lazily whenever a student or teacher reads the attempt, and from the scheduled job
+// (`settleExpiredAttempts`) for the attempts nobody is looking at. It is idempotent: every write
+// is guarded, so two callers at once change nothing twice.
+// ---------------------------------------------------------------------------
+
+type ResultTimes = { id: string; startedAt: Date; completedAt: Date | null; deadlineAt: Date | null; mockTest: { durationMinutes: number | null } };
+
+async function loadSettleContext(attemptId: string, studentId?: string) {
+  return prisma.fullMockAttempt.findFirst({
+    where: { id: attemptId, status: "IN_PROGRESS", ...(studentId ? { studentId } : {}) },
+    select: {
+      id: true,
+      studentId: true,
+      writingStartedAt: true,
+      writingEndedAt: true,
+      fullMockTest: { select: { transitionLimitMinutes: true, writingSections: { select: { writingTaskId: true } } } },
+      sectionResults: {
+        where: { section: { in: ["LISTENING", "READING"] } },
+        select: { section: true, result: { select: { id: true, startedAt: true, completedAt: true, deadlineAt: true, mockTest: { select: { durationMinutes: true } } } } },
+      },
+    },
+  });
+}
+
+/** The stored server deadline of a section; an attempt made before deadlines existed falls back to the official Full Mock length. */
+function sectionDeadlineOf(skill: "LISTENING" | "READING", result: ResultTimes): Date | null {
+  if (result.deadlineAt) return result.deadlineAt;
+  return deadlineFrom(result.startedAt, sectionAllowedSeconds({ skill, fullMock: true, durationMinutes: result.mockTest.durationMinutes, recordingSeconds: null }));
+}
+
+export type SettleOutcome = { steps: string[] };
+
+export async function settleFullMockAttempt(attemptId: string, options: { studentId?: string; now?: Date; analyse?: boolean } = {}): Promise<SettleOutcome> {
+  const now = options.now ?? new Date();
+  const steps: string[] = [];
+  let studentIdSeen: string | null = null;
+
+  // A few rounds at most: each one moves the sitting on by one section (a student who was away for a day passes through all of them).
+  for (let round = 0; round < 8; round++) {
+    const ctx = await loadSettleContext(attemptId, options.studentId);
+    if (!ctx) break;
+    studentIdSeen = ctx.studentId;
+    const limitMs = Math.max(0, ctx.fullMockTest.transitionLimitMinutes) * 60_000;
+    const listening = ctx.sectionResults.find((r) => r.section === "LISTENING")?.result;
+    const reading = ctx.sectionResults.find((r) => r.section === "READING")?.result;
+    if (!listening) break; // the sitting has no clock until its Listening opens
+
+    const expire = async (skill: "LISTENING" | "READING", result: ResultTimes) => {
+      const deadline = sectionDeadlineOf(skill, result);
+      if (!deadline || !isPastDeadline(deadline, now, EXPIRY_GRACE_SECONDS)) return false;
+      try {
+        await finalizeAttempt(result.id, { endedAt: deadline, reason: "TIME_EXPIRED" });
+      } catch {
+        // already finalised by the student's own hand-in or by another caller: that is the same outcome
+      }
+      steps.push(`${skill.toLowerCase()} expired`);
+      return true;
+    };
+
+    if (!listening.completedAt) {
+      if (await expire("LISTENING", listening)) continue;
+      break;
+    }
+
+    if (!reading) {
+      const startAt = new Date(listening.completedAt.getTime() + limitMs);
+      if (now.getTime() < startAt.getTime()) break; // still on the "Continue" screen, within the limit
+      await performSectionStart(attemptId, ctx.studentId, "READING", startAt);
+      steps.push("reading started automatically");
+      continue;
+    }
+    if (!reading.completedAt) {
+      if (await expire("READING", reading)) continue;
+      break;
+    }
+
+    if (ctx.fullMockTest.writingSections.length === 0) break;
+    if (!ctx.writingStartedAt) {
+      const startAt = new Date(reading.completedAt.getTime() + limitMs);
+      if (now.getTime() < startAt.getTime()) break;
+      await performSectionStart(attemptId, ctx.studentId, "WRITING", startAt);
+      steps.push("writing started automatically");
+      continue;
+    }
+    if (!ctx.writingEndedAt) {
+      const deadline = writingDeadline(ctx.writingStartedAt);
+      if (!isPastDeadline(deadline, now, EXPIRY_GRACE_SECONDS)) break;
+      // Hands in the drafts that were saved (blank for a task never touched); the AI marker is left to a later request.
+      await finalizeFullMockWriting(attemptId, ctx.studentId, [], { endedAt: deadline, reason: "TIME_EXPIRED", analyse: options.analyse ?? false });
+      steps.push("writing expired");
+      continue;
+    }
+    break;
+  }
+
+  // Links the handed-in essays and completes the sitting when nothing is left (the same step every visit takes).
+  if (steps.length > 0 && studentIdSeen) await resolveStep(attemptId, studentIdSeen);
+  return { steps };
+}
+
+/** What the "Continue" screen shows: when the next section starts by itself if the student does not continue. Null when nothing is waiting. */
+export async function getFullMockAutoStart(attemptId: string, studentId: string): Promise<{ section: FullMockStartableSection; autoStartAt: Date; limitMinutes: number } | null> {
+  const ctx = await loadSettleContext(attemptId, studentId);
+  if (!ctx) return null;
+  const listening = ctx.sectionResults.find((r) => r.section === "LISTENING")?.result;
+  const reading = ctx.sectionResults.find((r) => r.section === "READING")?.result;
+  const limitMinutes = Math.max(0, ctx.fullMockTest.transitionLimitMinutes);
+  if (listening?.completedAt && !reading) return { section: "READING", autoStartAt: new Date(listening.completedAt.getTime() + limitMinutes * 60_000), limitMinutes };
+  if (reading?.completedAt && ctx.fullMockTest.writingSections.length > 0 && !ctx.writingStartedAt) {
+    return { section: "WRITING", autoStartAt: new Date(reading.completedAt.getTime() + limitMinutes * 60_000), limitMinutes };
+  }
+  return null;
+}
+
+/**
+ * The scheduled job: finalises everything that has run past its deadline for students nobody is looking at -
+ * standalone Reading / Listening attempts and Full Mock sittings (a sitting may pass through several sections in one go).
+ * Bounded per run, light (the AI marker is not called), and safe to run as often as wanted.
+ */
+export async function settleExpiredAttempts(options: { now?: Date; limit?: number } = {}) {
+  const now = options.now ?? new Date();
+  const limit = options.limit ?? 200;
+  const cutoff = new Date(now.getTime() - EXPIRY_GRACE_SECONDS * 1000);
+  const summary = { standaloneAttempts: 0, fullMockAttempts: 0, fullMockSteps: 0, errors: 0 };
+
+  const open = await prisma.result.findMany({
+    where: { completedAt: null, deadlineAt: { lt: cutoff }, fullMockSectionResult: { is: null } },
+    select: { id: true, deadlineAt: true },
+    orderBy: { deadlineAt: "asc" },
+    take: limit,
+  });
+  for (const result of open) {
+    try {
+      await finalizeAttempt(result.id, { endedAt: result.deadlineAt ?? undefined, reason: "TIME_EXPIRED" });
+      summary.standaloneAttempts++;
+    } catch {
+      // handed in by the student in the meantime
+    }
+  }
+
+  const sittings = await prisma.fullMockAttempt.findMany({ where: { status: "IN_PROGRESS" }, select: { id: true }, orderBy: { updatedAt: "asc" }, take: limit });
+  for (const sitting of sittings) {
+    try {
+      const { steps } = await settleFullMockAttempt(sitting.id, { now });
+      if (steps.length > 0) {
+        summary.fullMockAttempts++;
+        summary.fullMockSteps += steps.length;
+      }
+    } catch (error) {
+      summary.errors++;
+      console.error("[cron] could not settle full mock attempt", sitting.id, error);
+    }
+  }
+  return summary;
+}
+
+/**
+ * A teacher ends the student's CURRENT section now (after confirming): finalised exactly like an expiry - scored with what was saved, marked
+ * "ended by the teacher" - and the sitting moves on to the "Continue" screen of the next section (or finishes). Normal teachers may do this for
+ * their own students and for sittings of their own mocks; a Root Teacher for any.
+ */
+export async function endFullMockSectionEarly(
+  attemptId: string,
+  teacher: { teacherId: string; isRoot: boolean }
+): Promise<{ ok: true; ended: "LISTENING" | "READING" | "WRITING" } | { ok: false; error: string }> {
+  const attempt = await prisma.fullMockAttempt.findFirst({
+    where: {
+      id: attemptId,
+      status: "IN_PROGRESS",
+      ...(teacher.isRoot ? {} : { OR: [{ student: { teacherId: teacher.teacherId } }, { fullMockTest: { createdById: teacher.teacherId } }] }),
+    },
+    select: { id: true, studentId: true, writingStartedAt: true, writingEndedAt: true, sectionResults: { where: { section: { in: ["LISTENING", "READING"] } }, select: { section: true, result: { select: { id: true, completedAt: true } } } } },
+  });
+  if (!attempt) return { ok: false, error: "That sitting was not found, or it has already finished." };
+
+  const open = (section: "LISTENING" | "READING") => attempt.sectionResults.find((r) => r.section === section)?.result ?? null;
+  const listening = open("LISTENING");
+  const reading = open("READING");
+  let ended: "LISTENING" | "READING" | "WRITING" | null = null;
+
+  if (listening && !listening.completedAt) {
+    await finalizeAttempt(listening.id, { endedAt: new Date(), reason: "TEACHER_ENDED", creditStudyTime: false });
+    ended = "LISTENING";
+  } else if (reading && !reading.completedAt) {
+    await finalizeAttempt(reading.id, { endedAt: new Date(), reason: "TEACHER_ENDED", creditStudyTime: false });
+    ended = "READING";
+  } else if (attempt.writingStartedAt && !attempt.writingEndedAt) {
+    const done = await finalizeFullMockWriting(attemptId, attempt.studentId, [], { endedAt: new Date(), reason: "TEACHER_ENDED", analyse: false });
+    if (!done.success) return { ok: false, error: done.error };
+    ended = "WRITING";
+  }
+  if (!ended) return { ok: false, error: "This student is not in the middle of a section." };
+
+  await resolveStep(attemptId, attempt.studentId);
+  return { ok: true, ended };
+}
+
+/**
+ * Lazy finalisation for a teacher's own screens: of the sittings matching `scope`, those whose current section has run past its deadline
+ * (+ grace) are settled before the screen is drawn, so a teacher never sees "in progress" for a section whose time ended an hour ago.
+ * Only the two cheap, indexed conditions are looked at (an open Reading / Listening attempt past its deadline, a Writing paper past its hour);
+ * a sitting merely waiting on a "Continue" screen is moved on by the student's next visit or by the scheduled job. Bounded and best-effort.
+ */
+export async function settleOverdueAttempts(scope: Prisma.FullMockAttemptWhereInput, options: { now?: Date; limit?: number } = {}): Promise<number> {
+  const now = options.now ?? new Date();
+  const cutoff = new Date(now.getTime() - EXPIRY_GRACE_SECONDS * 1000);
+  const writingCutoff = new Date(now.getTime() - (WRITING_ALLOWED_SECONDS + EXPIRY_GRACE_SECONDS) * 1000);
+  const overdue = await prisma.fullMockAttempt.findMany({
+    where: {
+      AND: [
+        scope,
+        { status: "IN_PROGRESS" },
+        { OR: [{ sectionResults: { some: { result: { completedAt: null, deadlineAt: { lt: cutoff } } } } }, { writingStartedAt: { lt: writingCutoff }, writingEndedAt: null }] },
+      ],
+    },
+    select: { id: true },
+    take: options.limit ?? 50,
+  });
+  let settled = 0;
+  for (const attempt of overdue) {
+    try {
+      const { steps } = await settleFullMockAttempt(attempt.id, { now });
+      if (steps.length > 0) settled++;
+    } catch (error) {
+      console.error("[full-mock] could not settle overdue attempt", attempt.id, error);
+    }
+  }
+  return settled;
 }

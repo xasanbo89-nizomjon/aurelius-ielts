@@ -1,7 +1,8 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { bandForSection, overallBandFromSections, requiredSectionsFor, writingBandIsEstimate, writingTaskBand } from "@/lib/full-mock-band-composition";
+import { bandForSection, overallBandFromSections, overallBandLabel, requiredSectionsFor, writingTaskBand } from "@/lib/full-mock-band-composition";
+import { fullMockTimeUsed, type FullMockTimeUsed } from "@/lib/exam/section-deadline";
 
 /** `included` is false for a skill the mock doesn't test (e.g. a Listening + Reading + Writing mock has no Speaking) — the results page hides those instead of showing a permanent "—". */
 export type FullMockSectionBand = {
@@ -13,15 +14,20 @@ export type FullMockSectionBand = {
   totalMarks: number | null;
 };
 
-export type FullMockWritingTaskResult = { label: string; band: number | null; words: number | null; estimated: boolean };
+/** `band` is the teacher's mark; null = awaiting teacher review. */
+export type FullMockWritingTaskResult = { label: string; band: number | null; words: number | null; awaitingReview: boolean };
 
 export type FullMockResults = {
   fullMockTestId: string;
   fullMockTestTitle: string;
   completedAt: Date | null;
-  /** Start to finish of the whole sitting. */
+  /** The sitting's total time: the sum of its sections (Phase K), not the clock time from first click to last. */
   durationSeconds: number | null;
+  /** Time used per section (Listening and Reading as stored when they ended, Writing = min(end - start, 60 min)). */
+  timeUsed: FullMockTimeUsed;
   overallBand: number | null;
+  /** "Overall (L/R/W, unofficial)" - says which skills the figure is made of. */
+  overallLabel: string;
   sections: {
     listening: FullMockSectionBand;
     reading: FullMockSectionBand;
@@ -30,10 +36,10 @@ export type FullMockResults = {
   };
   /** Per-task Writing detail; the Writing band above is composed from these (Task 2 counts double). */
   writingTasks: FullMockWritingTaskResult[];
-  /** True while any Writing task is banded by the AI marker's estimate because no teacher has marked it yet. */
-  writingIsEstimate: boolean;
-  /** True when an essay was handed in with text but has neither a teacher's mark nor the AI marker's band yet — the results page then offers to mark it now. */
-  writingUnmarked: boolean;
+  /** True while a Writing task is handed in but not yet marked by the teacher: the Writing band (and so the combined figure) is "Awaiting teacher review". */
+  writingAwaitingReview: boolean;
+  /** True when an essay was handed in with text but has neither a teacher's mark nor the AI marker's feedback yet — the results page then offers to generate the feedback now. */
+  writingNeedsFeedback: boolean;
   strengths: string[];
   weaknesses: string[];
   recommendations: string[];
@@ -54,12 +60,14 @@ export async function getFullMockAttemptResults(attemptId: string, studentId: st
     select: {
       startedAt: true,
       completedAt: true,
+      writingStartedAt: true,
+      writingEndedAt: true,
       fullMockTest: { select: { id: true, title: true, _count: { select: { writingSections: true, speakingSections: true } } } },
       sectionResults: {
         select: {
           section: true,
-          result: { select: { bandScore: true, rawScore: true, mockTest: { select: { questions: { select: { points: true } } } } } },
-          writingSubmission: { select: { bandScore: true, taskType: true, wordCount: true, analysis: { select: { estimatedBand: true } } } },
+          result: { select: { bandScore: true, rawScore: true, durationSeconds: true, mockTest: { select: { questions: { select: { points: true } } } } } },
+          writingSubmission: { select: { bandScore: true, taskType: true, wordCount: true, content: true, submittedAt: true, analysis: { select: { id: true, estimatedBand: true } } } },
           speakingSubmission: { select: { bandScore: true } },
         },
       },
@@ -84,20 +92,27 @@ export async function getFullMockAttemptResults(attemptId: string, studentId: st
     speaking: { label: "Speaking", band: bandForSection(attempt.sectionResults, "SPEAKING"), included: includesSpeaking, rawScore: null, totalMarks: null },
   };
 
-  const overallBand = overallBandFromSections(
-    attempt.sectionResults,
-    requiredSectionsFor({ writingSectionCount: attempt.fullMockTest._count.writingSections, speakingSectionCount: attempt.fullMockTest._count.speakingSections })
-  );
+  const required = requiredSectionsFor({ writingSectionCount: attempt.fullMockTest._count.writingSections, speakingSectionCount: attempt.fullMockTest._count.speakingSections });
+  const overallBand = overallBandFromSections(attempt.sectionResults, required);
 
   const writingTasks: FullMockWritingTaskResult[] = attempt.sectionResults
     .filter((r) => r.section === "WRITING" && r.writingSubmission)
-    .map((r) => ({
-      label: r.writingSubmission!.taskType ?? "Task",
-      band: writingTaskBand(r.writingSubmission!),
-      words: r.writingSubmission!.wordCount,
-      estimated: r.writingSubmission!.bandScore == null && r.writingSubmission!.analysis != null,
-    }))
+    .map((r) => {
+      const band = writingTaskBand(r.writingSubmission!);
+      return { label: r.writingSubmission!.taskType ?? "Task", band, words: r.writingSubmission!.wordCount, awaitingReview: band == null };
+    })
     .sort((a, b) => a.label.localeCompare(b.label));
+
+  // Writing counts as "handed in" once the paper has ended; the section's own time used is its start to its end (see fullMockTimeUsed).
+  const lastSubmittedAt = attempt.sectionResults.map((r) => r.writingSubmission?.submittedAt).filter((d): d is Date => d != null).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+  const timeUsed = fullMockTimeUsed({
+    listeningSeconds: attempt.sectionResults.find((r) => r.section === "LISTENING")?.result?.durationSeconds,
+    readingSeconds: attempt.sectionResults.find((r) => r.section === "READING")?.result?.durationSeconds,
+    hasWriting: includesWriting,
+    writingStartedAt: attempt.writingStartedAt,
+    // A sitting finished before Phase K has no recorded end for Writing: its last essay's hand-in is the end.
+    writingEndedAt: attempt.writingEndedAt ?? lastSubmittedAt,
+  });
 
   const known = Object.values(sections).filter((s) => s.included && s.band != null) as { label: string; band: number }[];
   const sorted = [...known].sort((a, b) => b.band - a.band);
@@ -123,12 +138,14 @@ export async function getFullMockAttemptResults(attemptId: string, studentId: st
     fullMockTestId: attempt.fullMockTest.id,
     fullMockTestTitle: attempt.fullMockTest.title,
     completedAt: attempt.completedAt,
-    durationSeconds: attempt.completedAt ? Math.max(0, Math.round((attempt.completedAt.getTime() - attempt.startedAt.getTime()) / 1000)) : null,
+    durationSeconds: attempt.completedAt ? timeUsed.total : null,
+    timeUsed,
     overallBand,
+    overallLabel: overallBandLabel(required),
     sections,
     writingTasks,
-    writingUnmarked: writingTasks.some((task) => task.band == null),
-    writingIsEstimate: writingBandIsEstimate(attempt.sectionResults.map((r) => ({ section: r.section, result: r.result, writingSubmission: r.writingSubmission, speakingSubmission: r.speakingSubmission }))),
+    writingAwaitingReview: writingTasks.some((task) => task.awaitingReview),
+    writingNeedsFeedback: attempt.sectionResults.some((r) => r.section === "WRITING" && r.writingSubmission && r.writingSubmission.bandScore == null && r.writingSubmission.analysis == null && r.writingSubmission.content.trim().length > 0),
     strengths,
     weaknesses,
     recommendations,

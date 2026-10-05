@@ -4,12 +4,13 @@ import { notFound, redirect } from "next/navigation";
 import { BookOpen, CheckCircle2, CircleDashed, Clock, PenLine } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
-import { getFullMockProgressSummary, resolveNextFullMockStep } from "@/lib/full-mock-attempts";
+import { getFullMockAutoStart, getFullMockProgressSummary, resolveNextFullMockStep } from "@/lib/full-mock-attempts";
 import { startFullMockSectionAction } from "@/actions/full-mock-attempts.actions";
 import { FULL_MOCK_READING_MINUTES, FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StartSectionButton } from "@/components/student/start-section-button";
+import { AutoStartNotice } from "@/components/student/auto-start-notice";
 
 export const metadata: Metadata = { title: "Section Complete" };
 
@@ -38,17 +39,17 @@ export default async function FullMockTransitionPage({
       finishedTitle: "Listening finished",
       finishedBody: "Your Listening answers have been saved.",
       nextLabel: "Reading",
-      button: "Start Reading",
+      button: "Continue",
       Icon: BookOpen,
       minutes: FULL_MOCK_READING_MINUTES,
       detail: `${progress.readingPassageCount} ${progress.readingPassageCount === 1 ? "passage" : "passages"} · ${progress.readingQuestionCount} questions`,
       notes: [] as readonly string[],
     },
     WRITING: {
-      finishedTitle: "Reading Completed",
+      finishedTitle: "Reading finished",
       finishedBody: "Your Reading answers have been saved.",
       nextLabel: "Writing",
-      button: "Start Writing",
+      button: "Continue",
       Icon: PenLine,
       minutes: FULL_MOCK_WRITING_MINUTES,
       detail: progress.writingTaskCount === 1 ? "1 task" : `Task 1 and Task 2`,
@@ -62,6 +63,9 @@ export default async function FullMockTransitionPage({
   } as const;
 
   const ready = step.kind === "ready" ? SECTION_COPY[step.section] : null;
+  // Phase K - the next section starts by itself if the student does not continue within the mock's limit.
+  const autoStart = step.kind === "ready" ? await getFullMockAutoStart(attemptId, profile.id) : null;
+  const autoStartSeconds = autoStart ? Math.max(0, Math.floor((autoStart.autoStartAt.getTime() - Date.now()) / 1000)) : null;
   const boundStart = step.kind === "ready" ? startFullMockSectionAction.bind(null, attemptId, step.section) : null;
 
   return (
@@ -109,6 +113,7 @@ export default async function FullMockTransitionPage({
                 )}
               </div>
               <StartSectionButton action={boundStart} label={ready.button} />
+              {autoStartSeconds != null && <AutoStartNotice secondsLeft={autoStartSeconds} sectionLabel={ready.nextLabel} attemptHref={`/student/full-mock/attempt/${attemptId}`} />}
             </>
           ) : (
             <Button asChild size="lg" className="w-full">

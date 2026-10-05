@@ -16,7 +16,10 @@
     "check:parity": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-question-parity.mjs",
     "check:papers": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-reading-papers.mjs",
     "check:writing": "node --import ./scripts/register-ts.mjs scripts/check-writing.mjs",
-    "attempts:repair-time": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/repair-time-used.mjs"
+    "check:expiry": "node --import ./scripts/register-ts.mjs scripts/check-expiry.mjs",
+    "attempts:repair-time": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/repair-time-used.mjs",
+    "attempts:finalize-expired": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/finalize-expired.mjs",
+    "audio:measure": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/measure-recordings.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -44,6 +47,7 @@
     "firebase-admin": "^14.4.0",
     "framer-motion": "^13.4.0",
     "lucide-react": "^1.47.0",
+    "music-metadata": "^12.0.0",
     "next": "^15.5.25",
     "openai": "^7.18.0",
     "pdf-lib": "^1.17.1",

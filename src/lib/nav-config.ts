@@ -66,6 +66,8 @@ export const TEACHER_NAV_ITEMS: NavItem[] = [
   { label: "Tests", href: "/teacher/tests", icon: "FileText" },
   // Phase 51 — Mock Access Code System's teacher-wide scoreboard, across every Full Mock Test.
   { label: "Mock Results", href: "/teacher/mock-results", icon: "ClipboardCheck" },
+  // Phase K - who is sitting a Full Mock right now: section, progress, time left on the server's clock, last save.
+  { label: "Live Monitor", href: "/teacher/mock-monitor", icon: "Activity" },
   { label: "Articles", href: "/teacher/articles", icon: "Newspaper" },
   // Phase 45 — Media Library 2.0: real standalone browsable content,
   // distinct from Tests (timed/graded MockTests) and Articles (interactive

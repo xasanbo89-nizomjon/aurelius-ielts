@@ -15,6 +15,9 @@ import { AIServiceUnavailableError } from "@/lib/ai/errors";
 
 export type ActionResult = { success: true } | { success: false; error: string };
 
+/** `ended`: the attempt is over for good (its time ran out on the server, or a teacher ended it) - the screen takes the student on instead of retrying. */
+export type SaveAnswerResult = { success: true } | { success: false; error: string; ended?: boolean };
+
 export async function startAttemptAction(mockTestId: string) {
   const { profile } = await requireStudentProfile();
 
@@ -93,13 +96,13 @@ export async function saveAnswerAction(
   resultId: string,
   questionId: string,
   response: Prisma.InputJsonValue
-): Promise<ActionResult> {
+): Promise<SaveAnswerResult> {
   try {
     const { profile } = await requireStudentProfile();
     await attempts.saveAnswer(resultId, profile.id, questionId, response);
     return { success: true };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Could not save your answer." };
+    return { success: false, error: error instanceof Error ? error.message : "Could not save your answer.", ended: error instanceof attempts.AttemptEndedError };
   }
 }
 
@@ -212,7 +215,14 @@ export async function submitAttemptAction(resultId: string) {
     redirect("/student/subscription?upgrade=1");
   }
 
-  await attempts.submitAttempt(resultId, profile.id);
+  try {
+    await attempts.submitAttempt(resultId, profile.id);
+  } catch (error) {
+    // Phase K - the server may have finalised the attempt already (its time ran out while the browser was offline, or a teacher ended the
+    // section): then there is nothing left to hand in and the student simply carries on to whatever comes next.
+    const done = await prisma.result.findFirst({ where: { id: resultId, studentId: profile.id, completedAt: { not: null } }, select: { id: true } });
+    if (!done) throw error;
+  }
 
   // Inside a Full Mock the sitting carries straight on: the next screen is the "ready" screen for the next section (Listening finished → Start Reading; Reading completed → Start Writing), not this section's marks.
   const fullMockAttemptId = await findInProgressFullMockLinkForResult(resultId);

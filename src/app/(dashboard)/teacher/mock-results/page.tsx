@@ -69,7 +69,7 @@ export default async function TeacherMockResultsPage({
               <TableHead>Reading</TableHead>
               <TableHead>Writing</TableHead>
               {showSpeaking && <TableHead>Speaking</TableHead>}
-              <TableHead>Overall Band</TableHead>
+              <TableHead>Overall (unofficial)</TableHead>
               <TableHead>Completion Time</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Started At</TableHead>
@@ -109,7 +109,8 @@ export default async function TeacherMockResultsPage({
                 </TableCell>
                 {showSpeaking && <TableCell>{formatBand(row.speakingBand, row.includes.speaking)}</TableCell>}
                 <TableCell className="font-medium" data-testid="overall-cell">
-                  {formatBand(row.overallBand)}
+                  <p className="tabular-nums">{formatBand(row.overallBand)}</p>
+                  <p className="text-muted-foreground text-xs font-normal">{row.overallBand != null ? row.overallLabel : row.includes.writing ? "needs Writing review" : ""}</p>
                 </TableCell>
                 <TableCell className="text-muted-foreground text-xs whitespace-nowrap" data-testid="duration-cell">
                   {formatTimeUsed(row.durationSeconds)}
@@ -119,6 +120,7 @@ export default async function TeacherMockResultsPage({
                     {row.status === "COMPLETED" ? "Completed" : "In Progress"}
                   </Badge>
                   {row.currentSection && <p className="text-muted-foreground mt-1 text-xs">{row.currentSection}</p>}
+                  {row.hadTimeExpiry && <p className="text-muted-foreground mt-1 text-xs" data-testid="expired-note">Time expired</p>}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{formatDateTime(row.startedAt)}</TableCell>
                 <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{formatDateTime(row.completedAt)}</TableCell>

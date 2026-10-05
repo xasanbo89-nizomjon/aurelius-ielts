@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Gauge, ListChecks, User } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Clock, Gauge, ListChecks, User } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getSubmissionReportForTeacher } from "@/lib/ai/writing";
+import { listLateTexts } from "@/lib/writing-late-text";
 import { Button } from "@/components/ui/button";
 import { WritingTaskImageView } from "@/components/student/writing-task-image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,9 @@ export default async function TeacherWritingReviewPage({
 
   const report = await getSubmissionReportForTeacher(submissionId, profile.id);
   if (!report) notFound();
+  // Phase K - words the student's browser still held when the paper had ended (offline at the time). Never part of the submission.
+  const lateTexts = await listLateTexts(report.id);
+  const stamp = (date: Date) => date.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className="space-y-6">
@@ -79,6 +83,32 @@ export default async function TeacherWritingReviewPage({
           <CardContent className="text-sm leading-relaxed whitespace-pre-wrap">{report.content}</CardContent>
         )}
       </Card>
+
+      {lateTexts.length > 0 && (
+        <Card className="border-accent/50" data-testid="late-text">
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+              <Clock className="text-accent size-4.5" aria-hidden="true" /> Late text available
+              <Badge variant="outline">not part of the submission</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              The paper had already been handed in when the student&apos;s browser reconnected; it still held the words below. The submission above, its word count and
+              its band are unchanged — this text was not marked and is shown here so you can decide whether to take it into account.
+            </p>
+            {lateTexts.map((late, index) => (
+              <details key={late.id} className="border-border/70 rounded-lg border px-3 py-2" data-testid="late-text-item">
+                <summary className="cursor-pointer text-sm font-medium">
+                  Late text {lateTexts.length > 1 ? index + 1 : ""} · {late.wordCount} {late.wordCount === 1 ? "word" : "words"} · held in the browser {stamp(late.clientSavedAt)}
+                </summary>
+                <p className="text-muted-foreground mt-1 text-xs">Received by the server {stamp(late.receivedAt)}.</p>
+                <p className="mt-2 leading-relaxed whitespace-pre-wrap" data-testid="late-text-content">{late.content}</p>
+              </details>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {report.analysis && <WritingAnalysisView analysis={report.analysis} content={report.content} />}
 

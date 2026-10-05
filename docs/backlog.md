@@ -14,13 +14,9 @@ Planned work that is not built yet. When a phase ships, delete its section.
   does when each part has its own file). The student then turns the parts themselves, as the recording tells them.
   Fix: let the teacher mark where each part starts (a start time per part, set when the recording is attached) and
   switch at those times.
-- **Length of the recording.** The server does not know how long a recording is: the browser measures it when it loads
-  the file. The 2 minutes of review time are counted from the end of the last recording as measured there, and a page
-  opened later works out its position from the server's start time. Storing the length when the audio is uploaded
-  would let the server hand a finished Listening in by itself even if the student never comes back.
-- **Time used.** For a standalone Listening the stored "time used" is still capped at the test's own duration (and at
-  42 minutes in a Full Mock); the official screen's own end is the recording plus 2 minutes. A test whose recording is
-  longer than its duration therefore shows a time used equal to the duration. Nothing is graded on it.
+- **Time used.** For a standalone Listening the stored "time used" is still capped at the test's own duration; the official
+  screen's own end is the recording plus 2 minutes. A test whose recording is longer than its duration therefore shows a time
+  used equal to the duration. Nothing is graded on it. (In a Full Mock the allowance is the recording + 2 minutes since Phase K.)
 - **First click after a reload.** A browser may refuse to start sound on a page the student has not clicked yet (it
   happens after a reload, and in some browsers on the first page too). The screen then shows "Continue the recording"
   and carries on from where the clock says the recording is. Headless Chrome never refuses, so the refusal was tested
@@ -53,6 +49,25 @@ Planned work that is not built yet. When a phase ships, delete its section.
 - **Autosave latency here.** A save is four database queries (about 3 s on this machine's link to the database, a fraction of
   that near it). The text is in the browser the whole time; only the "Saved" mark waits.
 
+## Full Mock follow-ups (after Phase K)
+
+- **The scheduled job needs a schedule.** `/api/cron/finalize-expired` exists and is tested, but nothing calls it until it is set up
+  (`docs/server-expiry.md`): Vercel Cron more often than once a day needs the Pro plan, otherwise an external pinger. Until then
+  sections are finalised when a student or a teacher opens them.
+- **The Live Monitor polls.** It asks the server every 20 seconds (a server action, one light query); it has no push channel.
+  A thousand students sitting at once would want a lighter, cached endpoint.
+- **Late text is for the official Writing screens.** The old Writing screen (`?ui=legacy`) keeps no browser copy, so it has nothing to
+  upload. Late text is never merged into a submission automatically; the teacher reads it and decides.
+- **The Listening deadline assumes the recording starts with the sitting.** It is start + recording + 2 minutes. The screen starts the
+  recording as soon as the recordings are loaded, so the two agree to within a few seconds; a student whose recording only began
+  more than the 90 s grace after the start would find the server's deadline before their own review time ends. Anchoring the
+  deadline on the moment the recording really began would need that moment stored on the server.
+- **Speaking** is not part of the new section clocks: a Full Mock with a Speaking part still sends the student to it after Writing, with
+  no server deadline.
+- **Standalone Reading / Listening with no duration** are untimed and never expire; only tests that have a duration get a deadline.
+- **A teacher who is not the student's teacher** but made the mock sees that student's sitting in the Live Monitor (the same rule the
+  Mock Results page has always had).
+
 ## Later phases
 
 - Show a student's highlight notes after the test is handed in (the review page and the teacher's result page draw the
@@ -70,7 +85,8 @@ Planned work that is not built yet. When a phase ships, delete its section.
 - 17 old completed Results have no stored band; the pages work it out when they are shown
   (`harness/backfill-bands` was never applied).
 - An internal-titled ("_...") Full Mock is hidden from lists but can still be opened by its direct address.
-- `npm run attempts:repair-time` lists one completed attempt whose stored time used is longer than the test allowed.
+- Old attempts: `npm run attempts:repair-time` and `npm run attempts:finalize-expired` (both dry runs by default) list what Phase K
+  would correct on data from before it; see `docs/server-expiry.md`.
 - The matching drag-and-drop uses click-to-place on touch screens (HTML5 drag does not work there).
 - The highlight menu on a touch screen was tested with Chrome's touch emulation only. Headless Chrome does not select
   text on a synthesized long-press, so the test makes the selection by script (which is what the system's selection
@@ -81,6 +97,8 @@ Planned work that is not built yet. When a phase ships, delete its section.
 | Command | What it checks |
 | --- | --- |
 | `npm run check:writing` | the Writing screen's safety logic, with no database: the word counter, the instruction sentences, the browser-copy rules and the draft engine (autosave, retry, lost answers, black-holed requests, older window refused) against a fake server |
+| `npm run check:expiry` | the server clock's rules, with no database: deadlines (recording + 2 minutes, 60 minutes, untimed never expires, the 90 s grace), time used as a sum, the Writing band and the combined figure's rounding (6.25 → 6.5, 6.75 → 7.0, 6.125 → 6.0) |
 | `npm run check:papers` | published Reading papers are tidy, lettered once, have 40 questions and consistent highlights |
+| `npm run audio:measure` / `attempts:finalize-expired` / `attempts:repair-time` | Phase K data scripts: dry run by default, `-- --apply` to write (see `docs/server-expiry.md`) |
 | `npm run check:parity` | student list, student exam, teacher list and teacher editor all count the same questions |
 | `npm run tests:temp` | lists temporary (`_...`) tests and who attempted them |

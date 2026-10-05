@@ -5,10 +5,11 @@ import { Clock, Gauge, Lightbulb, TrendingDown, TrendingUp } from "lucide-react"
 
 import { requireStudentProfile } from "@/lib/session";
 import { getFullMockAttemptResults } from "@/lib/full-mock-results";
-import { formatDuration } from "@/lib/format";
+import { formatTimeUsed } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MarkWritingButton } from "@/components/student/mark-writing-button";
+import { LateTextUploader } from "@/components/student/late-text-uploader";
 
 export const metadata: Metadata = { title: "Full Mock Results" };
 
@@ -24,9 +25,11 @@ export default async function FullMockResultsPage({
   if (!results) notFound();
 
   const sectionList = Object.values(results.sections).filter((section) => section.included);
+  const timeUsedOf = (label: string): number | null => (label === "Listening" ? results.timeUsed.listening : label === "Reading" ? results.timeUsed.reading : label === "Writing" ? results.timeUsed.writing : null);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-12 sm:py-16">
+      <LateTextUploader />
       <div className="space-y-8">
         <div className="space-y-2 text-center">
           <h1 className="font-display text-2xl font-medium tracking-tight">{results.fullMockTestTitle}</h1>
@@ -36,23 +39,25 @@ export default async function FullMockResultsPage({
         <Card className="border-primary/15 bg-primary/[0.03] py-10">
           <CardContent className="flex flex-col items-center gap-2 text-center">
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase">
-              <Gauge className="size-3.5" aria-hidden="true" /> Overall IELTS Band
+              <Gauge className="size-3.5" aria-hidden="true" /> {results.overallLabel}
             </span>
             <p data-testid="overall-band" className="font-display text-7xl font-medium">
               {results.overallBand != null ? results.overallBand.toFixed(1) : "—"}
             </p>
             {results.overallBand == null && (
-              <p className="text-muted-foreground max-w-sm text-xs">
-                The overall band appears as soon as every section has a band — Writing gets its band from the AI marker straight away (or your teacher&apos;s mark once they review it).
+              <p className="text-muted-foreground max-w-sm text-xs" data-testid="overall-pending">
+                {results.writingAwaitingReview
+                  ? "Your Listening and Reading bands are below. This figure appears once your teacher has marked your Writing."
+                  : "This figure appears as soon as every section has a band."}
               </p>
             )}
-            {results.writingUnmarked && <MarkWritingButton attemptId={attemptId} />}
-            {results.overallBand != null && results.writingIsEstimate && (
-              <p className="text-muted-foreground max-w-sm text-xs">Includes an AI estimate for Writing — it will be updated if your teacher marks it differently.</p>
+            {results.overallBand != null && (
+              <p className="text-muted-foreground max-w-sm text-xs">The mean of your section bands, rounded to the nearest half band. It is not an official IELTS result.</p>
             )}
+            {results.writingNeedsFeedback && <MarkWritingButton attemptId={attemptId} />}
             {results.durationSeconds != null && (
-              <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                <Clock className="size-3.5" aria-hidden="true" /> Completed in {formatDuration(results.durationSeconds)}
+              <p className="text-muted-foreground flex items-center gap-1.5 text-xs" data-testid="time-used-total">
+                <Clock className="size-3.5" aria-hidden="true" /> Time used: {formatTimeUsed(results.durationSeconds)}
               </p>
             )}
           </CardContent>
@@ -63,7 +68,18 @@ export default async function FullMockResultsPage({
             <Card key={section.label} className="py-4" data-testid={`section-${section.label.toLowerCase()}`}>
               <CardContent className="space-y-1 text-center">
                 <p className="text-muted-foreground text-xs font-medium">{section.label} Band</p>
-                <p className="font-display text-3xl font-medium">{section.band != null ? section.band.toFixed(1) : "—"}</p>
+                {section.label === "Writing" && section.band == null && results.writingTasks.length > 0 ? (
+                  <p className="font-display text-base font-medium" data-testid="writing-awaiting">
+                    Awaiting teacher review
+                  </p>
+                ) : (
+                  <p className="font-display text-3xl font-medium">{section.band != null ? section.band.toFixed(1) : "—"}</p>
+                )}
+                {timeUsedOf(section.label) != null && (
+                  <p className="text-muted-foreground text-xs tabular-nums" data-testid={`time-used-${section.label.toLowerCase()}`}>
+                    Time used {formatTimeUsed(timeUsedOf(section.label) as number)}
+                  </p>
+                )}
                 {section.rawScore != null && section.totalMarks != null && (
                   <p className="text-muted-foreground text-xs tabular-nums">
                     Raw score {section.rawScore}/{section.totalMarks}
@@ -73,8 +89,7 @@ export default async function FullMockResultsPage({
                   <p className="text-muted-foreground space-y-0.5 text-xs">
                     {results.writingTasks.map((task) => (
                       <span key={task.label} className="block tabular-nums">
-                        {task.label}: {task.band != null ? task.band.toFixed(1) : "marking…"}
-                        {task.estimated && task.band != null ? " (AI estimate)" : ""}
+                        {task.label}: {task.band != null ? task.band.toFixed(1) : "awaiting review"}
                       </span>
                     ))}
                   </p>

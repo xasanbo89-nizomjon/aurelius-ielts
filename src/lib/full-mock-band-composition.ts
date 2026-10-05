@@ -13,11 +13,16 @@ import { roundToIeltsBand } from "@/lib/analytics/band-rounding";
  * multiple rows (Part 1+2+3) too.
  *
  * Phase E — Writing is composed the way the real IELTS does it: each task has
- * a band (the teacher's mark when there is one, otherwise the AI marker's
- * estimate) and Task 2 counts DOUBLE — Writing = (Task 1 + 2 × Task 2) / 3,
+ * a band and Task 2 counts DOUBLE — Writing = (Task 1 + 2 × Task 2) / 3,
  * rounded to the nearest half band. A Writing band exists only once EVERY task
  * handed in has a band; one still waiting to be marked means "not yet", never a
  * half-finished average.
+ *
+ * Phase K — a task's band is the TEACHER'S mark and nothing else. Until it is
+ * marked the Writing section reads "Awaiting teacher review" and there is no
+ * combined figure: the AI marker's estimate (Phase E) no longer stands in for
+ * it, in a student's results or in a teacher's table. (A blank task is handed in
+ * with the band 0 the exam gives "no response", so it never holds a sitting up.)
  */
 export type FullMockSectionResultBand = {
   section: string;
@@ -58,14 +63,9 @@ function average(values: number[]): number | null {
 
 type WritingSubmissionBand = NonNullable<FullMockSectionResultBand["writingSubmission"]>;
 
-/** One Writing task's band: the teacher's mark if there is one, otherwise the AI marker's estimate. */
+/** One Writing task's band: the teacher's mark. Null while it is not marked (the AI marker's estimate is feedback, never a band). */
 export function writingTaskBand(submission: WritingSubmissionBand): number | null {
-  return submission.bandScore ?? submission.analysis?.estimatedBand ?? null;
-}
-
-/** True when a Writing band (or part of it) is the AI marker's estimate and no teacher has marked that task yet — shown to students as "estimated". */
-export function writingBandIsEstimate(rows: FullMockSectionResultBand[]): boolean {
-  return rows.some((r) => r.section === "WRITING" && r.writingSubmission && r.writingSubmission.bandScore == null && r.writingSubmission.analysis != null);
+  return submission.bandScore ?? null;
 }
 
 function writingBand(rows: FullMockSectionResultBand[]): number | null {
@@ -83,9 +83,8 @@ function writingBand(rows: FullMockSectionResultBand[]): number | null {
 /**
  * Where a mock's Writing leg stands, in the words teachers see on every
  * results table: "Not started", "In progress" (the 60-minute session is
- * running), "1 of 2 tasks submitted", "Submitted — awaiting grading",
- * "Submitted — AI estimate" (every task has the AI marker's band, no teacher
- * mark yet) or "Graded". null when the mock has no Writing section.
+ * running), "1 of 2 tasks submitted", "Submitted — awaiting teacher review" or
+ * "Graded". null when the mock has no Writing section.
  */
 export function writingProgressLabel(args: {
   taskCount: number;
@@ -97,8 +96,7 @@ export function writingProgressLabel(args: {
   if (submitted.length === 0) return args.started ? "In progress" : "Not started";
   if (submitted.length < args.taskCount) return `${submitted.length} of ${args.taskCount} tasks submitted`;
   if (submitted.every((r) => r.writingSubmission!.bandScore != null)) return "Graded";
-  if (submitted.every((r) => writingTaskBand(r.writingSubmission!) != null)) return "Submitted — AI estimate";
-  return "Submitted — awaiting grading";
+  return "Submitted — awaiting teacher review";
 }
 
 export function bandForSection(rows: FullMockSectionResultBand[], section: (typeof SECTIONS)[number]): number | null {
@@ -119,4 +117,14 @@ export function overallBandFromSections(rows: FullMockSectionResultBand[], requi
   if (required.length === 0) return null;
   const bands = required.map((section) => bandForSection(rows, section));
   return bands.every((b): b is number => b != null) ? roundToIeltsBand(average(bands as number[])!) : null;
+}
+
+const SECTION_LETTER: Record<FullMockSectionKey, string> = { LISTENING: "L", READING: "R", WRITING: "W", SPEAKING: "S" };
+
+/**
+ * Phase K - the label of the combined figure. It is NOT an official IELTS result (there is no Speaking in the mock, and the Writing band is a
+ * teacher's mark in a practice sitting), so it always says which skills it is made of and that it is unofficial: "Overall (L/R/W, unofficial)".
+ */
+export function overallBandLabel(required: readonly FullMockSectionKey[]): string {
+  return `Overall (${required.map((key) => SECTION_LETTER[key]).join("/")}, unofficial)`;
 }

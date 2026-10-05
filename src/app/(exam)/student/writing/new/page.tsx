@@ -72,6 +72,8 @@ export default async function NewWritingSubmissionPage({ searchParams }: { searc
 
     const task = taskId ? await getAssignedTaskForStudent(taskId, profile.id) : null;
     if (!task) redirect("/student/writing/tasks");
+    // A task written for a Full Mock is sat inside that mock, never on its own (Phase K).
+    if (await prisma.fullMockWritingSection.findUnique({ where: { writingTaskId: task.id }, select: { id: true } })) redirect("/student/writing/tasks");
 
     // A task already in progress goes straight back into it: its clock keeps running from its own start.
     const open = await prisma.writingSubmission.findFirst({ where: { studentId: profile.id, taskId: task.id, status: "DRAFT" }, orderBy: { updatedAt: "desc" }, select: { id: true } });

@@ -4,6 +4,7 @@ import type { Prisma, SkillType, SubmissionStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { bandForSection, overallBandFromSections, requiredSectionsFor, writingProgressLabel } from "@/lib/full-mock-band-composition";
+import { fullMockTimeUsed } from "@/lib/exam/section-deadline";
 
 /**
  * Phase C — the teacher's Results & Student Monitoring data layer.
@@ -240,13 +241,14 @@ async function loadFullMockRows({ studentWhere, search, take }: LoaderArgs): Pro
       startedAt: true,
       completedAt: true,
       writingStartedAt: true,
+      writingEndedAt: true,
       student: { select: { user: { select: { name: true, email: true } } } },
       fullMockTest: { select: { title: true, _count: { select: { writingSections: true, speakingSections: true } } } },
       sectionResults: {
         select: {
           section: true,
-          result: { select: { rawScore: true, bandScore: true, completedAt: true, mockTestId: true } },
-          writingSubmission: { select: { status: true, bandScore: true, taskType: true, analysis: { select: { estimatedBand: true } } } },
+          result: { select: { rawScore: true, bandScore: true, completedAt: true, durationSeconds: true, mockTestId: true } },
+          writingSubmission: { select: { status: true, bandScore: true, taskType: true, submittedAt: true, analysis: { select: { estimatedBand: true } } } },
           speakingSubmission: { select: { bandScore: true } },
         },
       },
@@ -290,7 +292,14 @@ async function loadFullMockRows({ studentWhere, search, take }: LoaderArgs): Pro
       testTitle: a.fullMockTest.title,
       startedAt: a.startedAt,
       completedAt: a.completedAt,
-      timeUsedSeconds: completed && a.completedAt ? Math.max(0, Math.round((a.completedAt.getTime() - a.startedAt.getTime()) / 1000)) : null,
+      // Phase K - the sum of the sections' time used, not the clock time from the first click to the last.
+      timeUsedSeconds: completed ? fullMockTimeUsed({
+        listeningSeconds: a.sectionResults.find((x) => x.section === "LISTENING")?.result?.durationSeconds,
+        readingSeconds: a.sectionResults.find((x) => x.section === "READING")?.result?.durationSeconds,
+        hasWriting: writingTasks > 0,
+        writingStartedAt: a.writingStartedAt,
+        writingEndedAt: a.writingEndedAt ?? a.sectionResults.map((x) => x.writingSubmission?.submittedAt).filter((d): d is Date => d != null).sort((x, y) => y.getTime() - x.getTime())[0] ?? null,
+      }).total : null,
       correct,
       total,
       incorrect: correct != null && total != null ? Math.max(0, total - correct) : null,

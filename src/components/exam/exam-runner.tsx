@@ -365,6 +365,8 @@ export function ExamRunner({
   const saveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const saveChains = useRef<Map<string, Promise<unknown>>>(new Map());
   const lastSaveErrorAt = useRef(0);
+  /** Phase K - set below: what to do when the server says this attempt is already over (its time ran out, or a teacher ended it). */
+  const onAttemptEnded = useRef<(() => void) | null>(null);
 
   /** Sends the latest value of one question now. Saves of the same question go out strictly in order, so a slow earlier save can never overwrite a newer one. */
   const sendSave = useCallback(
@@ -377,6 +379,10 @@ export function ExamRunner({
       const next = previous
         .then(() => saveAnswerAction(resultId, questionId, value as never))
         .then((result) => {
+          if (!result.success && result.ended) {
+            onAttemptEnded.current?.();
+            return;
+          }
           if (!result.success && Date.now() - lastSaveErrorAt.current > 8000) {
             lastSaveErrorAt.current = Date.now();
             toast.error(`Your last answer couldn't be saved: ${result.error}`);
@@ -646,6 +652,20 @@ export function ExamRunner({
       await submitAttemptAction(resultId);
     });
   }, [resultId, flushPendingWork]);
+
+  // The server finalised this attempt while the page was open (a teacher ended the section, or its time ran out while the browser was offline):
+  // hand-in is a no-op then, and the student is taken on to whatever comes next.
+  const attemptEndedHandled = useRef(false);
+  useEffect(() => {
+    onAttemptEnded.current = () => {
+      if (attemptEndedHandled.current) return;
+      attemptEndedHandled.current = true;
+      toast.info("This section has ended - taking you on.");
+      startSubmitTransition(async () => {
+        await submitAttemptAction(resultId);
+      });
+    };
+  }, [resultId]);
 
   function handleSubmit() {
     startSubmitTransition(async () => {

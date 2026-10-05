@@ -3,11 +3,12 @@ import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
 import { requireStudentProfile } from "@/lib/session";
-import { getAttemptDetail } from "@/lib/exam/attempts";
+import { finalizeAttempt, getAttemptDetail } from "@/lib/exam/attempts";
+import { EXPIRY_GRACE_SECONDS, isPastDeadline, secondsLeft } from "@/lib/exam/section-deadline";
 import { resolvePassageAudioSrc } from "@/lib/uploads/audio-constraints";
 import { getBookmarkedQuestionIds } from "@/lib/bookmarks";
 import { listQuestionHighlights } from "@/lib/exam/annotations";
-import { getFullMockExamContext } from "@/lib/full-mock-attempts";
+import { findInProgressFullMockLinkForResult, getFullMockExamContext, settleFullMockAttempt } from "@/lib/full-mock-attempts";
 import { answerKeysOf } from "@/lib/exam/summary-blanks";
 import { examDurationSeconds, remainingSeconds } from "@/lib/exam/timing";
 import { resolveExamUiMode } from "@/lib/exam/ui-mode";
@@ -27,8 +28,21 @@ export default async function ExamAttemptPage({
   const { ui: uiOverride } = await searchParams;
   const { user, profile } = await requireStudentProfile();
 
-  const attempt = await getAttemptDetail(resultId, profile.id);
+  let attempt = await getAttemptDetail(resultId, profile.id);
   if (!attempt) notFound();
+
+  // Phase K - the server's deadline is the one that counts: an attempt opened after its time (and the browser's own hand-in) is over is
+  // finalised here with the answers that were saved, and the student moves on exactly as if their browser had submitted it.
+  if (!attempt.completedAt && isPastDeadline(attempt.deadlineAt, Date.now(), EXPIRY_GRACE_SECONDS)) {
+    const sittingId = await findInProgressFullMockLinkForResult(resultId);
+    if (sittingId) {
+      await settleFullMockAttempt(sittingId, { studentId: profile.id });
+      redirect(`/student/full-mock/attempt/${sittingId}`);
+    }
+    await finalizeAttempt(resultId, { endedAt: attempt.deadlineAt ?? undefined, reason: "TIME_EXPIRED", creditStudyTime: false }).catch(() => undefined);
+    attempt = await getAttemptDetail(resultId, profile.id);
+    if (!attempt) notFound();
+  }
   if (attempt.completedAt) redirect(`/student/exam/attempt/${resultId}/results`);
 
   const initialAnswers: Record<string, unknown> = {};
@@ -55,7 +69,8 @@ export default async function ExamAttemptPage({
   // Worked out ONCE, here: computing it in the client component from Date.now() gave the server render and the browser's hydration different numbers (React hydration error #418).
   const durationMinutes = fullMock?.durationMinutes ?? attempt.mockTest.durationMinutes;
   // Anchored on the server's start time. No usable duration (null, 0, not a number) = untimed: no countdown, never an auto-submit.
-  const initialRemainingSeconds = remainingSeconds({ startedAt: attempt.startedAt, allowedSeconds: examDurationSeconds(durationMinutes) });
+  // Phase K - the stored server deadline when there is one (a Listening deadline is the recording + the review time); attempts made before deadlines existed use the old rule.
+  const initialRemainingSeconds = attempt.deadlineAt ? secondsLeft(attempt.deadlineAt) : remainingSeconds({ startedAt: attempt.startedAt, allowedSeconds: examDurationSeconds(durationMinutes) });
 
   return (
     <ExamRunner

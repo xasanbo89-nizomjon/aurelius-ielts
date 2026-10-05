@@ -1,11 +1,14 @@
 import "server-only";
 
+import type { SectionEndReason } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 import { FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
 import { getAssignedTaskForStudent, type AssignedWritingTask } from "@/lib/writing-tasks";
-import { ensureWritingAssignment } from "@/lib/full-mock-attempts";
+import { ensureWritingAssignment } from "@/lib/full-mock-assignments";
 import { getOrCreateOpenDraft, runAnalysis, saveDraftVersioned, submitFullMockEssay } from "@/lib/ai/writing";
 import { WRITING_SAVE_GRACE_SECONDS } from "@/lib/writing/constants";
+import { recordLateText } from "@/lib/writing-late-text";
 import type { DraftSaveResult, HandInDraft } from "@/lib/writing/save-types";
 
 // ---------------------------------------------------------------------------
@@ -47,6 +50,7 @@ async function loadContext(attemptId: string, studentId: string) {
       id: true,
       startedAt: true,
       writingStartedAt: true,
+      writingEndedAt: true,
       fullMockTest: { select: { title: true, writingSections: { orderBy: { orderIndex: "asc" }, select: { writingTaskId: true } } } },
     },
   });
@@ -121,11 +125,42 @@ export async function saveFullMockWritingDraft(
 ): Promise<SaveFullMockDraftResult> {
   const context = await loadContext(attemptId, studentId);
   const deadline = context ? deadlineOf(context) : null;
+  // Phase K - the paper was already handed in (its time ran out while this window was offline, or a teacher ended it): nothing more can be saved, and the screen says so
+  // instead of retrying for ever.
+  if (!context || context.writingEndedAt) {
+    const sitting = await prisma.fullMockAttempt.findFirst({ where: { id: attemptId, studentId }, select: { writingEndedAt: true, status: true } });
+    if (sitting && (sitting.writingEndedAt || sitting.status === "COMPLETED")) return { success: false, error: "This writing has already been handed in.", submitted: true };
+  }
   if (!context || !deadline) return { success: false, error: "This writing session isn't open." };
   if (!context.fullMockTest.writingSections.some((s) => s.writingTaskId === input.taskId)) return { success: false, error: "That task isn't part of this mock." };
   if (Date.now() > deadline.getTime() + SUBMIT_GRACE_SECONDS * 1000) return { success: false, error: "Time is up.", timeUp: true };
 
   return saveDraftVersioned(studentId, { taskId: input.taskId, content: input.content, submissionId: input.submissionId ?? null, baseUpdatedAt: input.baseUpdatedAt ?? null });
+}
+
+/** The essay of this task that was handed in during the sitting that began at `since`. */
+async function handedInSubmissionId(studentId: string, taskId: string, since: Date): Promise<string | null> {
+  const row = await prisma.writingSubmission.findFirst({
+    where: { studentId, taskId, status: { not: "DRAFT" }, OR: [{ submittedAt: { gte: since } }, { submittedAt: null, createdAt: { gte: since } }] },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  return row?.id ?? null;
+}
+
+/**
+ * Phase K - the Writing paper already ended (the server handed it in while the student was offline) and the browser comes with words it never
+ * managed to save: they are kept as late text for the teacher. True when the paper really has ended, so the screen can go on to the results.
+ */
+async function keepLateTextOfEndedWriting(attemptId: string, studentId: string, drafts: HandInDraft[]): Promise<boolean> {
+  const attempt = await prisma.fullMockAttempt.findFirst({ where: { id: attemptId, studentId }, select: { startedAt: true, writingEndedAt: true, status: true } });
+  if (!attempt || !(attempt.writingEndedAt || attempt.status === "COMPLETED")) return false;
+  for (const draft of drafts) {
+    if (draft.content === undefined) continue;
+    const submissionId = await handedInSubmissionId(studentId, draft.taskId, attempt.startedAt);
+    if (submissionId) await recordLateText(studentId, { submissionId, content: draft.content }).catch(() => undefined);
+  }
+  return true;
 }
 
 export type FinalizeFullMockWritingResult =
@@ -157,11 +192,23 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null
 export async function finalizeFullMockWriting(
   attemptId: string,
   studentId: string,
-  drafts: HandInDraft[]
+  drafts: HandInDraft[],
+  options: {
+    /** When the paper ended. Default: now. The server's expiry passes the deadline itself. */
+    endedAt?: Date;
+    /** Why it ended. Default: TIME_EXPIRED when it ended at or after the deadline, SUBMITTED otherwise. */
+    reason?: SectionEndReason;
+    /** Run the AI marker for the essays with text (the student's own hand-in does; the scheduled job does not - it must stay light). */
+    analyse?: boolean;
+  } = {}
 ): Promise<FinalizeFullMockWritingResult> {
   const context = await loadContext(attemptId, studentId);
   const deadline = context ? deadlineOf(context) : null;
-  if (!context || !deadline) return { success: false, error: "This writing session isn't open." };
+  if (!context || !deadline) {
+    // The sitting has moved on without this window (the clock ran out while the browser was offline and the server handed the paper in).
+    if (await keepLateTextOfEndedWriting(attemptId, studentId, drafts)) return { success: true, handedIn: 0, analysed: 0 };
+    return { success: false, error: "This writing session isn't open." };
+  }
 
   const late = Date.now() > deadline.getTime() + SUBMIT_GRACE_SECONDS * 1000;
   const alreadyHandedIn = await submittedTaskIds(context, studentId);
@@ -174,7 +221,13 @@ export async function finalizeFullMockWriting(
   const waiting: { taskId: string; draft: { id: string; content: string; updatedAt: Date } | null; browser: HandInDraft | undefined }[] = [];
   for (const section of context.fullMockTest.writingSections) {
     const taskId = section.writingTaskId;
-    if (alreadyHandedIn.has(taskId)) continue;
+    if (alreadyHandedIn.has(taskId)) {
+      // Handed in already (by another window or by the server): this window's words, if different, are kept as late text.
+      const browserText = drafts.find((d) => d.taskId === taskId)?.content;
+      const handedInId = browserText !== undefined ? await handedInSubmissionId(studentId, taskId, context.startedAt) : null;
+      if (handedInId && browserText !== undefined) await recordLateText(studentId, { submissionId: handedInId, content: browserText }).catch(() => undefined);
+      continue;
+    }
     await ensureWritingAssignment(studentId, taskId);
     const draft = await prisma.writingSubmission.findFirst({
       where: { studentId, taskId, status: "DRAFT", createdAt: { gte: context.writingStartedAt ?? context.startedAt } },
@@ -197,12 +250,20 @@ export async function finalizeFullMockWriting(
     if (!submitted.success) return { success: false, error: submitted.error, conflicts: submitted.conflict ? [taskId] : undefined };
     handedIn++;
     if (!submitted.blank) toAnalyse.push(submitted.submissionId);
+    // Phase K - the browser's words arrived after the hour (+ grace): the saved draft was handed in; these are kept for the teacher, never in the submission.
+    if (late && fromBrowser !== undefined) await recordLateText(studentId, { submissionId: submitted.submissionId, content: fromBrowser }).catch(() => undefined);
 
     const linked = await prisma.fullMockSectionResult.findUnique({ where: { writingSubmissionId: submitted.submissionId }, select: { id: true } });
     if (!linked) await prisma.fullMockSectionResult.create({ data: { attemptId, section: "WRITING", writingSubmissionId: submitted.submissionId } });
   }
 
+  // Phase K - the paper has ended: when and how are recorded once (time used for Writing = min(end - start, 60 min)).
+  const endedAt = options.endedAt ?? new Date();
+  const reason: SectionEndReason = options.reason ?? (endedAt.getTime() >= deadline.getTime() - 1000 ? "TIME_EXPIRED" : "SUBMITTED");
+  await prisma.fullMockAttempt.updateMany({ where: { id: attemptId, writingEndedAt: null }, data: { writingEndedAt: endedAt, writingEndReason: reason } });
+
   // The AI marker runs for every essay that has text, in parallel and with a ceiling: handing in is already done and safe by this point.
+  if (options.analyse === false) return { success: true, handedIn, analysed: 0 };
   const outcomes = await Promise.all(toAnalyse.map((submissionId) => withTimeout(analyseWithRetry(submissionId, studentId), ANALYSIS_TIMEOUT_MS)));
   return { success: true, handedIn, analysed: outcomes.filter((o) => o && o.success).length };
 }
