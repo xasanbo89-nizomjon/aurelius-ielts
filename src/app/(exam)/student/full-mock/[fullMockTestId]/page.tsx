@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { BookOpen, CheckCircle2, CircleDashed, ClipboardCheck, Clock, Headphones, KeyRound, Mic, PenLine } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
+import { resolveExamUiMode } from "@/lib/exam/ui-mode";
+import { resolvePassageAudioSrc } from "@/lib/uploads/audio-constraints";
 import { hasActiveAccessForFullMockTest } from "@/lib/subscription";
 import { getPublishedFullMockTestDetail } from "@/lib/full-mock-tests";
 import { MOCK_TEST_DIFFICULTY_BADGE_VARIANT, MOCK_TEST_DIFFICULTY_LABELS } from "@/lib/labels";
@@ -64,6 +67,25 @@ export default async function FullMockStartPage({
 
   const boundStart = startFullMockAttemptAction.bind(null, fullMockTestId);
   const progress = inProgress ? await getFullMockProgressSummary(inProgress.id, profile.id) : null;
+
+  // Phase I - the official Listening starts its recording by itself with the sitting, so a NEW sitting begins with the sound check and the recordings are loaded first.
+  const officialListening = resolveExamUiMode() === "official";
+  const audioSources =
+    officialListening && !progress
+      ? [
+          ...new Set(
+            (
+              await prisma.passage.findMany({
+                where: { mockTest: { fullMockListeningUses: { some: { fullMockTestId } } } },
+                orderBy: { orderIndex: "asc" },
+                select: { audioPath: true, audioUrl: true },
+              })
+            )
+              .map((passage) => resolvePassageAudioSrc(passage))
+              .filter((src): src is string => !!src)
+          ),
+        ]
+      : [];
 
   return (
     <div className="flex min-h-svh items-center justify-center px-6 py-12">
@@ -130,7 +152,7 @@ export default async function FullMockStartPage({
             </div>
           )}
 
-          <FullMockStartForm action={boundStart} buttonLabel={progress ? "Resume Full Mock" : "Start Full Mock"} requireAcknowledgement={!progress} />
+          <FullMockStartForm action={boundStart} buttonLabel={progress ? "Resume Full Mock" : "Start Full Mock"} requireAcknowledgement={!progress} soundCheck={officialListening} audioSources={audioSources} />
           <p className="text-muted-foreground text-xs">
             {progress
               ? `${progress.completedCount}/${progress.totalCount} sections complete · ~${progress.estimatedMinutesRemaining} min remaining`

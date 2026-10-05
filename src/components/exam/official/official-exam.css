@@ -7,7 +7,8 @@
  */
 
 .official-exam,
-.ex-start {
+.ex-start,
+.ex-scope {
   --ex-bg: #ffffff;
   --ex-fg: #000000;
   --ex-muted: #4d4d4d;
@@ -1150,4 +1151,114 @@
 
 .ex-start form {
   margin-top: 0.5em;
+}
+
+/* ---------------------------------------------------------------- Listening (Phase I) */
+
+/* One pane of questions, no passage: readable width, centred. */
+.ex-single {
+  max-width: 62em;
+  margin: 0 auto;
+}
+
+.ex-header-end {
+  align-items: center;
+  gap: 0.75em;
+}
+
+/* What the recording is doing, in the middle of the header (the review countdown reuses .ex-clock). */
+.ex-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+}
+
+.ex-status[data-status="error"],
+.ex-status[data-status="blocked"] {
+  color: var(--ex-warn);
+}
+
+.ex-status-icon svg {
+  width: 1.15em;
+  height: 1.15em;
+}
+
+/* The only control a student has over the recording. */
+.ex-volume {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.ex-volume-icon svg {
+  display: block;
+  width: 1.3em;
+  height: 1.3em;
+}
+
+.ex-volume input[type="range"] {
+  width: 7em;
+  accent-color: var(--ex-accent);
+  cursor: pointer;
+}
+
+/* Loading / could not load / waiting for a click. */
+.ex-audio-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35em 0.5em;
+  margin: 0 0 1.25em;
+  padding: 0.6em 0.9em;
+  border: 1px solid var(--ex-control);
+  background: var(--ex-bar);
+}
+
+.ex-audio-banner[data-tone="error"] {
+  border: 2px solid var(--ex-warn);
+}
+
+.ex-audio-banner[data-tone="notice"] {
+  border: 2px solid var(--ex-accent);
+}
+
+.ex-audio-banner .ex-button {
+  margin-left: auto;
+}
+
+/* Maps, plans and diagrams: as wide as the questions, never smaller than readable. */
+.ex-figure-listening img {
+  min-width: min(100%, 36em);
+}
+
+/* The sound check (before the test). */
+.ex-soundcheck {
+  margin: 1.25em 0 1.5em;
+  padding: 1em 1.25em;
+  border: 1px solid var(--ex-control);
+}
+
+.ex-soundcheck p {
+  margin: 0 0 0.75em;
+}
+
+.ex-soundcheck-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75em 1.25em;
+}
+
+.ex-soundcheck-row .ex-volume input[type="range"] {
+  width: 12em;
+}
+
+@media (max-width: 767px) {
+  .ex-volume input[type="range"] {
+    width: 4.5em;
+  }
+
+  .ex-status {
+    font-size: 0.9em;
+  }
 }

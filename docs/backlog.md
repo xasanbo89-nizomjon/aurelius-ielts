@@ -7,15 +7,34 @@ Planned work that is not built yet. When a phase ships, delete its section.
 - **"Preview as student".** A button on a test in the teacher panel that opens the official exam screen on a
   throwaway attempt without recording a result. It does not exist yet.
 
+## Listening follow-ups (after Phase I)
+
+- **Part switching with ONE shared recording.** The quick builder attaches a single recording to all four parts, and
+  nothing stored says where a part begins inside it, so the screen cannot follow the recording from part to part (it
+  does when each part has its own file). The student then turns the parts themselves, as the recording tells them.
+  Fix: let the teacher mark where each part starts (a start time per part, set when the recording is attached) and
+  switch at those times.
+- **Length of the recording.** The server does not know how long a recording is: the browser measures it when it loads
+  the file. The 2 minutes of review time are counted from the end of the last recording as measured there, and a page
+  opened later works out its position from the server's start time. Storing the length when the audio is uploaded
+  would let the server hand a finished Listening in by itself even if the student never comes back.
+- **Time used.** For a standalone Listening the stored "time used" is still capped at the test's own duration (and at
+  42 minutes in a Full Mock); the official screen's own end is the recording plus 2 minutes. A test whose recording is
+  longer than its duration therefore shows a time used equal to the duration. Nothing is graded on it.
+- **First click after a reload.** A browser may refuse to start sound on a page the student has not clicked yet (it
+  happens after a reload, and in some browsers on the first page too). The screen then shows "Continue the recording"
+  and carries on from where the clock says the recording is. Headless Chrome never refuses, so the refusal was tested
+  by making the page's first `play()` fail.
+
 ## Later phases
 
-- The Listening and Writing screens in the same official style (Listening still uses the old layout, so it keeps the
-  old highlight toolbar; the highlight / notes menu of Phase H is only on the official Reading screen).
+- The Writing screen in the same official style.
 - Show a student's highlight notes after the test is handed in (the review page and the teacher's result page draw the
   highlights but not the notes).
 - Red highlights: `HighlightColor.RED` exists in the database (Postgres cannot drop an enum value) but nothing draws or
   stores it; the menu has one highlight colour, yellow.
-- Retire the old Reading screen (`NEXT_PUBLIC_EXAM_UI=legacy`) once the official one has had a release cycle.
+- Retire the old Reading and Listening screens (`NEXT_PUBLIC_EXAM_UI=legacy`) once the official ones have had a
+  release cycle. The old Listening screen still has its own player (play, seek, speed) and its own highlight toolbar.
 
 ## Known items from earlier phases
 

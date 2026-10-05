@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { textSizePx, type ExamPreferences } from "@/lib/exam/ui-preferences";
+import { ListeningStartForm, SoundCheck } from "@/components/exam/official/official-sound-check";
 
 import "./official-exam.css";
 
@@ -18,7 +19,7 @@ import "./official-exam.css";
  * back into it). Server components: no client script is needed to read them.
  */
 
-export type OfficialPreTestStep = "details" | "instructions";
+export type OfficialPreTestStep = "details" | "sound" | "instructions";
 
 type Common = {
   candidateName: string;
@@ -63,6 +64,9 @@ export function OfficialPreTest({
   canStart,
   instructionsHref,
   startAction,
+  module = "Reading",
+  soundHref,
+  audioSources = [],
 }: Common & {
   step: OfficialPreTestStep;
   description: string | null;
@@ -70,9 +74,13 @@ export function OfficialPreTest({
   minutes: number | null;
   questionCount: number;
   canStart: boolean;
-  /** Where "My details are correct" leads (the instructions screen). */
+  /** Where the screen after "My details are correct" is: the instructions (Reading) or, for Listening, the sound check. */
   instructionsHref: string;
   startAction: () => Promise<void>;
+  /** Phase I - a Listening test has a sound check between the details and the instructions, and its recordings are loaded before it can be started. */
+  module?: "Reading" | "Listening";
+  soundHref?: string;
+  audioSources?: readonly string[];
 }) {
   if (step === "details") {
     return (
@@ -92,13 +100,55 @@ export function OfficialPreTest({
         {canStart ? (
           <>
             <p>Check that your name and the test are correct. If your name is wrong, tell your teacher before you begin.</p>
-            <Link href={instructionsHref} className="ex-button ex-button-primary" style={{ display: "inline-block", padding: "0.7em 1.8em", fontSize: "1.05em", textDecoration: "none" }}>
+            <Link href={module === "Listening" && soundHref ? soundHref : instructionsHref} className="ex-button ex-button-primary" style={{ display: "inline-block", padding: "0.7em 1.8em", fontSize: "1.05em", textDecoration: "none" }}>
               My details are correct
             </Link>
           </>
         ) : (
           <UpgradeNotice />
         )}
+      </Shell>
+    );
+  }
+
+  if (step === "sound" && module === "Listening") {
+    return (
+      <Shell candidateName={candidateName} title={title} preferences={preferences}>
+        <h1 data-testid="pretest-sound">Sound check</h1>
+        {canStart ? <SoundCheck continueHref={instructionsHref} preload={audioSources} /> : <UpgradeNotice />}
+      </Shell>
+    );
+  }
+
+  if (module === "Listening") {
+    return (
+      <Shell candidateName={candidateName} title={title} preferences={preferences}>
+        <h1 data-testid="pretest-module">Listening</h1>
+        <dl className="ex-start-facts">
+          <div>
+            <dt>Time allowed</dt>
+            <dd data-testid="pretest-time">{minutes ? "About 30 minutes" : "The length of the recording"}</dd>
+          </div>
+          <div>
+            <dt>Questions</dt>
+            <dd data-testid="pretest-questions">{questionCount} questions</dd>
+          </div>
+        </dl>
+
+        <h2 style={{ margin: "0 0 0.25em", fontSize: "1.1em" }}>Instructions</h2>
+        <ul>
+          <li>You will hear the recording once only. It starts by itself when you press &ldquo;Start test&rdquo;. You cannot pause it, rewind it or play it again.</li>
+          <li>Answer the questions as you listen. The screen moves to the next part when the recording does; use the numbers at the bottom of the screen to go back to an earlier part. Tick &ldquo;Review&rdquo; to mark a question you want to come back to.</li>
+          <li>You can change the volume at any time with the slider at the top right.</li>
+          <li>To highlight text or add a note, select it, then right-click (or use the small button above the selection) and choose &ldquo;Highlight&rdquo; or &ldquo;Notes&rdquo;. &ldquo;Clear&rdquo; removes a highlight.</li>
+          <li>
+            Your answers are saved as you go.{" "}
+            {minutes ? "When the recording ends you have 2 minutes to check your answers; then they are handed in automatically." : "There is no time limit: when the recording ends, click the tick at the bottom right to hand in your answers."}
+          </li>
+          <li>When you have finished, click the tick at the bottom right.</li>
+        </ul>
+
+        {canStart ? <ListeningStartForm action={startAction} sources={audioSources} /> : <UpgradeNotice />}
       </Shell>
     );
   }

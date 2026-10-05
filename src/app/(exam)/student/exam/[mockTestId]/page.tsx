@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { hasActiveAccess } from "@/lib/subscription";
 import { getQuestionNumberCount } from "@/lib/exam/question-counts";
 import { examDurationSeconds } from "@/lib/exam/timing";
+import { resolvePassageAudioSrc } from "@/lib/uploads/audio-constraints";
 import { resolveExamUiMode } from "@/lib/exam/ui-mode";
 import { examPreferencesCookieName, parseExamPreferences } from "@/lib/exam/ui-preferences";
 import { startAttemptAction } from "@/actions/exam.actions";
@@ -51,8 +52,9 @@ export default async function ExamStartPage({
   const boundStart = startAttemptAction.bind(null, test.id);
   const Icon = test.type === "LISTENING" ? Headphones : BookOpen;
 
-  // Phase G — a Reading test is introduced in the same flat style it is taken in: two screens (confirm your details, then the instructions). Listening keeps the card below, its screen comes in a later phase.
-  if (test.type === "READING" && resolveExamUiMode(uiOverride) === "official") {
+  // Phase G - a Reading test is introduced in the same flat style it is taken in: two screens (confirm your details, then the instructions).
+  // Phase I - a Listening test has a third, between them: the sound check. Both are skipped by a student who already has the test in progress.
+  if (resolveExamUiMode(uiOverride) === "official") {
     // Resuming skips both screens: a test already in progress goes straight back to where it was (its clock keeps running from the original start).
     if (canStart) {
       const inProgress = await prisma.result.findFirst({
@@ -64,10 +66,25 @@ export default async function ExamStartPage({
     }
 
     const cookieStore = await cookies();
-    const step = (Array.isArray(stepParam) ? stepParam[0] : stepParam) === "instructions" ? "instructions" : "details";
+    const isListening = test.type === "LISTENING";
+    const askedStep = Array.isArray(stepParam) ? stepParam[0] : stepParam;
+    const step = askedStep === "instructions" ? "instructions" : askedStep === "sound" && isListening ? "sound" : "details";
     const carryUi = typeof uiOverride === "string" && uiOverride ? `&ui=${encodeURIComponent(uiOverride)}` : "";
+    // The recordings of a Listening test (distinct files, in part order): loaded in full before the test can be started. They are used by the page's scripts only, never shown.
+    const audioSources = isListening
+      ? [
+          ...new Set(
+            (await prisma.passage.findMany({ where: { mockTestId: test.id }, orderBy: { orderIndex: "asc" }, select: { audioPath: true, audioUrl: true } }))
+              .map((passage) => resolvePassageAudioSrc(passage))
+              .filter((src): src is string => !!src)
+          ),
+        ]
+      : [];
     return (
       <OfficialPreTest
+        module={isListening ? "Listening" : "Reading"}
+        soundHref={`?step=sound${carryUi}`}
+        audioSources={audioSources}
         step={step}
         candidateName={user.name ?? ""}
         title={test.title}

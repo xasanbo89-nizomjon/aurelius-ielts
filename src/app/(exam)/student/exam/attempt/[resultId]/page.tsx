@@ -79,6 +79,9 @@ export default async function ExamAttemptPage({
         }))
       )}
       initialRemainingSeconds={initialRemainingSeconds}
+      // Phase I - the official Listening screen follows the recording by how long ago the test started on the SERVER (one number worked out here, like the clock above).
+      listeningElapsedSeconds={Math.max(0, (Date.now() - attempt.startedAt.getTime()) / 1000)}
+      listeningTimed={examDurationSeconds(durationMinutes) != null}
       fullMock={fullMock ? { attemptId: fullMock.attemptId, transferSecondsRemaining: fullMock.transferSecondsRemaining } : null}
       passages={attempt.mockTest.passages.map((passage) => ({
         id: passage.id,

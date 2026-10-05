@@ -48,6 +48,7 @@ import { HighlightSurface } from "@/components/exam/highlight/highlight-surface"
 import { QuestionHighlightProvider } from "@/components/exam/highlight/question-highlight-context";
 import { useExamHighlights, type StoredHighlight } from "@/components/exam/highlight/use-exam-highlights";
 import { OfficialReadingExam } from "@/components/exam/official/official-reading-exam";
+import { OfficialListeningExam } from "@/components/exam/official/official-listening-exam";
 
 export type ExamQuestion = {
   id: string;
@@ -142,6 +143,8 @@ export function ExamRunner({
   groups = [],
   preferenceKey = "",
   initialPreferences = DEFAULT_EXAM_PREFERENCES,
+  listeningElapsedSeconds = 0,
+  listeningTimed = false,
 }: {
   resultId: string;
   testTitle: string;
@@ -167,6 +170,10 @@ export function ExamRunner({
   /** The student's profile id — names the cookie that remembers their contrast / text-size choice. */
   preferenceKey?: string;
   initialPreferences?: ExamPreferences;
+  /** Phase I (official Listening) - seconds since "Start test" when the server rendered the page, by the SERVER's clock: where the recording is. */
+  listeningElapsedSeconds?: number;
+  /** Phase I - the test has a clock (a duration, or a Full Mock section): it is handed in by itself 2 minutes after the recording. An untimed test never is. */
+  listeningTimed?: boolean;
 }) {
   const [answers, setAnswers] = useState<Record<string, unknown>>(initialAnswers);
   const latestAnswers = useRef<Record<string, unknown>>(initialAnswers);
@@ -677,6 +684,9 @@ export function ExamRunner({
     });
   }, [resultId, flushPendingWork]);
 
+  // Phase I - the recording that belongs to each part, for the official Listening screen.
+  const partAudio = useMemo(() => sections.map((section, index) => ({ partIndex: index, src: section.passage?.audioUrl ?? null })), [sections]);
+
   const currentPassageNotes: ExamNote[] = useMemo(
     () => notes.filter((n) => n.passageId === (currentPassage?.id ?? null)),
     [notes, currentPassage]
@@ -799,6 +809,53 @@ export function ExamRunner({
           answeredCount,
           flaggedCount,
           totalQuestionCount,
+        }}
+      />
+    );
+  }
+
+  // Phase I - the same attempt on the official computer-delivered Listening screen: one pane of questions, a recording that plays once by itself.
+  if (ui === "official" && !isReading) {
+    return (
+      <OfficialListeningExam
+        session={{
+          candidateName,
+          initialRemainingSeconds,
+          onExpire: handleExpire,
+          preferencesCookieName: examPreferencesCookieName(preferenceKey),
+          initialPreferences,
+          sections,
+          sectionIndex,
+          groups,
+          passageGroups,
+          activeNumber: effectiveActiveNumber,
+          activeQuestionId: effectiveActiveQuestionId,
+          answers,
+          flags,
+          onAnswer: handleAnswerChange,
+          onToggleFlag: handleToggleFlag,
+          goToQuestion,
+          goToPassage: handleSelectPassage,
+          onPrevious: goToPrevious,
+          onNext: goToNext,
+          hasPrevious: adjacentNumber(passageGroups, effectiveActiveNumber, -1) !== null,
+          hasNext: adjacentNumber(passageGroups, effectiveActiveNumber, 1) !== null,
+          highlights: highlightStore,
+          panelRef: questionsPanelRef,
+          onPanelInteraction: handlePanelInteraction,
+          onAnswerKeyDown: handleAnswerKeyDown,
+          submitting,
+          onSubmit: handleSubmit,
+          answeredCount,
+          flaggedCount,
+          totalQuestionCount,
+          resultId,
+          parts: partAudio,
+          elapsedSecondsAtRender: listeningElapsedSeconds,
+          timed: listeningTimed,
+          goToSection,
+          onReviewOver: handleTransferExpire,
+          onRecordingEnded: handleAudioEnded,
         }}
       />
     );

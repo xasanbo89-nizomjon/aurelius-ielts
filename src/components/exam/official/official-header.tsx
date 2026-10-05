@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { CONTRAST_OPTIONS, TEXT_SIZE_OPTIONS, type ExamPreferences } from "@/lib/exam/ui-preferences";
 import { ExamTimer } from "@/components/exam/exam-timer";
@@ -50,14 +50,20 @@ function Clock({ remaining, announcement }: { remaining: number | null; announce
  */
 export function OfficialHeader({
   candidateName,
-  initialRemainingSeconds,
-  onExpire,
+  initialRemainingSeconds = null,
+  onExpire = () => undefined,
+  center,
+  endExtra,
   preferences,
   onPreferencesChange,
 }: {
   candidateName: string;
-  initialRemainingSeconds: number | null;
-  onExpire: () => void;
+  initialRemainingSeconds?: number | null;
+  onExpire?: () => void;
+  /** Phase I - the Listening screen draws its own status in the middle ("Audio is playing", "2 minutes left to check your answers") instead of the countdown. */
+  center?: ReactNode;
+  /** Phase I - controls placed in front of the menu button (the Listening volume). */
+  endExtra?: ReactNode;
   preferences: ExamPreferences;
   onPreferencesChange: (next: ExamPreferences) => void;
 }) {
@@ -100,10 +106,11 @@ export function OfficialHeader({
       </div>
 
       <div>
-        <ExamTimer durationSeconds={initialRemainingSeconds} onExpire={onExpire} render={({ remaining, announcement }) => <Clock remaining={remaining} announcement={announcement} />} />
+        {center ?? <ExamTimer durationSeconds={initialRemainingSeconds} onExpire={onExpire} render={({ remaining, announcement }) => <Clock remaining={remaining} announcement={announcement} />} />}
       </div>
 
       <div className="ex-header-end">
+        {endExtra}
         <button
           ref={buttonRef}
           type="button"
