@@ -19,7 +19,7 @@ export function issueHref(testId: string, target: IssueTarget): string {
  * Publishing is refused with the full list of problems (see validateTestForPublish). Each one says what is wrong in the numbers the student sees and
  * links to the exact question or part to fix.
  */
-export function PublishIssuesDialog({ testId, issues, open, onOpenChange }: { testId: string; issues: TestIssue[]; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function PublishIssuesDialog({ testId, issues, open, onOpenChange, onGo }: { testId: string; issues: TestIssue[]; open: boolean; onOpenChange: (open: boolean) => void; /** Inside the editor a problem is jumped to on the same page instead of opening a link. */ onGo?: (target: IssueTarget) => void }) {
   const errors = issues.filter((issue) => issue.severity === "error");
   const warnings = issues.filter((issue) => issue.severity === "warning");
 
@@ -38,9 +38,22 @@ export function PublishIssuesDialog({ testId, issues, open, onOpenChange }: { te
             <li key={`${issue.code}-${index}`} className="border-destructive/30 bg-destructive/5 flex items-start gap-2.5 rounded-xl border p-3 text-sm" data-testid="publish-issue">
               <AlertTriangle className="text-destructive mt-0.5 size-4 shrink-0" />
               <span className="min-w-0 flex-1">{issue.message}</span>
-              <Link href={issueHref(testId, issue.target)} onClick={() => onOpenChange(false)} className="text-accent inline-flex shrink-0 items-center gap-1 text-xs font-medium underline-offset-4 hover:underline">
-                Go to it <ArrowRight className="size-3" />
-              </Link>
+              {onGo ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onGo(issue.target);
+                  }}
+                  className="text-accent inline-flex shrink-0 items-center gap-1 text-xs font-medium underline-offset-4 hover:underline"
+                >
+                  Go to it <ArrowRight className="size-3" />
+                </button>
+              ) : (
+                <Link href={issueHref(testId, issue.target)} onClick={() => onOpenChange(false)} className="text-accent inline-flex shrink-0 items-center gap-1 text-xs font-medium underline-offset-4 hover:underline">
+                  Go to it <ArrowRight className="size-3" />
+                </Link>
+              )}
             </li>
           ))}
         </ul>

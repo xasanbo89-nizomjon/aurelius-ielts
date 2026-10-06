@@ -103,6 +103,7 @@ export default async function ExamAttemptPage({
         title: passage.title,
         content: passage.content,
         audioUrl: resolvePassageAudioSrc(passage),
+        audioStartSeconds: passage.audioStartSeconds,
         orderIndex: passage.orderIndex,
         attachments: passage.attachments.map((attachment) => ({
           id: attachment.id,

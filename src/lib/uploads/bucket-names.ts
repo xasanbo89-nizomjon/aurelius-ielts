@@ -16,3 +16,5 @@ export const READING_LIBRARY_BUCKET = "reading-library";
 export const LISTENING_LIBRARY_AUDIO_BUCKET = "listening-library-audio";
 /** Phase 50 — PDF Test Importer's source PDFs. Teacher-only: never linked from any student-facing page, same storage model as reading-library (object paths aren't guessable, and nothing in student code ever reads this bucket name). */
 export const TEST_IMPORT_PDF_BUCKET = "test-import-pdfs";
+/** Phase L2 - the original PDF a Writing Task 1 picture was taken from (its own bucket: the PDF importer's stale-upload sweep must never touch it). */
+export const WRITING_TASK_PDF_BUCKET = "writing-task-pdfs";

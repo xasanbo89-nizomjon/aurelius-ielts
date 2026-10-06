@@ -1,7 +1,7 @@
 import type { QuestionType } from "@prisma/client";
 
 import { numberQuestions, summaryBlankKeys, type NumberedQuestion } from "@/lib/exam/question-numbering";
-import { answerKeysOf } from "@/lib/exam/summary-blanks";
+import { answerKeysOf, parseSummaryText } from "@/lib/exam/summary-blanks";
 
 /**
  * Phase L - the one definition of "this Reading / Listening test is ready for students". Pure and client-safe: the editor's checklist runs it on
@@ -22,7 +22,28 @@ export type ValidatorPart = {
   audioSrc: string | null;
   /** The measured length of that recording in whole seconds; null = not measured (or not readable). */
   audioDurationSeconds: number | null;
+  /** Phase L2 - Listening, one recording shared by every part: where this part starts inside it, in seconds. Part 1 has none (it starts at 0). */
+  startSeconds?: number | null;
 };
+
+/** "7:05" -> 425, "1:02:03" -> 3723, "425" -> 425; empty -> null; anything else -> NaN (a time the teacher typed wrongly). */
+export function parseTimeInput(text: string): number | null {
+  const clean = text.trim();
+  if (!clean) return null;
+  if (!/^\d{1,3}(:[0-5]?\d){0,2}$/.test(clean)) return Number.NaN;
+  const parts = clean.split(":").map(Number);
+  return parts.reduce((total, part) => total * 60 + part, 0);
+}
+
+/** 425 -> "7:05", 3723 -> "1:02:03", null -> "". */
+export function formatTimeInput(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "";
+  const whole = Math.floor(seconds);
+  const h = Math.floor(whole / 3600);
+  const m = Math.floor((whole % 3600) / 60);
+  const sec = whole % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
+}
 
 export type ValidatorGroup = { id: string; partId: string; instructions: string | null; startQuestion: number; endQuestion: number };
 
@@ -59,6 +80,7 @@ export type TestIssue = {
     | "OPTIONS"
     | "SUMMARY_BLANKS"
     | "AUDIO_DURATION"
+    | "AUDIO_START_TIMES"
     | "PARITY";
   severity: IssueSeverity;
   message: string;
@@ -144,8 +166,21 @@ function checkQuestion(row: Numbered, groupInstructions: string | null): TestIss
       const keys = summaryBlankKeys(text);
       const declared = typeof options.blankCount === "number" ? options.blankCount : 0;
       if (!nonEmpty(text)) issues.push(issue("SUMMARY_BLANKS", "the text is empty."));
-      else if (keys.length === 0) issues.push(issue("SUMMARY_BLANKS", "has no blanks: mark each answer box in the text."));
-      else if (keys.length !== declared) issues.push(issue("SUMMARY_BLANKS", `the text has ${keys.length} blank${keys.length === 1 ? "" : "s"} but is set up for ${declared}.`));
+      else if (keys.length === 0) {
+        // Phase L2 - the old dotted spelling ("37 ......") is still drawn as answer boxes on the student's screen, but {{n}} is the stored form every editor, import and check relies on.
+        const dotted = parseSummaryText(text).style === "legacy";
+        issues.push(issue("SUMMARY_BLANKS", dotted ? "writes its blanks as dotted lines (for example \"37 ......\") instead of {{n}} blank markers: open the test in the editor and use \"Insert blank\" for each answer box." : "has no blanks: mark each answer box in the text."));
+      } else if (keys.length < declared) issues.push(issue("SUMMARY_BLANKS", `the text marks only ${keys.length} of its ${declared} blanks with {{n}}: every blank needs a marker.`));
+      else if (keys.length > declared) issues.push(issue("SUMMARY_BLANKS", `the text has ${keys.length} blanks but is set up for ${declared}.`));
+
+      if (keys.length > 0) {
+        // The numbers must agree three ways: the markers in the text, the answers, and the numbers this task really has in the test.
+        const sameNumbers = (a: readonly string[], b: readonly string[]) => a.length === b.length && [...a].sort((x, y) => Number(x) - Number(y)).join(",") === [...b].sort((x, y) => Number(x) - Number(y)).join(",");
+        const answerKeys = answerKeysOf(row.correctAnswer);
+        const rowNumbers = Array.from({ length: row.endNumber - row.startNumber + 1 }, (_, i) => String(row.startNumber + i));
+        if (!sameNumbers(keys, answerKeys)) issues.push(issue("SUMMARY_BLANKS", `the blanks in the text are numbered ${keys.join(", ")} but the answers are for ${answerKeys.join(", ") || "no question"}: they must be the same numbers.`));
+        else if (keys.length === declared && !sameNumbers(keys, rowNumbers)) issues.push(issue("SUMMARY_BLANKS", `the blanks are numbered ${keys.join(", ")} but this task is Questions ${row.startNumber}–${row.endNumber}: renumber the blanks (the editor does it for you).`));
+      }
       const answers = asRecord(row.correctAnswer) ?? {};
       keys.forEach((key, index) => {
         if (!hasTextAnswer(answers[key])) issues.push({ ...issue("ANSWER_MISSING", ""), message: `Question ${row.startNumber + index}: no answer is entered.` });
@@ -239,6 +274,27 @@ export function validateTestStructure(input: ValidateTestInput): TestValidation 
       const holders = input.parts.filter((part) => part.audioSrc === src);
       if (holders.some((part) => part.audioDurationSeconds == null || part.audioDurationSeconds <= 0)) {
         add("AUDIO_DURATION", "A recording's length could not be read: upload the file again (MP3, WAV or M4A) so its length is stored.", { kind: "audio", partId: holders[0].id });
+      }
+    }
+
+    // Phase L2 - ONE recording shared by every part: the start times of Parts 2-4 say where the screen turns to the next part. Optional (a test without
+    // them keeps the old behaviour: the student turns the parts), but when they are given they must make sense.
+    const shared = sources.length === 1 && input.parts.length > 1 && input.parts.every((part) => part.audioSrc === sources[0]);
+    if (shared) {
+      const length = input.parts.find((part) => part.audioDurationSeconds != null && part.audioDurationSeconds > 0)?.audioDurationSeconds ?? null;
+      const given = input.parts.map((part, index) => (index === 0 ? null : (part.startSeconds ?? null)));
+      const setCount = given.filter((value) => value != null).length;
+      let previous = 0;
+      input.parts.forEach((part, index) => {
+        const at = given[index];
+        if (index === 0 || at == null) return;
+        const target: IssueTarget = { kind: "times", partId: part.id };
+        if (at <= previous) add("AUDIO_START_TIMES", `${partName(index)} starts at ${formatTimeInput(at)}, which is not after ${index === 1 || given.slice(1, index).every((v) => v == null) ? "the start of the recording" : "the previous part"} (${formatTimeInput(previous)}): the start times must increase.`, target);
+        else if (length != null && at >= length) add("AUDIO_START_TIMES", `${partName(index)} starts at ${formatTimeInput(at)}, but the recording is only ${formatTimeInput(length)} long.`, target);
+        previous = Math.max(previous, at);
+      });
+      if (setCount > 0 && setCount < input.parts.length - 1) {
+        add("AUDIO_START_TIMES", "Only some of the parts have a start time: the student's screen follows the recording only when Parts 2 to " + input.parts.length + " all have one, so these are ignored until the rest are set.", { kind: "times" }, "warning");
       }
     }
   }

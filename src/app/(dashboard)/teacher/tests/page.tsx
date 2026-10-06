@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { scopeFor } from "@/lib/exam/test-access";
 import { listFullMockTestsForTeacher } from "@/lib/full-mock-tests";
 import { getQuestionNumberCounts } from "@/lib/exam/question-counts";
+import { versionNumbersFor } from "@/lib/exam/version-numbers";
 import { getFullMockTeacherOverviewAnalytics } from "@/lib/analytics/full-mock-analytics";
 import { MOCK_TEST_DIFFICULTY_BADGE_VARIANT, MOCK_TEST_DIFFICULTY_LABELS } from "@/lib/labels";
 import { isInternalTestTitle } from "@/lib/test-visibility";
@@ -117,6 +118,8 @@ export default async function TeacherTestsPage({
   ]);
   // Numbered questions, not rows - the same count the student sees (see getQuestionNumberCounts).
   const questionCounts = await getQuestionNumberCounts(tests.map((t) => t.id));
+  // Phase L2 - versions keep their title, so they are told apart as v1, v2 ... (only looked up for tests that are part of a chain).
+  const versionNumbers = await versionNumbersFor(tests.filter((t) => t.versionOf || t._count.versions > 0).flatMap((t) => [t.id, ...(t.versionOf ? [t.versionOf.id] : [])]));
 
   const fullMocks = allFullMocks.filter(
     (mock) =>
@@ -255,9 +258,14 @@ export default async function TeacherTestsPage({
                         <span className="min-w-0">
                           {test.title}
                           {(test.versionOf || test._count.versions > 0) && (
+                            <Badge variant="outline" className="ml-2 align-middle" data-testid="version-badge">
+                              v{versionNumbers.get(test.id) ?? 1}
+                            </Badge>
+                          )}
+                          {(test.versionOf || test._count.versions > 0) && (
                             <span className="text-muted-foreground mt-0.5 flex items-center gap-1 text-[11px] font-normal">
                               <GitBranch className="size-3" />
-                              {test.versionOf ? `New version of ${test.versionOf.title}` : null}
+                              {test.versionOf ? `New version of v${versionNumbers.get(test.versionOf.id) ?? 1}` : null}
                               {test.versionOf && test._count.versions > 0 ? " · " : null}
                               {test._count.versions > 0 ? `${test._count.versions} newer version${test._count.versions === 1 ? "" : "s"}` : null}
                             </span>
@@ -289,6 +297,7 @@ export default async function TeacherTestsPage({
                         attemptCount={test._count.results}
                         ownerMockTitle={test.packageFullMockTest?.title ?? null}
                         usedInFullMocks={[...new Set([...test.fullMockReadingUses, ...test.fullMockListeningUses].map((use) => use.fullMockTest.title))]}
+                        isNewVersion={Boolean(test.versionOf)}
                       />
                     </TableCell>
                   </TableRow>

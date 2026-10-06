@@ -63,8 +63,11 @@ function resolveWordBankAnswer(raw: string, wordBank: string[]): string {
   return trimmed;
 }
 
-/** What a printed blank looks like next to its number: a dot leader ("......", ". . . ."), an ellipsis, underscores or dashes. */
-const BLANK_LEADER = String.raw`\.(?:[ \t]?\.)+|…+|_{2,}|-{3,}`;
+/** What a printed blank looks like next to its number: a dot leader ("......", ". . . ."), an ellipsis, underscores, dashes or a run of long dashes. */
+const BLANK_LEADER = String.raw`\.(?:[ \t]?\.)+|…+|_{2,}|-{3,}|[–—]{2,}`;
+
+/** A leader with NO number beside it - long enough that ordinary prose ("and so on...") cannot be mistaken for a blank. */
+const UNNUMBERED_LEADER = new RegExp(String.raw`(?<![\w{.…_-])(?<!\d[.):]?[ \t]?)(?:\.(?:[ \t]?\.){4,}|…{2,}|_{3,}|-{4,}|[–—]{3,})(?![\w}])(?![ \t]?\d)`, "g");
 
 const blankMarker = (n: number) => `{{${n}}}`;
 const hasBlankMarker = (text: string, n: number) => text.includes(blankMarker(n));
@@ -84,11 +87,24 @@ export function insertSummaryBlankMarkers(text: string, startNumber: number, end
     const patterns = [
       new RegExp(String.raw`\[\s*${n}\s*\](?:\s*(?:${BLANK_LEADER}))?`),
       new RegExp(String.raw`\(\s*${n}\s*\)(?:\s*(?:${BLANK_LEADER}))?`),
-      new RegExp(String.raw`(?<![\d{])${n}(?!\d)\s*(?:${BLANK_LEADER})`),
+      // "37 .......", "38 ____", "39....", and "37. ......" / "37) ......" / "37: ......"
+      new RegExp(String.raw`(?<![\d{])${n}(?!\d)[.):]?\s*(?:${BLANK_LEADER})`),
       new RegExp(String.raw`(?:${BLANK_LEADER})\s*(?<![\d{])${n}(?!\d)`),
     ];
     const pattern = patterns.find((candidate) => candidate.test(result));
     if (pattern) result = result.replace(pattern, blankMarker(n));
+  }
+
+  // Phase L2 - blanks that carry NO number at all ("... were ........ Most evidence ... a ........ time"): when there are exactly as many bare leaders as
+  // numbers still without a marker, they belong to those numbers in the order they appear. Any other count is ambiguous, so nothing is guessed.
+  const missing: number[] = [];
+  for (let n = startNumber; n <= endNumber; n++) if (!hasBlankMarker(result, n)) missing.push(n);
+  if (missing.length > 0) {
+    const leaders = [...result.matchAll(UNNUMBERED_LEADER)];
+    if (leaders.length === missing.length) {
+      let next = 0;
+      result = result.replace(UNNUMBERED_LEADER, () => blankMarker(missing[next++]));
+    }
   }
   return result;
 }

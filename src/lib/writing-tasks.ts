@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { recordMediaUsage, removeMediaUsage, uploadMediaFile } from "@/lib/media-library";
 import { WRITING_TASK_IMAGE_MAX_BYTES, validateWritingTaskImageFile } from "@/lib/uploads/image-constraints";
 import { inspectImage } from "@/lib/uploads/image-processing";
+import { WRITING_TASK_PDF_BUCKET } from "@/lib/uploads/bucket-names";
+import { parseStoredFileLocation } from "@/lib/uploads/storage-locations";
+import { deleteBucketObjects } from "@/lib/uploads/storage-cleanup";
 import { taskImageFromRow, type WritingTaskImage } from "@/lib/writing-task-image";
 import type { CreateWritingTaskInput, WritingTaskStatusValue } from "@/lib/validations/writing";
 
@@ -87,7 +90,10 @@ export async function setWritingTaskImage(taskId: string, teacherId: string, med
   if (columns.imageMediaFileId) await recordMediaUsage(columns.imageMediaFileId, "WRITING_TASK_VISUAL", taskId);
 }
 
-export async function createWritingTask(teacherId: string, input: CreateWritingTaskInput) {
+/** Phase L2 - what a task made by the Writing test builder carries on top of the usual fields. */
+export type WritingTaskExtras = { bundleId?: string; visualPdfUrl?: string; visualPdfPage?: number };
+
+export async function createWritingTask(teacherId: string, input: CreateWritingTaskInput, extras: WritingTaskExtras = {}) {
   await assertOwnStudents(teacherId, input.assignedStudentIds);
   const image = await resolveTaskImageColumns(teacherId, input.taskNumber, input.imageMediaFileId);
   const task = await prisma.writingTask.create({
@@ -103,6 +109,9 @@ export async function createWritingTask(teacherId: string, input: CreateWritingT
       targetBand: input.targetBand ?? null,
       dueDate: input.dueDate ?? null,
       createdById: teacherId,
+      bundleId: extras.bundleId ?? null,
+      visualPdfUrl: extras.visualPdfUrl ?? null,
+      visualPdfPage: extras.visualPdfPage ?? null,
       assignments: { create: input.assignedStudentIds.map((studentId) => ({ studentId })) },
     },
   });
@@ -185,6 +194,9 @@ export async function deleteWritingTask(taskId: string, teacherId: string): Prom
     throw new Error("This task has real student submissions and can't be deleted — unpublish it instead.");
   }
   await prisma.writingTask.delete({ where: { id: taskId } });
+  // Phase L2 - the original PDF a Task 1 picture was taken from goes with the task (the picture itself stays in the Media Library, as before).
+  const pdf = parseStoredFileLocation(task.visualPdfUrl);
+  if (pdf && pdf.kind === "supabase" && pdf.bucket === WRITING_TASK_PDF_BUCKET) await deleteBucketObjects(WRITING_TASK_PDF_BUCKET, [pdf.path]).catch(() => undefined);
 }
 
 export async function listWritingTasksForTeacher(teacherId: string) {

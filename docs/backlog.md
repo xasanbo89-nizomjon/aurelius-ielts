@@ -2,37 +2,34 @@
 
 Planned work that is not built yet. When a phase ships, delete its section.
 
-## Phase L2 - the rest of the test builder
+## Phase L2 follow-ups (what the test builder still lacks)
 
-Phase L1 is done (`docs/test-builder.md`). Left for L2:
+Phase L1 and L2 are done (`docs/test-builder.md`). Known limits and what could come next:
 
-- **A structured editor.** One page per test with its parts, groups and questions, autosaving by question id (upsert; only rows the
-  teacher removes are deleted; never delete-and-recreate) and structural edits only while the test is a draft. A prepared model and
-  tests exist outside the repository; they are to be rebuilt on the L1 rules.
-- **Bulk answer-key paste.** Paste "1 B, 2 TRUE, 3 colour/color …" and fill the keys, with a preview before it is applied.
-- **Listening part start times.** Say where each part starts inside one shared recording, so the screen can follow it (see
-  "Listening follow-ups"). `passages.audioStartSeconds` already exists in the schema (nullable, unused); the validator should then
-  require a start time for every part when one recording is shared.
-- **Writing Task 1 picture from a PDF page.** Must work on Vercel serverless: pure JavaScript / WASM only (for example `pdfjs-dist`
-  with a node canvas package), no poppler or system binaries. A page picker and a size limit. The exam screen stays picture-only
-  (the page becomes a PNG when it is uploaded). `writing_tasks.bundleId`, `visualPdfPage` and `visualPdfUrl` already exist in the
-  schema (nullable, unused).
-- **One way to upload a recording.** Use the signed direct upload for every recording (large files exceed the server action body
-  limit). Keep reading the legacy `Passage.audioUrl` as a fallback; do not delete it.
-- **The Writing task bank inside the wizard.** Bring `/teacher/writing` into the New test wizard instead of building a second place
-  for Writing tasks. Until then the wizard only links to it.
-- **"Preview as student".** A button on a test in the teacher panel that opens the official exam screen on a throwaway attempt
-  without recording a result. It does not exist yet.
-- **A switch for Full Mocks.** A new version is picked into a Full Mock in that mock's editor today. A "use the newest version"
-  button on the old test's page could do it in one step.
+- **Writing tasks belong to one teacher.** Tests, Full Mocks and access codes are managed by a Root Teacher for everyone; the Writing task bank
+  (`/teacher/writing`) still lists and edits only the tasks the signed-in teacher created, Root Teacher included. ("Preview as student" follows the
+  test rule: a Root Teacher can preview any task.) Bringing the bank under the same access rule is a small change in `src/lib/writing-tasks.ts`.
+- **A Writing test is sat as two tasks.** Task 1 + Task 2 made together are previewed as one paper, but a student takes each task on its own screen
+  (20 and 40 minutes); a standalone sitting of both under one clock needs a change to the student's Writing screen and was out of scope.
+- **"Choose TWO" counts as one number.** In the editor (and for the student) a multiple-choice question with "more than one correct answer" is one numbered
+  question, as `numberQuestions` has always counted it. A real IELTS "choose TWO" takes two numbers; a teacher who wants that makes two questions.
+- **Table completion is drawn as lines.** The editor takes a table as rows of cells separated by `|` with `{{}}` boxes, stores it as a summary-style question,
+  and the student's screen shows it line by line, not as a grid. A real table editor and a grid on the student's screen are a later step.
+- **One picture per Writing task.** A Task 1 with two charts needs a second picture; the screen draws one.
+- **The PDF page is rendered by WebAssembly (PDFium).** It works with `next build && next start`; it has not been run on Vercel itself. If the first
+  Writing PDF there fails, check that `next.config.ts` (`serverExternalPackages`, `outputFileTracingIncludes`) is applied and that the function has enough memory
+  (a page is drawn at most 1800 x 2000 px, about 15 MB of pixels while it is encoded).
+- **Start times follow the browser's clock.** The student's screen moves to the next part when the playing recording reaches its start time
+  (`timeupdate`, a few times a second), so it can be a fraction of a second late; the exam's deadlines are unaffected.
+- **A new Reading or Listening detail route needs a 404 rule.** `src/lib/route-guard.ts` lists the routes that address one record; a route added later with a
+  `loading.tsx` answers 404 only once it has a rule there. A student without a subscription sees the lock screen (status 200) on Articles, the libraries and
+  Speaking results - that is the page's own gate and was not changed. A finished attempt's address redirects to its results from inside the streamed page, so
+  that redirect also answers 200 (the browser follows it; nothing reads it as an error).
+- **Archiving the previous version waits for students.** "Archive previous version" does nothing while a student is in the middle of it; the message says so and
+  it can be archived from the Tests list later.
 
 ## Listening follow-ups (after Phase I)
 
-- **Part switching with ONE shared recording.** The quick builder attaches a single recording to all four parts, and
-  nothing stored says where a part begins inside it, so the screen cannot follow the recording from part to part (it
-  does when each part has its own file). The student then turns the parts themselves, as the recording tells them.
-  Fix: let the teacher mark where each part starts (a start time per part, set when the recording is attached) and
-  switch at those times.
 - **Time used.** For a standalone Listening the stored "time used" is still capped at the test's own duration; the official
   screen's own end is the recording plus 2 minutes. A test whose recording is longer than its duration therefore shows a time
   used equal to the duration. Nothing is graded on it. (In a Full Mock the allowance is the recording + 2 minutes since Phase K.)
@@ -43,13 +40,6 @@ Phase L1 is done (`docs/test-builder.md`). Left for L2:
 
 ## Writing follow-ups (after Phase J)
 
-- **A PDF as the Task 1 picture.** Phase F accepts JPG, JPEG, PNG and WEBP only (the "PDF quick-build" reads the TEXT of a
-  Writing paper; the chart is attached as a picture), so a task cannot have a PDF visual and the Writing screen draws
-  pictures only. If teachers need to attach a PDF page: turn the page into a PNG when it is uploaded, so the exam screen
-  stays picture-only, rather than rendering PDFs in the student's browser.
-- **A paired Writing test.** A task taken on its own is one part (Task 1 = Part 1 with a 20 minute clock, Task 2 = Part 2
-  with 40). The two-part screen under one clock exists inside a Full Mock only; a standalone test that pairs a Task 1 with
-  a Task 2 would be a new item (a task bundle).
 - **Practice mode (Phase N).** The exam screen has no minimum-length notice and no word-count warning on purpose; they belong
   to a practice mode.
 - **Highlights and notes on the task text** are kept in the browser (they survive a reload on the same computer, they do not
@@ -104,11 +94,8 @@ Phase L1 is done (`docs/test-builder.md`). Left for L2:
 - 17 old completed Results have no stored band; the pages work it out when they are shown
   (`harness/backfill-bands` was never applied).
 - An internal-titled ("_...") Full Mock is hidden from lists but can still be opened by its direct address.
-- **A not-found page answers HTTP 200.** A page that streams (it has a `loading.tsx`) has already sent its status line when
-  `notFound()` runs, so opening another teacher's test (`/teacher/tests/<their id>`) shows "Page not found" but with status 200.
-  Nothing of the test is shown (checked in Phase L1); the problem is that anything reading the status code (monitoring,
-  crawlers, status-based tests) sees "OK". Fix later: decide access before the page streams (check ownership in the layout or
-  in `generateMetadata`, or drop `loading.tsx` on the routes that can 404), then assert the 404 status in the browser checks.
+- The real published tests are titled "IELTS Reading Test" (Xasan) and "IELTS Reading Test (new version)" (Azizbek Tursunov): the second was made
+  before versions kept their title, so students still see "(new version)" in its name. Renaming a stored title is a data change and was not done.
 - Old attempts: `npm run attempts:repair-time` and `npm run attempts:finalize-expired` (both dry runs by default) list what Phase K
   would correct on data from before it; see `docs/server-expiry.md`.
 - The matching drag-and-drop uses click-to-place on touch screens (HTML5 drag does not work there).
@@ -127,6 +114,7 @@ Phase L1 is done (`docs/test-builder.md`). Left for L2:
 | `npm run check:publish` | no database: the publish rules (39 / 41 questions, a gap, a missing or invalid answer, a Listening test without audio, a complete test passes), typed answers with alternatives, the importer, and reviews against stored scores |
 | `npm run check:grading` | read-only: every stored answer key still validates and scores itself, and every stored student answer re-grades to the verdict stored at hand-in |
 | `npm run check:l1` | the real database with its own tagged fixtures (removed at the end): teacher vs Root access, the validator on stored tests, the edit rule, ids kept, versions, review vs stored score |
+| `npm run check:builder` | no database: the structured editor's model (every question type -> stored rows -> the student's numbers), the answer-key paste, the start-time rules and part switching |
 | `npm run tests:validate` | read-only: what the publish rules say about every test already in the database (`-- --only-problems`) |
 | `npm run check:parity` | student list, student exam, teacher list and teacher editor all count the same questions |
 | `npm run tests:temp` | lists temporary (`_...`) tests and who attempted them |

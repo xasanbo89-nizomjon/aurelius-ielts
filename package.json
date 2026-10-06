@@ -18,6 +18,7 @@
     "check:writing": "node --import ./scripts/register-ts.mjs scripts/check-writing.mjs",
     "check:expiry": "node --import ./scripts/register-ts.mjs scripts/check-expiry.mjs",
     "check:publish": "node --import ./scripts/register-ts.mjs scripts/check-publish.mjs",
+    "check:builder": "node --import ./scripts/register-ts.mjs scripts/check-builder.mjs",
     "check:grading": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-grading.mjs",
     "check:l1": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-l1.mjs",
     "tests:validate": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/validate-tests.mjs",
@@ -27,6 +28,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
+    "@hyzyla/pdfium": "^2.1.13",
     "@prisma/client": "^6.19.3",
     "@radix-ui/react-accordion": "^1.2.20",
     "@radix-ui/react-avatar": "^1.2.6",

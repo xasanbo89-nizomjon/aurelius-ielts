@@ -23,7 +23,17 @@ import { canManageTest, canViewTest, authorScope, getTestActor } from "@/lib/exa
 import { TestLockedError } from "@/lib/exam/test-lock";
 import { PublishValidationError, validateTestForPublish } from "@/lib/exam/test-publish";
 import * as tm from "@/lib/exam/test-management";
-import { copyTest } from "@/lib/exam/test-versions";
+import {
+  copyTest,
+  getFullMockVersionHints,
+  newestPublishedVersion,
+  newestPublishedVersions,
+  previousLiveVersion,
+  publishVersion,
+  switchAssignmentToNewestVersion,
+  switchFullMockToNewestVersion,
+} from "@/lib/exam/test-versions";
+import { versionNumbersFor } from "@/lib/exam/version-numbers";
 import { getFullMockTestForEdit, listFullMockTestsForTeacher, setFullMockReadingTest } from "@/lib/full-mock-tests";
 import { createMockAccessCode, listMockAccessCodesForFullMockTest } from "@/lib/mock-access-codes";
 
@@ -438,7 +448,7 @@ async function sectionVersions() {
     assert.equal(copy.createdById, ctx.A, "the version stays with the author of the test it replaces");
     assert.equal(copy.packageFullMockTestId, null);
     assert.equal(copy._count.results, 0, "no attempts come with the copy");
-    assert.match(copy.title, /\(new version\)$/);
+    assert.equal(copy.title, source.title, "Phase L2: a new version keeps the title of the test it replaces (students never see a version label)");
 
     const ids = (rows) => rows.map((row) => row.id);
     const oldIds = new Set([source.id, ...ids(source.passages), ...source.passages.flatMap((p) => [...ids(p.questionGroups), ...ids(p.attachments)]), ...ids(source.questions)]);
@@ -474,6 +484,85 @@ async function sectionVersions() {
     assert.equal((await db.fullMockReadingSection.findFirst({ where: { fullMockTestId: fm.id } })).mockTestId, version.id);
     assert.equal((await db.result.findUnique({ where: { id: attempt.id }, select: { mockTestId: true } })).mockTestId, s.testId, "the attempt is still linked to the version it was taken on");
     assert.equal((await db.mockTest.findUnique({ where: { id: s.testId }, select: { isPublished: true } })).isPublished, true);
+  });
+
+  await check("versions (L2): version numbers v1/v2/v3 follow the chain and the newest PUBLISHED version is found from any earlier one", async () => {
+    const v3 = await copyTest(version.id, ctx.A, "version");
+    assert.deepEqual([...(await versionNumbersFor([s.testId, version.id, v3.id])).entries()], [[s.testId, 1], [version.id, 2], [v3.id, 3]]);
+    assert.equal((await newestPublishedVersion(s.testId, ctx.A)).id, version.id, "v3 is a draft, so the newest PUBLISHED one is v2");
+    await tm.setPublished(v3.id, ctx.A, true);
+    const newest = await newestPublishedVersion(s.testId, ctx.A);
+    assert.deepEqual([newest.id, newest.versionNumber], [v3.id, 3]);
+    assert.equal(await newestPublishedVersion(v3.id, ctx.A), null, "nothing is newer than v3");
+    assert.equal((await newestPublishedVersions([s.testId, v3.id], ctx.A)).size, 1, "batched lookup agrees");
+    await tm.setArchived(v3.id, ctx.A, true);
+    assert.equal((await newestPublishedVersion(s.testId, ctx.A)).id, version.id, "an archived version is never offered");
+  });
+
+  await check("versions (L2): 'Use newest version' moves a Full Mock section and an assignment on request; the finished attempt stays where it was taken", async () => {
+    const hint = await getFullMockVersionHints(fm.id, ctx.A);
+    assert.equal(hint.reading.current.id, version.id, "the Full Mock was moved to v2 by the check above");
+    const back = await db.fullMockReadingSection.updateMany({ where: { fullMockTestId: fm.id }, data: { mockTestId: s.testId } });
+    assert.equal(back.count, 1);
+    const before = await getFullMockVersionHints(fm.id, ctx.A);
+    assert.deepEqual([before.reading.current.versionNumber, before.reading.newest?.id], [1, version.id]);
+    await switchFullMockToNewestVersion(fm.id, ctx.A, "READING");
+    assert.equal((await db.fullMockReadingSection.findFirst({ where: { fullMockTestId: fm.id } })).mockTestId, version.id);
+    await switchAssignmentToNewestVersion(assignment.id, ctx.A);
+    assert.equal((await db.assignment.findUnique({ where: { id: assignment.id } })).mockTestId, version.id);
+    assert.equal((await db.result.findUnique({ where: { id: attempt.id }, select: { mockTestId: true } })).mockTestId, s.testId);
+    await refused(switchAssignmentToNewestVersion(assignment.id, ctx.B), tm.OwnershipError, "another teacher cannot switch someone else's assignment");
+    await assert.rejects(() => switchFullMockToNewestVersion(fm.id, ctx.A, "READING"), /no newer published version/i);
+  });
+
+  await check("versions (L2): publishing a new version with 'archive previous' retires the old one, moves what used it, and keeps finished work", async () => {
+    const old = await insertTest({ teacherId: ctx.A, name: "retire me" });
+    await tm.setPublished(old.testId, ctx.A, true);
+    const mock = await db.fullMockTest.create({ data: { title: `${TAG} mock retire`, createdById: ctx.A, status: "PUBLISHED" } });
+    await db.fullMockReadingSection.create({ data: { fullMockTestId: mock.id, mockTestId: old.testId, orderIndex: 0 } });
+    const open = await db.assignment.create({ data: { teacherId: ctx.A, studentId: ctx.S, mockTestId: old.testId, title: `${TAG} open`, status: "ASSIGNED" } });
+    const finished = await db.assignment.create({ data: { teacherId: ctx.A, studentId: ctx.S2, mockTestId: old.testId, title: `${TAG} finished`, status: "COMPLETED" } });
+    const fresh = await copyTest(old.testId, ctx.A, "version");
+
+    const preview = await previousLiveVersion(fresh.id, ctx.A);
+    assert.deepEqual([preview.id, preview.versionNumber, preview.openAssignments, preview.inProgress, preview.fullMocks.map((m) => m.id)], [old.testId, 1, 1, 0, [mock.id]]);
+
+    const outcome = await publishVersion(fresh.id, ctx.A, { archivePrevious: true });
+    assert.deepEqual([outcome.archived?.id, outcome.switched, outcome.notArchivedBecause], [old.testId, { fullMocks: 1, assignments: 1 }, null]);
+    const oldRow = await db.mockTest.findUnique({ where: { id: old.testId }, select: { isPublished: true, isArchived: true } });
+    assert.deepEqual([oldRow.isPublished, oldRow.isArchived], [false, true]);
+    assert.equal((await db.mockTest.findUnique({ where: { id: fresh.id }, select: { isPublished: true } })).isPublished, true);
+    assert.equal((await db.fullMockReadingSection.findFirst({ where: { fullMockTestId: mock.id } })).mockTestId, fresh.id, "the Full Mock keeps working: it moved to the new version");
+    assert.equal((await db.assignment.findUnique({ where: { id: open.id } })).mockTestId, fresh.id);
+    assert.equal((await db.assignment.findUnique({ where: { id: finished.id } })).mockTestId, old.testId, "a finished assignment stays on the version it was done on");
+  });
+
+  await check("versions (L2): 'archive previous' unticked, or a student in the middle of the old one, leaves the old version published", async () => {
+    const old = await insertTest({ teacherId: ctx.A, name: "keep me" });
+    await tm.setPublished(old.testId, ctx.A, true);
+    const fresh = await copyTest(old.testId, ctx.A, "version");
+    const kept = await publishVersion(fresh.id, ctx.A, { archivePrevious: false });
+    assert.deepEqual([kept.archived, kept.notArchivedBecause], [null, null]);
+    assert.equal((await db.mockTest.findUnique({ where: { id: old.testId }, select: { isPublished: true } })).isPublished, true);
+
+    const old2 = await insertTest({ teacherId: ctx.A, name: "someone is sitting me" });
+    await tm.setPublished(old2.testId, ctx.A, true);
+    const sitting = await attempts.getOrCreateAttempt(ctx.S2, old2.testId);
+    assert.ok(sitting, "the student started the old version");
+    const fresh2 = await copyTest(old2.testId, ctx.A, "version");
+    const blocked = await publishVersion(fresh2.id, ctx.A, { archivePrevious: true });
+    assert.equal(blocked.archived, null);
+    assert.match(blocked.notArchivedBecause ?? "", /1 student is in the middle/);
+    assert.deepEqual([(await db.mockTest.findUnique({ where: { id: old2.testId }, select: { isPublished: true, isArchived: true } })).isPublished, (await db.mockTest.findUnique({ where: { id: fresh2.id }, select: { isPublished: true } })).isPublished], [true, true], "both are live; the sitting continues");
+    assert.ok(await attempts.getOrCreateAttempt(ctx.S2, old2.testId), "the open attempt can still be resumed");
+  });
+
+  await check("versions (L2): a test that is not a version publishes exactly as before (no archive question)", async () => {
+    const plain = await insertTest({ teacherId: ctx.A, name: "plain" });
+    assert.equal(await previousLiveVersion(plain.testId, ctx.A), null);
+    const outcome = await publishVersion(plain.testId, ctx.A, { archivePrevious: true });
+    assert.deepEqual([outcome.archived, outcome.switched], [null, { fullMocks: 0, assignments: 0 }]);
+    assert.equal((await db.mockTest.findUnique({ where: { id: plain.testId }, select: { isPublished: true } })).isPublished, true);
   });
 
   await check("versions: Duplicate is a fresh test with no link back; deleting it leaves the original and its attempts alone", async () => {

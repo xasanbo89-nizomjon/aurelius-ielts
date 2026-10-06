@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { applyHighlightChangeAction } from "@/actions/exam.actions";
+import { useExamActions } from "@/components/exam/exam-actions";
 import type { HighlightChange } from "@/lib/exam/annotations";
 import { parseRegion, rangesOverlap, rangesTouch, remainingAfterClear, type HighlightRange } from "@/lib/exam/text-highlight";
 import { cleanNote, combineNotes, noteForPiece } from "@/lib/exam/highlight-notes";
@@ -51,6 +51,7 @@ export function splitRedundant(highlights: StoredHighlight[]): { kept: StoredHig
  *  - `flush()` resolves when everything in flight has reached the server.
  */
 export function useExamHighlights(resultId: string, initial: StoredHighlight[]) {
+  const actions = useExamActions(); // the real server write for a student; nothing at all in a teacher's preview
   const [initialSplit] = useState(() => splitRedundant(initial));
   const [highlights, setHighlights] = useState<StoredHighlight[]>(initialSplit.kept);
   const latest = useRef(highlights);
@@ -71,7 +72,7 @@ export function useExamHighlights(resultId: string, initial: StoredHighlight[]) 
   const send = useCallback(
     async (change: HighlightChange): Promise<string[] | null> => {
       try {
-        const result = await applyHighlightChangeAction(resultId, change);
+        const result = await actions.applyHighlightChange(resultId, change);
         if (result.success) return result.ids;
         toast.error(result.error);
       } catch {
@@ -79,7 +80,7 @@ export function useExamHighlights(resultId: string, initial: StoredHighlight[]) 
       }
       return null;
     },
-    [resultId]
+    [resultId, actions]
   );
 
   /**

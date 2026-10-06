@@ -21,7 +21,12 @@ export const LISTENING_REVIEW_SECONDS = FULL_MOCK_LISTENING_TRANSFER_MINUTES * 6
 /** A page that opens this soon after "Start test" is the START of the test: the recording begins at its beginning, not some seconds in (a slow connection can make the page take a while to open). */
 export const FRESH_START_GRACE_SECONDS = 60;
 
-export type PartAudio = { partIndex: number; src: string | null };
+export type PartAudio = {
+  partIndex: number;
+  src: string | null;
+  /** Phase L2 - where this part starts inside a recording shared by every part, in seconds. Part 1 has none (it starts at 0). */
+  startSeconds?: number | null;
+};
 export type Track = { src: string; partIndexes: number[] };
 
 /** The distinct recordings in the order they are first needed, with the parts that use each. A part without a recording has no track. */
@@ -39,6 +44,31 @@ export function buildTracks(parts: readonly PartAudio[]): Track[] {
 /** Whether the screen should follow the recording from part to part: only when every part has a recording of its own. */
 export function followsParts(tracks: readonly Track[]): boolean {
   return tracks.length > 1 && tracks.every((track) => track.partIndexes.length === 1);
+}
+
+/**
+ * Phase L2 - ONE recording shared by every part, and the teacher said where each part starts: the part starts in seconds, [0, t2, t3, t4]. Null when
+ * the old behaviour applies (separate recordings, no start times, or only some of them - then the student turns the parts, as before). The times must
+ * run strictly upwards from the start; anything else is treated as "not set" rather than guessed at.
+ */
+export function sharedPartStarts(parts: readonly PartAudio[], tracks: readonly Track[]): number[] | null {
+  if (tracks.length !== 1 || parts.length < 2 || tracks[0].partIndexes.length !== parts.length) return null;
+  const ordered = [...parts].sort((a, b) => a.partIndex - b.partIndex);
+  const starts: number[] = [];
+  for (let i = 0; i < ordered.length; i++) {
+    const at = i === 0 ? 0 : ordered[i].startSeconds;
+    if (at == null || !Number.isFinite(at) || at < 0) return null;
+    if (i > 0 && at <= starts[i - 1]) return null;
+    starts.push(at);
+  }
+  return starts;
+}
+
+/** The part (0-based) that the recording is in at `seconds`: the last one whose start is not after it. */
+export function partAtSeconds(starts: readonly number[], seconds: number): number {
+  let part = 0;
+  for (let i = 0; i < starts.length; i++) if (seconds >= starts[i]) part = i;
+  return part;
 }
 
 export type AudioPosition =

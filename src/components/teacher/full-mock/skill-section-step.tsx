@@ -6,6 +6,9 @@ import { toast } from "sonner";
 
 import { setFullMockListeningTestAction, setFullMockReadingTestAction } from "@/actions/full-mock-tests.actions";
 import type { PickableMockTest } from "@/lib/full-mock-tests";
+import type { FullMockVersionHint } from "@/lib/exam/test-versions";
+import { UseNewestVersionButton } from "@/components/teacher/use-newest-version-button";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -16,18 +19,27 @@ export function SkillSectionStep({
   skill,
   options,
   selectedMockTestId,
+  hint = null,
   onSaved,
 }: {
   fullMockTestId: string;
   skill: "READING" | "LISTENING";
   options: PickableMockTest[];
   selectedMockTestId: string | null;
+  /** Phase L2 - the test this section holds now (even one that was archived since) and the newer published version of it, if there is one. */
+  hint?: FullMockVersionHint | null;
   onSaved: () => void;
 }) {
   const [selected, setSelected] = useState<string | null>(selectedMockTestId);
   const [submitting, setSubmitting] = useState(false);
+  const holdsArchived = Boolean(hint && !options.some((test) => test.id === hint.current.id));
 
   async function handleContinue() {
+    // Nothing changed: just move on (the test it holds may have been archived since, and an archived test cannot be picked again).
+    if (selected === selectedMockTestId) {
+      onSaved();
+      return;
+    }
     setSubmitting(true);
     const action = skill === "READING" ? setFullMockReadingTestAction : setFullMockListeningTestAction;
     const result = await action(fullMockTestId, selected);
@@ -41,7 +53,7 @@ export function SkillSectionStep({
     onSaved();
   }
 
-  if (options.length === 0) {
+  if (options.length === 0 && !hint) {
     return (
       <EmptyState
         icon={FileQuestion}
@@ -53,6 +65,23 @@ export function SkillSectionStep({
 
   return (
     <div className="max-w-xl space-y-5">
+      {hint && (
+        <div className="border-border/70 space-y-2 rounded-xl border p-4 text-sm" data-testid="section-version-hint">
+          <p>
+            This Full Mock uses <strong>{hint.current.title}</strong> <Badge variant="outline">v{hint.current.versionNumber}</Badge>
+            {hint.current.isArchived ? " (archived)" : hint.current.isPublished ? "" : " (not published)"}.
+          </p>
+          {hint.newest && (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-muted-foreground">
+                A newer version is published: <strong className="text-foreground">v{hint.newest.versionNumber}</strong>. Nothing switches until you choose it.
+              </span>
+              <UseNewestVersionButton target={{ kind: "full-mock", fullMockTestId, skill }} versionNumber={hint.newest.versionNumber} />
+            </div>
+          )}
+          {holdsArchived && !hint.newest && <p className="text-muted-foreground">That test is no longer published, so students cannot start this section. Pick another test below.</p>}
+        </div>
+      )}
       <RadioGroup value={selected ?? undefined} onValueChange={setSelected}>
         {options.map((test) => (
           <label
@@ -64,6 +93,7 @@ export function SkillSectionStep({
             <div className="min-w-0 flex-1 space-y-1">
               <Label htmlFor={`${skill}-${test.id}`} className="cursor-pointer text-sm font-medium">
                 {test.title}
+                {test.versionNumber ? <span className="text-muted-foreground ml-2 text-xs font-normal">v{test.versionNumber}</span> : null}
               </Label>
               <div className="text-muted-foreground flex items-center gap-3 text-xs">
                 <span className="flex items-center gap-1">

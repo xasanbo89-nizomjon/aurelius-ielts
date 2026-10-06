@@ -7,6 +7,8 @@ import {
   buildTracks,
   followsParts,
   locateAudio,
+  partAtSeconds,
+  sharedPartStarts,
   resolveAudioStartOffset,
   type PartAudio,
 } from "@/lib/exam/listening-audio";
@@ -77,6 +79,8 @@ export function useListeningAudio({
 }) {
   const tracks = useMemo(() => buildTracks(parts), [parts]);
   const following = useMemo(() => followsParts(tracks), [tracks]);
+  // Phase L2 - one shared recording whose parts have start times: the screen turns to the next part by itself when the recording gets there.
+  const partStarts = useMemo(() => sharedPartStarts(parts, tracks), [parts, tracks]);
 
   const [status, setStatus] = useState<ListeningAudioStatus>(tracks.length === 0 ? "silent" : "loading");
   const [percent, setPercent] = useState(0);
@@ -86,8 +90,9 @@ export function useListeningAudio({
   const [attempt, setAttempt] = useState(0);
 
   // Always the latest callbacks, without re-running the long-lived effects below.
-  const callbacks = useRef({ onPartChange, onRecordingEnded, onOver, timed, following });
-  callbacks.current = { onPartChange, onRecordingEnded, onOver, timed, following };
+  const callbacks = useRef({ onPartChange, onRecordingEnded, onOver, timed, following, partStarts });
+  callbacks.current = { onPartChange, onRecordingEnded, onOver, timed, following, partStarts };
+  const lastPart = useRef<number | null>(null);
 
   const mountedAt = useRef<{ perf: number; date: number } | null>(null);
   const loadedTracks = useRef<LoadedTrack[]>([]);
@@ -172,6 +177,11 @@ export function useListeningAudio({
       if (!audio || !loaded) return;
       trackIndex.current = index;
       if (callbacks.current.following) callbacks.current.onPartChange?.(tracks[index].partIndexes[0]);
+      else if (callbacks.current.partStarts) {
+        // (re)starting inside the shared recording (a reload in the middle): the screen belongs on the part the recording is in.
+        lastPart.current = partAtSeconds(callbacks.current.partStarts, position);
+        callbacks.current.onPartChange?.(lastPart.current);
+      }
 
       programmatic.current = true;
       audio.src = loaded.url;
@@ -308,6 +318,14 @@ export function useListeningAudio({
     };
     const onTimeUpdate = () => {
       if (!audio.seeking) lastTime.current = audio.currentTime;
+      const starts = callbacks.current.partStarts;
+      if (starts && phase.current === "playing" && !audio.seeking) {
+        const part = partAtSeconds(starts, audio.currentTime);
+        if (part !== lastPart.current) {
+          lastPart.current = part;
+          callbacks.current.onPartChange?.(part);
+        }
+      }
     };
     const onSeeking = () => {
       if (programmatic.current) return;

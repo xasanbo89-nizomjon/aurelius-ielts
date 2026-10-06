@@ -4,6 +4,7 @@ import type { MockTestCategory, MockTestDifficulty, WritingTaskCategory, Writing
 
 import { prisma } from "@/lib/prisma";
 import { getQuestionNumberCounts } from "@/lib/exam/question-counts";
+import { versionNumbersFor } from "@/lib/exam/version-numbers";
 import { collectTestDependencies, deleteStoredFilesIfUnreferenced } from "@/lib/exam/test-management";
 import { deleteBucketObjects } from "@/lib/uploads/storage-cleanup";
 import { TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
@@ -260,6 +261,8 @@ export type PickableMockTest = {
   title: string;
   durationMinutes: number | null;
   questionCount: number;
+  /** Phase L2 - versions share a title, so the picker tells them apart as v1, v2 ... (null for a test that is not part of a version chain). */
+  versionNumber: number | null;
 };
 
 export async function listPickableTestsForFullMock(
@@ -270,10 +273,13 @@ export async function listPickableTestsForFullMock(
     // A test that belongs to another Full Mock package isn't offered here — it can only ever be part of its own package.
     where: { ...(await authorScope(teacherId)), type, isPublished: true, isArchived: false, packageFullMockTestId: null },
     orderBy: { createdAt: "desc" },
-    select: { id: true, title: true, durationMinutes: true },
+    select: { id: true, title: true, durationMinutes: true, versionOfId: true, _count: { select: { versions: true } } },
   });
-  const counts = await getQuestionNumberCounts(tests.map((t) => t.id));
-  return tests.map((t) => ({ id: t.id, title: t.title, durationMinutes: t.durationMinutes, questionCount: counts.get(t.id) ?? 0 }));
+  const [counts, numbers] = await Promise.all([
+    getQuestionNumberCounts(tests.map((t) => t.id)),
+    versionNumbersFor(tests.filter((t) => t.versionOfId || t._count.versions > 0).map((t) => t.id)),
+  ]);
+  return tests.map((t) => ({ id: t.id, title: t.title, durationMinutes: t.durationMinutes, questionCount: counts.get(t.id) ?? 0, versionNumber: numbers.get(t.id) ?? null }));
 }
 
 async function setFullMockSkillTest(

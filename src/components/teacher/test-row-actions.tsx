@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { Loader2, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
-import { copyTestAction, deleteTestAction, setArchivedAction, setPublishedAction, type PublishActionResult } from "@/actions/test-management.actions";
+import { copyTestAction, deleteTestAction, previousLiveVersionAction, setArchivedAction, setPublishedAction, type PublishActionResult } from "@/actions/test-management.actions";
 import type { TestIssue } from "@/lib/exam/test-validation";
+import type { PreviousLiveVersion } from "@/lib/exam/test-versions";
 import { PublishIssuesDialog } from "@/components/teacher/publish-issues-dialog";
+import { PublishVersionDialog, publishMessage } from "@/components/teacher/publish-version-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -36,6 +38,8 @@ export function TestRowActions({
   usedInFullMocks = [],
   ownerMockTitle = null,
   redirectAfterDelete,
+  hidePublish = false,
+  isNewVersion = false,
 }: {
   testId: string;
   isPublished: boolean;
@@ -48,12 +52,17 @@ export function TestRowActions({
   ownerMockTitle?: string | null;
   /** Where to go after a successful delete (the editor page no longer exists once its test is gone). */
   redirectAfterDelete?: string;
+  /** Phase L2 - inside the structured editor publishing is the editor's own button (it saves first), so this menu does not offer a second, unsaved way. */
+  hidePublish?: boolean;
+  /** Phase L2 - this test is a new version of another: publishing it offers to archive the one it replaces. */
+  isNewVersion?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [understandsAttemptsGoToo, setUnderstandsAttemptsGoToo] = useState(false);
   const [issues, setIssues] = useState<TestIssue[] | null>(null);
+  const [previous, setPrevious] = useState<PreviousLiveVersion | null>(null);
   const blockedByFullMock = usedInFullMocks.length > 0 || Boolean(ownerMockTitle);
 
   function run(action: () => Promise<ActionResult>, onSuccess?: () => void) {
@@ -71,15 +80,33 @@ export function TestRowActions({
 
   /** Publishing answers with the list of problems when the test is not ready: shown with a link to each one. */
   function publish(next: boolean) {
+    // A new version whose predecessor is still live asks first whether to archive that one; the dialog then calls doPublish with the answer.
+    if (!next || !isNewVersion) return doPublish(next, false);
     startTransition(async () => {
-      const result: PublishActionResult = await setPublishedAction(testId, next);
-      if (result.success) {
-        router.refresh();
-        return;
-      }
-      if (result.issues && result.issues.length > 0) setIssues(result.issues);
-      else toast.error(result.error);
+      const found = await previousLiveVersionAction(testId);
+      if (found.success && found.previous) setPrevious(found.previous);
+      else await runPublish(next, false);
     });
+  }
+
+  function doPublish(next: boolean, archivePrevious: boolean) {
+    startTransition(() => runPublish(next, archivePrevious));
+  }
+
+  async function runPublish(next: boolean, archivePrevious: boolean) {
+    const result: PublishActionResult = await setPublishedAction(testId, next, { archivePrevious });
+    setPrevious(null);
+    if (result.success) {
+      if (next) {
+        const message = publishMessage(result);
+        if (message.warning) toast.warning(message.text);
+        else toast.success(message.text);
+      }
+      router.refresh();
+      return;
+    }
+    if (result.issues && result.issues.length > 0) setIssues(result.issues);
+    else toast.error(result.error);
   }
 
   function copy(mode: "version" | "duplicate") {
@@ -115,7 +142,7 @@ export function TestRowActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {!isArchived && (
+          {!isArchived && !hidePublish && (
             <DropdownMenuItem
               disabled={isPublished && attemptCount > 0}
               title={isPublished && attemptCount > 0 ? "Students have taken this test - archive it to retire it, or create a new version." : undefined}
@@ -124,6 +151,11 @@ export function TestRowActions({
               {isPublished ? "Unpublish" : "Publish"}
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem asChild>
+            <a href={`/teacher/preview/${testId}`} target="_blank" rel="noopener noreferrer">
+              Preview as student
+            </a>
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => copy("version")}>Create new version</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => copy("duplicate")}>Duplicate</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => run(() => setArchivedAction(testId, !isArchived))}>
@@ -143,6 +175,7 @@ export function TestRowActions({
       </DropdownMenu>
 
       <PublishIssuesDialog testId={testId} issues={issues ?? []} open={issues !== null} onOpenChange={(open) => !open && setIssues(null)} />
+      <PublishVersionDialog key={previous?.id ?? "none"} previous={previous} busy={pending} onConfirm={(archive) => doPublish(true, archive)} onCancel={() => setPrevious(null)} />
 
       <Dialog
         open={confirmDeleteOpen}

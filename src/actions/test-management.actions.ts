@@ -6,7 +6,16 @@ import type { Prisma, PassageAttachmentType, QuestionType } from "@prisma/client
 import { requireTeacherProfile } from "@/lib/session";
 import * as tm from "@/lib/exam/test-management";
 import { PublishValidationError } from "@/lib/exam/test-publish";
-import { copyTest, type CopyMode } from "@/lib/exam/test-versions";
+import {
+  copyTest,
+  previousLiveVersion,
+  publishVersion,
+  switchAssignmentToNewestVersion,
+  switchFullMockToNewestVersion,
+  type CopyMode,
+  type PreviousLiveVersion,
+  type PublishVersionOutcome,
+} from "@/lib/exam/test-versions";
 import type { TestIssue } from "@/lib/exam/test-validation";
 import { uploadListeningAudio } from "@/lib/uploads/audio-storage";
 import { uploadContentCoverImage } from "@/lib/uploads/image-storage";
@@ -78,19 +87,60 @@ export async function updateTestAction(testId: string, input: UpdateTestInput): 
   }
 }
 
-export type PublishActionResult = { success: true } | { success: false; error: string; issues?: TestIssue[] };
+export type PublishActionResult = ({ success: true } & Partial<PublishVersionOutcome>) | { success: false; error: string; issues?: TestIssue[] };
 
-/** Publishing re-validates the stored test; a test that is not ready answers with the full list of problems (each names the field to fix). */
-export async function setPublishedAction(testId: string, isPublished: boolean): Promise<PublishActionResult> {
+/**
+ * Publishing re-validates the stored test; a test that is not ready answers with the full list of problems (each names the field to fix).
+ * Phase L2 - `archivePrevious` (the new-version dialog's checkbox) also retires the version this one replaces.
+ */
+export async function setPublishedAction(testId: string, isPublished: boolean, options: { archivePrevious?: boolean } = {}): Promise<PublishActionResult> {
   try {
     const { profile } = await requireTeacherProfile();
-    await tm.setPublished(testId, profile.id, isPublished);
+    let outcome: PublishVersionOutcome | undefined;
+    if (isPublished) outcome = await publishVersion(testId, profile.id, { archivePrevious: options.archivePrevious === true });
+    else await tm.setPublished(testId, profile.id, false);
     revalidatePath(`/teacher/tests/${testId}`);
     revalidatePath("/teacher/tests");
-    return { success: true };
+    revalidatePath("/teacher/assignments");
+    return { success: true, ...outcome };
   } catch (error) {
     if (error instanceof PublishValidationError) return { success: false, error: error.message, issues: error.issues };
     return { success: false, error: errorMessage(error, "Could not update publish status.") };
+  }
+}
+
+/** Phase L2 - what the "publish a new version" dialog needs: the version this one replaces (if it is still live) and what still uses it. */
+export async function previousLiveVersionAction(testId: string): Promise<{ success: true; previous: PreviousLiveVersion | null } | { success: false; error: string }> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    return { success: true, previous: await previousLiveVersion(testId, profile.id) };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not look up the previous version.") };
+  }
+}
+
+/** Phase L2 - "Use v2" in a Full Mock's Reading / Listening step. */
+export async function switchFullMockToNewestVersionAction(fullMockTestId: string, skill: "READING" | "LISTENING"): Promise<{ success: true; versionNumber: number; title: string } | { success: false; error: string }> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    const newest = await switchFullMockToNewestVersion(fullMockTestId, profile.id, skill);
+    revalidatePath(`/teacher/tests/full-mock/${fullMockTestId}`);
+    revalidatePath("/teacher/tests");
+    return { success: true, versionNumber: newest.versionNumber, title: newest.title };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not switch to the newest version.") };
+  }
+}
+
+/** Phase L2 - "Use v2" on an assignment. */
+export async function switchAssignmentToNewestVersionAction(assignmentId: string): Promise<{ success: true; versionNumber: number; title: string } | { success: false; error: string }> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    const newest = await switchAssignmentToNewestVersion(assignmentId, profile.id);
+    revalidatePath("/teacher/assignments");
+    return { success: true, versionNumber: newest.versionNumber, title: newest.title };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, "Could not switch to the newest version.") };
   }
 }
 

@@ -4,6 +4,7 @@ import { ArrowLeft, BookOpen, FileUp, Files, Headphones, Layers, ListPlus, PenLi
 
 import { PageHeader } from "@/components/dashboard/page-header";
 import { CreateTestForm } from "@/components/teacher/create-test-form";
+import { WritingBundleForm } from "@/components/teacher/writing-bundle-form";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -32,7 +33,10 @@ const METHODS: Record<TestKind, { href: string; title: string; description: stri
     { href: "/teacher/tests/full-mock/new", title: "Assemble from tests I already have", description: "Pick a published Reading and Listening test and add the Writing and Speaking tasks.", icon: Layers },
     { href: "/teacher/tests/full-mock/quick", title: "Build from files", description: "Upload the Reading and Listening papers and the recording; the whole mock is made in one go.", icon: Files },
   ],
-  writing: [{ href: "/teacher/writing", title: "Open the Writing task bank", description: "Writing tasks, with their Task 1 pictures, are managed there.", icon: PenLine }],
+  writing: [
+    { href: "/teacher/tests/new?type=writing&method=bundle", title: "Task 1 + Task 2 together", description: "Make a Writing test: both tasks at once, Task 1 with a picture or a page of a PDF.", icon: ListPlus },
+    { href: "/teacher/writing", title: "Open the Writing task bank", description: "Every Writing task - edit, publish, assign - is managed there.", icon: PenLine },
+  ],
 };
 
 const isKind = (value: string | undefined): value is TestKind => KINDS.some((k) => k.kind === value);
@@ -66,6 +70,17 @@ export default async function NewTestPage({ searchParams }: { searchParams: Prom
         <BackLink href={`/teacher/tests/new?type=${kind}`} label="Choose another way" />
         <PageHeader title={`New ${kind} test`} description="Start with the basics - you'll add passages and questions next." />
         <CreateTestForm defaultType={kind === "listening" ? "LISTENING" : "READING"} />
+      </>
+    );
+  }
+
+  // Step 3 (Writing): both tasks made together; they land in the Writing task bank as ordinary tasks.
+  if (kind === "writing" && method === "bundle") {
+    return (
+      <>
+        <BackLink href="/teacher/tests/new?type=writing" label="Choose another way" />
+        <PageHeader title="New Writing test" description="Task 1 and Task 2 together. They are saved to the Writing task bank as drafts." />
+        <WritingBundleForm />
       </>
     );
   }

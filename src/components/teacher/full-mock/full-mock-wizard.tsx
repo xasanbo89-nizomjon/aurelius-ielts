@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import type { FullMockCompleteness, FullMockTestForEdit, PickableMockTest } from "@/lib/full-mock-tests";
+import type { FullMockVersionHint } from "@/lib/exam/test-versions";
 import { BasicsStep } from "@/components/teacher/full-mock/basics-step";
 import { SkillSectionStep } from "@/components/teacher/full-mock/skill-section-step";
 import { WritingStep } from "@/components/teacher/full-mock/writing-step";
@@ -25,11 +26,14 @@ export function FullMockWizard({
   pickableReading,
   pickableListening,
   completeness,
+  versionHints,
 }: {
   test: FullMockTestForEdit;
   pickableReading: PickableMockTest[];
   pickableListening: PickableMockTest[];
   completeness: FullMockCompleteness;
+  /** Phase L2 - what the Reading / Listening sections hold now and whether a newer published version of it exists ("Use newest version"). */
+  versionHints: { reading: FullMockVersionHint | null; listening: FullMockVersionHint | null };
 }) {
   const router = useRouter();
   const [step, setStep] = useState("1");
@@ -72,6 +76,7 @@ export function FullMockWizard({
           skill="READING"
           options={pickableReading}
           selectedMockTestId={test.readingSections[0]?.mockTest.id ?? null}
+          hint={versionHints.reading}
           onSaved={() => refreshAndAdvance("3")}
         />
       </TabsContent>
@@ -82,6 +87,7 @@ export function FullMockWizard({
           skill="LISTENING"
           options={pickableListening}
           selectedMockTestId={test.listeningSections[0]?.mockTest.id ?? null}
+          hint={versionHints.listening}
           onSaved={() => refreshAndAdvance("4")}
         />
       </TabsContent>

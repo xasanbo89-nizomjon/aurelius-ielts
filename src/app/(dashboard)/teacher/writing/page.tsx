@@ -119,6 +119,7 @@ export default async function TeacherWritingPage() {
             targetBand: task.targetBand,
             dueDate: task.dueDate,
             status: task.status,
+            bundleId: task.bundleId,
             submissionCount: task._count.submissions,
             assignedStudentIds: task.assignments.map((a) => a.studentId),
             assignedStudentNames: task.assignments.map((a) => a.student.user.name ?? a.student.user.email),

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { requireTeacherProfile } from "@/lib/session";
+import { getFullMockVersionHints } from "@/lib/exam/test-versions";
 import { getFullMockCompleteness, getFullMockTestForEdit, listPickableTestsForFullMock } from "@/lib/full-mock-tests";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { FullMockWizard } from "@/components/teacher/full-mock/full-mock-wizard";
@@ -23,6 +24,8 @@ export default async function EditFullMockTestPage({
   ]);
 
   if (!test) notFound();
+  // Phase L2 - "Use newest version": looked up only for a Full Mock this teacher may open.
+  const versionHints = await getFullMockVersionHints(test.id, profile.id);
 
   const completeness = getFullMockCompleteness(test);
 
@@ -34,6 +37,7 @@ export default async function EditFullMockTestPage({
         pickableReading={pickableReading}
         pickableListening={pickableListening}
         completeness={completeness}
+        versionHints={versionHints}
       />
     </>
   );

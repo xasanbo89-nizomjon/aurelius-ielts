@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 
 import { answerToText, textToAnswer } from "@/lib/exam/answer-alternatives";
 import { isAnswerCorrect } from "@/lib/exam/grading";
-import { buildQuestionPayloadsFromGroup } from "@/lib/exam/pdf-import-conversion";
+import { buildQuestionPayloadsFromGroup, insertSummaryBlankMarkers, missingSummaryBlankNumbers } from "@/lib/exam/pdf-import-conversion";
 import { numberQuestions, summarizeAttemptSlots } from "@/lib/exam/question-numbering";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
 import { validateTestStructure } from "@/lib/exam/test-validation";
@@ -213,6 +213,61 @@ test("the wrong number of parts is blocked (Reading has 3 passages, Listening 4 
   const input = build();
   input.parts.pop();
   assert.ok(validateTestStructure(input).issues.some((i) => i.code === "PART_COUNT"));
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// Phase L2 - blanks: the importer writes {{n}} markers, the validator insists on them
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+test("the importer turns numbered gaps into {{n}} blanks: dots, underscores, an ellipsis, brackets, long dashes", () => {
+  const text = "were 37 ....... Most evidence; a 38 ____ time; dangerous (39) …… , among; the [40] ... end; and 41. ........ also; 42 ———";
+  assert.equal(
+    insertSummaryBlankMarkers(text, 37, 42),
+    "were {{37}} Most evidence; a {{38}} time; dangerous {{39}} , among; the {{40}} end; and {{41}} also; {{42}}"
+  );
+  const old = "Neanderthalers lived in were 37 ....... Most evidence lasted a 38...... time. needed to protect from dangerous 39....... , among other things.";
+  assert.equal(insertSummaryBlankMarkers(old, 37, 39), "Neanderthalers lived in were {{37}} Most evidence lasted a {{38}} time. needed to protect from dangerous {{39}} , among other things.");
+});
+
+test("the importer is idempotent, leaves ordinary prose dots alone and never touches another number", () => {
+  const done = "were {{37}} Most evidence; a {{38}} time; and so on... in 2019 ... then";
+  assert.equal(insertSummaryBlankMarkers(done, 37, 38), done);
+  assert.equal(insertSummaryBlankMarkers("there were 370 ...... people", 37, 37), "there were 370 ...... people", "37 inside 370 is not blank 37");
+  assert.deepEqual(missingSummaryBlankNumbers("a 37 ..... b and 38 ..... c", 37, 38), []);
+  assert.deepEqual(missingSummaryBlankNumbers("a 37 ..... b and nothing for the next", 37, 38), [38]);
+});
+
+test("blanks with no number at all take the missing numbers in the order they appear, only when the count is exact", () => {
+  assert.equal(insertSummaryBlankMarkers("were ........ Most evidence, a ........ time", 37, 38), "were {{37}} Most evidence, a {{38}} time");
+  assert.equal(insertSummaryBlankMarkers("were 37 ..... and a ........ time", 37, 38), "were {{37}} and a {{38}} time", "the numbered one is placed first, the bare one gets what is left");
+  assert.equal(insertSummaryBlankMarkers("were ........ Most evidence, a ........ time, a ........ day", 37, 38), "were ........ Most evidence, a ........ time, a ........ day", "three bare blanks for two numbers: ambiguous, nothing is guessed");
+});
+
+test("a completion text with fewer {{n}} markers than blanks, or with the old dotted spelling, is an error", () => {
+  const few = build();
+  few.questions.find((q) => q.id === "q19").options.text = "Line {{19}}. Line {{20}}. Line 21 ...... Line 22 ......";
+  const fewIssues = errors(validateTestStructure(few)).filter((i) => i.code === "SUMMARY_BLANKS");
+  assert.ok(fewIssues.some((i) => /marks only 2 of its 4 blanks/.test(i.message)), fewIssues.map((i) => i.message).join(" | "));
+
+  const dotted = build();
+  dotted.questions.find((q) => q.id === "q19").options.text = "Line 19 ...... Line 20 ...... Line 21 ...... Line 22 ......";
+  const dottedIssue = errors(validateTestStructure(dotted)).find((i) => i.code === "SUMMARY_BLANKS");
+  assert.ok(dottedIssue && /dotted lines/.test(dottedIssue.message) && /Insert blank/.test(dottedIssue.message), dottedIssue?.message);
+});
+
+test("blank numbers must match the answers and the task's own numbers", () => {
+  const key = build();
+  key.questions.find((q) => q.id === "q19").correctAnswer = { 19: "a", 20: "b", 21: "c", 23: "d" };
+  assert.ok(errors(validateTestStructure(key)).some((i) => i.code === "SUMMARY_BLANKS" && /numbered 19, 20, 21, 22 but the answers are for 19, 20, 21, 23/.test(i.message)));
+
+  const shifted = build();
+  const row = shifted.questions.find((q) => q.id === "q19");
+  row.options.text = "Line {{1}}. Line {{2}}. Line {{3}}. Line {{4}}.";
+  row.correctAnswer = { 1: "a", 2: "b", 3: "c", 4: "d" };
+  const issue = errors(validateTestStructure(shifted)).find((i) => i.code === "SUMMARY_BLANKS" && /this task is Questions 19–22/.test(i.message));
+  assert.ok(issue, errors(validateTestStructure(shifted)).map((i) => i.message).join(" | "));
+
+  assert.deepEqual(errors(validateTestStructure(build())), [], "a correct summary is untouched by the new rules");
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------

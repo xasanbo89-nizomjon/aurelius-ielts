@@ -6,16 +6,7 @@ import type { HighlightColor, QuestionType } from "@prisma/client";
 import { ClipboardList, Home, List, Loader2, Maximize2, Minimize2, NotebookPen } from "lucide-react";
 import { toast } from "sonner";
 
-import {
-  deleteNoteAction,
-  markListeningAudioEndedAction,
-  saveAnswerAction,
-  saveNoteAction,
-  submitAttemptAction,
-  toggleFlagAction,
-  updateLastSeenQuestionAction,
-} from "@/actions/exam.actions";
-import { toggleQuestionBookmarkAction } from "@/actions/bookmarks.actions";
+import { useExamActions } from "@/components/exam/exam-actions";
 import { cn } from "@/lib/utils";
 import { FULL_MOCK_LISTENING_TRANSFER_MINUTES } from "@/lib/full-mock-constants";
 import { numberQuestions, slotAnswered, summarizeSlotAnswer, type NumberedQuestion } from "@/lib/exam/question-numbering";
@@ -68,6 +59,8 @@ export type ExamPassage = {
   title: string;
   content: string;
   audioUrl: string | null;
+  /** Phase L2 - where this part starts inside a recording shared by every part, in seconds (null = not set: the student turns the parts, as before). */
+  audioStartSeconds?: number | null;
   orderIndex: number;
   attachments: ExamAttachment[];
 };
@@ -175,6 +168,8 @@ export function ExamRunner({
   /** Phase I - the test has a clock (a duration, or a Full Mock section): it is handed in by itself 2 minutes after the recording. An untimed test never is. */
   listeningTimed?: boolean;
 }) {
+  // Phase L2 - every write to the server goes through these (the real actions for a student; in a teacher's preview they do nothing).
+  const actions = useExamActions();
   const [answers, setAnswers] = useState<Record<string, unknown>>(initialAnswers);
   const latestAnswers = useRef<Record<string, unknown>>(initialAnswers);
   const [flags, setFlags] = useState<Set<string>>(() => new Set(initialFlags));
@@ -377,7 +372,7 @@ export function ExamRunner({
       const value = latestAnswers.current[questionId];
       const previous = saveChains.current.get(questionId) ?? Promise.resolve();
       const next = previous
-        .then(() => saveAnswerAction(resultId, questionId, value as never))
+        .then(() => actions.saveAnswer(resultId, questionId, value as never))
         .then((result) => {
           if (!result.success && result.ended) {
             onAttemptEnded.current?.();
@@ -400,7 +395,7 @@ export function ExamRunner({
       saveChains.current.set(questionId, next);
       return next;
     },
-    [resultId]
+    [resultId, actions]
   );
 
   const handleAnswerChange = useCallback(
@@ -438,9 +433,9 @@ export function ExamRunner({
         else next.add(questionId);
         return next;
       });
-      void toggleFlagAction(resultId, questionId);
+      void actions.toggleFlag(resultId, questionId);
     },
-    [resultId]
+    [resultId, actions]
   );
 
   const handleToggleBookmark = useCallback((questionId: string) => {
@@ -450,8 +445,8 @@ export function ExamRunner({
       else next.add(questionId);
       return next;
     });
-    void toggleQuestionBookmarkAction(questionId);
-  }, []);
+    void actions.toggleBookmark(questionId);
+  }, [actions]);
 
   // ---- navigation ---------------------------------------------------------------------------------------------------
   const lastSeenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -464,10 +459,10 @@ export function ExamRunner({
       if (lastSeenTimer.current) clearTimeout(lastSeenTimer.current);
       lastSeenTimer.current = setTimeout(() => {
         lastPersistedQuestion.current = questionId;
-        void updateLastSeenQuestionAction(resultId, questionId);
+        void actions.updateLastSeenQuestion(resultId, questionId);
       }, 800);
     },
-    [resultId]
+    [resultId, actions]
   );
 
   // A jump is "switch section → wait for it to render → scroll to the question → focus its answer box". Doing the last two in an effect (not straight after setState) is what makes it work when the target is on another passage or another phone tab.
@@ -633,14 +628,14 @@ export function ExamRunner({
   async function handleSaveNote(content: string) {
     const passageId = currentPassage?.id ?? null;
     setNotes((prev) => [...prev, { id: `temp-${Date.now()}`, passageId, content }]);
-    const result = await saveNoteAction(resultId, { passageId: passageId ?? undefined, content });
+    const result = await actions.saveNote(resultId, { passageId: passageId ?? undefined, content });
     if (!result.success) toast.error(result.error);
   }
 
   async function handleDeleteNote(noteId: string) {
     setNotes((prev) => prev.filter((n) => n.id !== noteId));
     if (!noteId.startsWith("temp-")) {
-      await deleteNoteAction(resultId, noteId);
+      await actions.deleteNote(resultId, noteId);
     }
   }
 
@@ -649,9 +644,9 @@ export function ExamRunner({
     toast.info("Time's up — submitting your test.");
     startSubmitTransition(async () => {
       await flushPendingWork();
-      await submitAttemptAction(resultId);
+      await actions.submitAttempt(resultId);
     });
-  }, [resultId, flushPendingWork]);
+  }, [resultId, flushPendingWork, actions]);
 
   // The server finalised this attempt while the page was open (a teacher ended the section, or its time ran out while the browser was offline):
   // hand-in is a no-op then, and the student is taken on to whatever comes next.
@@ -662,15 +657,15 @@ export function ExamRunner({
       attemptEndedHandled.current = true;
       toast.info("This section has ended - taking you on.");
       startSubmitTransition(async () => {
-        await submitAttemptAction(resultId);
+        await actions.submitAttempt(resultId);
       });
     };
-  }, [resultId]);
+  }, [resultId, actions]);
 
   function handleSubmit() {
     startSubmitTransition(async () => {
       await flushPendingWork();
-      await submitAttemptAction(resultId);
+      await actions.submitAttempt(resultId);
     });
   }
 
@@ -689,23 +684,23 @@ export function ExamRunner({
       if (lastAudioSrc && src !== lastAudioSrc) return;
       transferStarted.current = true;
       setTransferSeconds(transferTotalSeconds);
-      void markListeningAudioEndedAction(fullMock.attemptId).then((reply) => {
+      void actions.markListeningAudioEnded(fullMock.attemptId).then((reply) => {
         if (reply.success && Math.abs(reply.transferSecondsRemaining - transferTotalSeconds) > 2) setTransferSeconds(reply.transferSecondsRemaining);
       });
     },
-    [fullMock, testType, lastAudioSrc, transferTotalSeconds]
+    [fullMock, testType, lastAudioSrc, transferTotalSeconds, actions]
   );
 
   const handleTransferExpire = useCallback(() => {
     toast.info("Transfer time is over — submitting your Listening test.");
     startSubmitTransition(async () => {
       await flushPendingWork();
-      await submitAttemptAction(resultId);
+      await actions.submitAttempt(resultId);
     });
-  }, [resultId, flushPendingWork]);
+  }, [resultId, flushPendingWork, actions]);
 
   // Phase I - the recording that belongs to each part, for the official Listening screen.
-  const partAudio = useMemo(() => sections.map((section, index) => ({ partIndex: index, src: section.passage?.audioUrl ?? null })), [sections]);
+  const partAudio = useMemo(() => sections.map((section, index) => ({ partIndex: index, src: section.passage?.audioUrl ?? null, startSeconds: section.passage?.audioStartSeconds ?? null })), [sections]);
 
   const currentPassageNotes: ExamNote[] = useMemo(
     () => notes.filter((n) => n.passageId === (currentPassage?.id ?? null)),
@@ -1098,7 +1093,7 @@ export function ExamRunner({
       <LeaveTestDialog
         open={leaveDialogOpen}
         onOpenChange={setLeaveDialogOpen}
-        onConfirm={() => router.push("/student/dashboard")}
+        onConfirm={() => router.push(actions.exitHref)}
       />
     </div>
   );

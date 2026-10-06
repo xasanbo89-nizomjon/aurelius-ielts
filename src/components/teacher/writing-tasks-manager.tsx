@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Archive, ImageIcon, Loader2, Pencil, PenLine, Plus, Send, Trash2 } from "lucide-react";
+import { Archive, Eye, ImageIcon, Loader2, Pencil, PenLine, Plus, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { WritingTaskStatus } from "@prisma/client";
 
@@ -25,6 +25,8 @@ import { WritingTaskEditorDialog, type ExistingWritingTask } from "@/components/
 import { FallbackImage } from "@/components/ui/fallback-image";
 
 export type WritingTaskRow = ExistingWritingTask & {
+  /** Phase L2 - set when Task 1 and Task 2 were made together as a Writing test. */
+  bundleId?: string | null;
   status: WritingTaskStatus;
   submissionCount: number;
   assignedStudentNames: string[];
@@ -109,6 +111,11 @@ export function WritingTasksManager({ tasks, students }: { tasks: WritingTaskRow
                       )}
                     </span>
                     {task.title}
+                    {task.bundleId && (
+                      <Badge variant="outline" className="text-[11px]" data-testid="bundle-chip" title="Task 1 and Task 2 were made together as one Writing test">
+                        Writing test
+                      </Badge>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">{WRITING_TASK_NUMBER_LABELS[task.taskNumber]}</TableCell>
@@ -127,6 +134,11 @@ export function WritingTasksManager({ tasks, students }: { tasks: WritingTaskRow
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-1">
+                    <Button asChild variant="ghost" size="icon">
+                      <a href={`/teacher/preview/writing/${task.id}`} target="_blank" rel="noopener noreferrer" aria-label={`Preview ${task.title} as a student`} data-testid="preview-writing-task">
+                        <Eye className="size-4" />
+                      </a>
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => openEdit(task)} aria-label={`Edit ${task.title}`}>
                       <Pencil className="size-4" />
                     </Button>

@@ -8,7 +8,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { createTestSchema, type CreateTestInput } from "@/lib/validations/test-management";
-import { createTestAction } from "@/actions/test-management.actions";
+import { createBuilderTestAction } from "@/actions/test-builder.actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +36,8 @@ export function CreateTestForm({ defaultType = "READING" }: { defaultType?: "REA
 
   async function onSubmit(values: CreateTestInput) {
     setSubmitting(true);
-    const result = await createTestAction(values);
+    // Phase L2 - the test is created with its parts (3 passages / 4 parts) already in place and opens in the structured editor.
+    const result = await createBuilderTestAction({ type: values.type, title: values.title, description: values.description, durationMinutes: values.durationMinutes ?? null, category: values.category });
     setSubmitting(false);
 
     if (!result.success) {

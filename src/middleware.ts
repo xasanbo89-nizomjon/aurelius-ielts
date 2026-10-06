@@ -34,7 +34,11 @@ export default function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.nextUrl.origin));
   }
 
-  return NextResponse.next();
+  // Phase L2 - the layouts need the address to answer 404 for a missing record before a page starts streaming (see src/lib/route-guard.ts). Always
+  // overwritten here, so a header sent by a browser is never believed.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname);
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {
