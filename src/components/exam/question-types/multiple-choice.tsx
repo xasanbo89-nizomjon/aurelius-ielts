@@ -29,6 +29,8 @@ export function MultipleChoiceAnswer({
   startNumber,
 }: QuestionAnswerProps<Options, string[]>) {
   const selected = value ?? [];
+  // "Choose TWO": no more letters than the question asks for (a further box stays off until one is unticked).
+  const limit = options.allowMultiple && (options.chooseCount ?? 0) > 1 ? options.chooseCount! : null;
 
   if (options.allowMultiple) {
     return (
@@ -41,6 +43,7 @@ export function MultipleChoiceAnswer({
               <Checkbox
                 id={id}
                 checked={checked}
+                disabled={limit !== null && !checked && selected.length >= limit}
                 data-question-number={index === 0 ? startNumber : undefined}
                 onCheckedChange={(next) =>
                   onChange(next ? [...selected, choice.id] : selected.filter((c) => c !== choice.id))

@@ -1,6 +1,7 @@
 import type { QuestionType } from "@prisma/client";
 
 import { gradeItems, isAnswerCorrect, isGroupedQuestionType, isResponseAnswered } from "@/lib/exam/grading";
+import { chooseCountOf, chooseMarks } from "@/lib/exam/choose-many";
 import { completeBlankIds, summaryBlankIds } from "@/lib/exam/summary-blanks";
 
 /**
@@ -73,6 +74,9 @@ export function questionSlotKeys(type: QuestionType, options: unknown, hintKeys?
     return completeBlankIds(found, span, startNumber, hintKeys);
   }
 
+  // Phase L3 - "Choose TWO letters" covers two numbers (21 and 22), each worth one mark (see choose-many.ts). Any other multiple-choice row is one number.
+  if (type === "MULTIPLE_CHOICE") return Array.from({ length: chooseCountOf(type, opts) }, () => null);
+
   return [null];
 }
 
@@ -106,6 +110,11 @@ export function formatNumberRange(startNumber: number, endNumber: number): strin
 
 /** Whether each numbered question of a row has an answer yet, in number order. */
 export function slotAnswered(question: Pick<NumberedQuestion<NumberableQuestion>, "type" | "slotKeys">, response: unknown): boolean[] {
+  // "Choose TWO": the first number is answered once one letter is picked, the second once two are.
+  if (question.type === "MULTIPLE_CHOICE" && question.slotKeys.length > 1) {
+    const picked = Array.isArray(response) ? response.filter((id) => typeof id === "string" && id.length > 0).length : 0;
+    return question.slotKeys.map((_, index) => index < picked);
+  }
   if (!isGroupedQuestionType(question.type)) return [isResponseAnswered(response)];
   const given = asRecord(response);
   return question.slotKeys.map((key) => {
@@ -140,6 +149,19 @@ export function evaluateSlots(
 ): SlotOutcome[] {
   const answered = slotAnswered(question, response);
   const verdict = verdictOf(stored);
+
+  // Phase L3 - "Choose TWO": one mark per correct letter, so a row can be partly right. As for the grouped types, the STORED marks decide how many of its
+  // numbers were right; only a row with no stored verdict is worked out from the key.
+  if (question.type === "MULTIPLE_CHOICE" && question.slotKeys.length > 1) {
+    const slots = question.slotKeys.length;
+    let marks = chooseMarks(question.correctAnswer, response);
+    if (verdict?.isCorrect === true) marks = slots;
+    else if (verdict?.isCorrect === false && verdict.pointsAwarded != null) {
+      const worth = verdict.points != null && verdict.points > 0 ? verdict.points : slots;
+      marks = Math.min(slots, Math.ceil((verdict.pointsAwarded * slots) / worth));
+    }
+    return question.slotKeys.map((_, index) => ({ number: question.startNumber + index, answered: answered[index], correct: answered[index] && index < marks }));
+  }
 
   if (!isGroupedQuestionType(question.type)) {
     const correct = verdict?.isCorrect != null ? verdict.isCorrect : response !== undefined && isAnswerCorrect(question.type, question.correctAnswer, response);
@@ -217,7 +239,10 @@ export function summarizeSlotAnswer(question: NumberedQuestion<NumberableQuestio
     case "MULTIPLE_CHOICE": {
       if (!Array.isArray(response) || response.length === 0) return null;
       const choices = (asRecord(question.options)?.choices as { id: string; text: string }[] | undefined) ?? [];
-      return response.map((id) => choices.find((choice) => choice.id === id)?.text ?? String(id)).join(", ");
+      // "Choose TWO": each number shows the letter picked for it (the first number the first letter ...).
+      const picked = question.slotKeys.length > 1 ? response.slice(slotIndex, slotIndex + 1) : response;
+      if (picked.length === 0) return null;
+      return picked.map((id) => choices.find((choice) => choice.id === id)?.text ?? String(id)).join(", ");
     }
     case "TRUE_FALSE_NOT_GIVEN":
       return typeof response === "string" && response ? response.replace(/_/g, " ") : null;

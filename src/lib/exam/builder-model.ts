@@ -1,6 +1,7 @@
 import type { QuestionType } from "@prisma/client";
 
 import { numberQuestions, summaryBlankKeys } from "@/lib/exam/question-numbering";
+import { MAX_CHOOSE, MIN_CHOOSE, chooseCountOf } from "@/lib/exam/choose-many";
 import { answerKeysOf } from "@/lib/exam/summary-blanks";
 import { insertSummaryBlankMarkers } from "@/lib/exam/pdf-import-conversion";
 import type { ValidateTestInput, ValidatorPart } from "@/lib/exam/test-validation";
@@ -45,7 +46,7 @@ const LIMIT_TWO = "NO MORE THAN TWO WORDS";
 export const GROUP_KIND_META: Record<GroupKind, KindMeta> = {
   MULTIPLE_CHOICE: {
     label: "Multiple choice",
-    hint: "Choose one answer - or allow several for a \"choose TWO\" question (it still counts as one numbered question).",
+    hint: "Choose one answer - or allow several for a \"Choose TWO letters\" question (it covers two question numbers, one mark for each correct letter).",
     stored: "MULTIPLE_CHOICE",
     perNumber: true,
     instruction: { READING: "Choose the correct letter, A, B, C or D.", LISTENING: "Choose the correct letter, A, B or C." },
@@ -178,6 +179,8 @@ export type BuilderGroup = {
   wordBank: string[];
   /** Multiple choice: more than one correct answer ("choose TWO"). */
   allowMultiple: boolean;
+  /** Multiple choice with allowMultiple: how many letters each question asks for (2 = "choose TWO"). Every such question covers that many numbers. */
+  chooseCount: number;
   items: BuilderItem[];
   /** Summary / notes / table text, every blank written as {{}} (the real question numbers are written in when it is saved). */
   text: string;
@@ -285,6 +288,7 @@ export function emptyGroup(kind: GroupKind, skill: Skill): BuilderGroup {
     maxWords: null,
     wordBank: [],
     allowMultiple: false,
+    chooseCount: 2,
     items: perNumber ? [emptyItem(kind)] : [],
     text: "",
     blanks: [],
@@ -380,7 +384,16 @@ export function toRows(model: BuilderModel, newId: IdFactory): BuilderRows {
           if (group.kind === "MULTIPLE_CHOICE") {
             const choices = item.choices.map((choice) => ({ id: choice.id, text: choice.text }));
             const known = new Set(choices.map((choice) => choice.id));
-            push({ id, type: "MULTIPLE_CHOICE", prompt: item.prompt, options: { choices, allowMultiple: group.allowMultiple }, correctAnswer: item.correctChoiceIds.filter((c) => known.has(c)), points: 1 });
+            // "Choose TWO": the row says how many letters it asks for, covers that many numbers and is worth one mark per letter (see choose-many.ts).
+            const count = group.allowMultiple ? Math.min(MAX_CHOOSE, Math.max(MIN_CHOOSE, Math.round(group.chooseCount) || MIN_CHOOSE)) : 1;
+            push({
+              id,
+              type: "MULTIPLE_CHOICE",
+              prompt: item.prompt,
+              options: group.allowMultiple ? { choices, allowMultiple: true, chooseCount: count } : { choices, allowMultiple: false },
+              correctAnswer: item.correctChoiceIds.filter((c) => known.has(c)),
+              points: count,
+            });
           } else if (meta.stored === "TRUE_FALSE_NOT_GIVEN") {
             push({ id, type: "TRUE_FALSE_NOT_GIVEN", prompt: item.prompt, options: {}, correctAnswer: item.tfng || null, points: 1 });
           } else {
@@ -402,6 +415,8 @@ export function toRows(model: BuilderModel, newId: IdFactory): BuilderRows {
         const id = group.questionId ?? newId(rowKeyOfGroup(group));
         const blanks = Math.max(1, countBlanks(group.text));
         const options: Record<string, unknown> = { text: group.text, blankCount: blanks };
+        // A table is always drawn as a table (a title, a note and a short row included) - see table-text.ts.
+        if (group.kind === "TABLE_COMPLETION") options.layout = "table";
         if (group.wordBank.length > 0) options.wordBank = group.wordBank;
         if (group.maxWords) options.maxWords = group.maxWords;
         push({ id, type: "SUMMARY_COMPLETION", prompt: group.instructions, options, correctAnswer: {}, points: Math.min(20, blanks) });
@@ -445,7 +460,7 @@ type StoredQuestion = { id: string; passageId: string | null; questionGroupId: s
 type StoredGroup = { id: string; passageId: string; instructions: string | null; orderIndex: number };
 type StoredPassage = { id: string; title: string; content: string; orderIndex: number; audioStartSeconds: number | null };
 
-function kindOf(type: QuestionType, instructions: string): GroupKind {
+function kindOf(type: QuestionType, instructions: string, options: Record<string, unknown> = {}): GroupKind {
   switch (type) {
     case "MULTIPLE_CHOICE":
       return "MULTIPLE_CHOICE";
@@ -454,7 +469,7 @@ function kindOf(type: QuestionType, instructions: string): GroupKind {
     case "MATCHING":
       return /heading/i.test(instructions) ? "MATCHING_HEADINGS" : /\b(diagram|map|plan|label)/i.test(instructions) ? "DIAGRAM_LABELLING" : "MATCHING";
     case "SUMMARY_COMPLETION":
-      return /\btable\b/i.test(instructions) ? "TABLE_COMPLETION" : /\bnotes?\b/i.test(instructions) ? "NOTE_COMPLETION" : "SUMMARY_COMPLETION";
+      return options.layout === "table" || /\btable\b/i.test(instructions) ? "TABLE_COMPLETION" : /\bnotes?\b/i.test(instructions) ? "NOTE_COMPLETION" : "SUMMARY_COMPLETION";
     case "FILL_IN_BLANK":
       return "FORM_COMPLETION";
     case "SENTENCE_COMPLETION":
@@ -524,7 +539,7 @@ export function fromRows(args: {
       const first = current.rows[0];
       const stored = current.groupId ? groupInfo.get(current.groupId) : undefined;
       const instructions = stored?.instructions ?? (first.type === "MATCHING" || first.type === "SUMMARY_COMPLETION" ? first.prompt : "");
-      const kind = kindOf(first.type, instructions);
+      const kind = kindOf(first.type, instructions, asRecord(first.options) ?? {});
       const group: BuilderGroup = { ...emptyGroup(kind, "READING"), key: newKey("g"), kind, instructions, items: [] };
       // a stored group id is only handed to the FIRST builder group made from it (a split group's later parts get new ids)
       if (current.groupId && !usedGroupIds.has(current.groupId)) {
@@ -535,6 +550,9 @@ export function fromRows(args: {
       if (GROUP_KIND_META[kind].perNumber) {
         group.items = current.rows.map(itemFromRow);
         group.allowMultiple = options.allowMultiple === true;
+        // a row saved before "choose N" existed has no chooseCount: it is read as asking for as many letters as its key has (at least two)
+        const keyLength = Array.isArray(first.correctAnswer) ? first.correctAnswer.length : 0;
+        group.chooseCount = group.allowMultiple ? Math.min(MAX_CHOOSE, Math.max(MIN_CHOOSE, chooseCountOf("MULTIPLE_CHOICE", options) > 1 ? chooseCountOf("MULTIPLE_CHOICE", options) : keyLength)) : 2;
         group.maxWords = typeof options.maxWords === "number" ? options.maxWords : null;
         group.wordBank = Array.isArray(options.wordBank) ? (options.wordBank as unknown[]).filter((w): w is string => typeof w === "string") : [];
       } else if (first.type === "MATCHING") {
@@ -576,7 +594,8 @@ export function fromRows(args: {
 // Numbers the editor shows
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
 
-export type GroupLayout = { first: number; last: number; count: number; itemNumbers: number[] };
+/** `itemNumbers`: every number of the group, in order. `itemRanges`: one entry per ITEM of a one-question-per-item group (a "choose TWO" item covers two numbers). */
+export type GroupLayout = { first: number; last: number; count: number; itemNumbers: number[]; itemRanges: { first: number; last: number }[] };
 export type ModelLayout = { total: number; parts: { first: number | null; last: number | null; count: number; groups: GroupLayout[] }[] };
 
 /**
@@ -598,7 +617,11 @@ export function layoutOf(model: BuilderModel): ModelLayout {
       const ids = meta.perNumber ? group.items.map((item) => item.questionId ?? item.key) : [group.questionId ?? rowKeyOfGroup(group)];
       const itemNumbers = range(ids);
       const first = itemNumbers[0] ?? 0;
-      return { first, last: itemNumbers.length ? itemNumbers[itemNumbers.length - 1] : 0, count: itemNumbers.length, itemNumbers };
+      const itemRanges = ids.map((id) => {
+        const row = byId.get(id);
+        return row ? { first: row.startNumber, last: row.endNumber } : { first: 0, last: 0 };
+      });
+      return { first, last: itemNumbers.length ? itemNumbers[itemNumbers.length - 1] : 0, count: itemNumbers.length, itemNumbers, itemRanges };
     });
     const all = groups.filter((g) => g.count > 0);
     const count = all.reduce((sum, g) => sum + g.count, 0);
@@ -666,4 +689,28 @@ export function previewOf(model: BuilderModel): Map<string, { rows: PreviewRow[]
     }
   }
   return result;
+}
+
+/**
+ * Keeps each blank's answers with its blank when the text is edited: a blank added before others pushes their answers along, a blank removed
+ * takes its answers with it (found from where the old and the new text first differ).
+ */
+export function reconcileBlanks(oldText: string, newText: string, blanks: string[][]): string[][] {
+  const oldCount = countBlanks(oldText);
+  const newCount = countBlanks(newText);
+  if (oldCount === newCount) return padBlanks(blanks, newCount);
+  let at = 0;
+  while (at < oldText.length && at < newText.length && oldText[at] === newText[at]) at++;
+  const before = countBlanks(oldText.slice(0, at));
+  const next = blanks.slice();
+  if (newCount > oldCount) next.splice(before, 0, ...Array.from({ length: newCount - oldCount }, () => [] as string[]));
+  else next.splice(before, oldCount - newCount);
+  return padBlanks(next, newCount);
+}
+
+/** Keeps one list of answers per blank, however many blanks the text has now. */
+export function padBlanks(blanks: string[][], count: number): string[][] {
+  const next = blanks.slice(0, Math.max(count, 0));
+  while (next.length < count) next.push([]);
+  return next;
 }

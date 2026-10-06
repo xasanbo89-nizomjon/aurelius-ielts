@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { getTestActor } from "@/lib/exam/test-access";
 import { cefrLabelForBand } from "@/lib/analytics/student-insights";
 
 export const STUDENT_ROSTER_PAGE_SIZE = 10;
@@ -109,10 +110,11 @@ export async function getStudentForTeacher(
 
 export type StudentOption = { id: string; name: string | null; email: string };
 
-/** Every real student assigned to this teacher — options for assignment pickers (e.g. Writing Assignments). */
+/** Every real student assigned to this teacher — options for assignment pickers (e.g. Writing Assignments). A Root Teacher manages everything, so every real student. */
 export async function listStudentsForTeacher(teacherId: string): Promise<StudentOption[]> {
+  const actor = await getTestActor(teacherId);
   const students = await prisma.studentProfile.findMany({
-    where: { teacherId },
+    where: actor.isRootTeacher ? {} : { teacherId },
     orderBy: { user: { name: "asc" } },
     select: { id: true, user: { select: { name: true, email: true } } },
   });

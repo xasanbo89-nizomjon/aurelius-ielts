@@ -15,6 +15,8 @@
  * Pure and client-safe.
  */
 
+import { parseTableText } from "@/lib/exam/table-text";
+
 export type SummaryPart = string | { blank: string };
 
 const MARKER = /\{\{(\d+)\}\}/g;
@@ -108,7 +110,8 @@ export function answerKeysOf(correctAnswer: unknown): string[] {
 
 export type SummaryLayout =
   | { kind: "paragraph"; text: string }
-  | { kind: "table"; rows: string[][] }
+  /** `caption` / `note`: a title above and a line under the table; `spanRows[r]`: row r is one heading across the whole width (only for a table the teacher marked as one). */
+  | { kind: "table"; rows: string[][]; caption?: string; note?: string; spanRows?: boolean[]; columns?: number }
   | { kind: "flow"; steps: string[] };
 
 const ARROW_ONLY = /^[\s↓⬇▼↧⇩⬇️➔➜→⇒↘]+$/u;
@@ -119,7 +122,14 @@ const ARROW_ONLY = /^[\s↓⬇▼↧⇩⬇️➔➜→⇒↘]+$/u;
  * the text clearly has that shape it is drawn as a table / flow chart,
  * otherwise as a paragraph — and in every case the SAME blanks are used.
  */
-export function detectSummaryLayout(text: string): SummaryLayout {
+export function detectSummaryLayout(text: string, layoutHint?: string | null): SummaryLayout {
+  // Phase L3 - a question the teacher built as a TABLE (options.layout = "table") is always drawn as one, however it was typed: a title above, a note below
+  // and a short row are all fine. Any other text is recognised only when every line is a row of the same width (older tests and imports, unchanged).
+  if (layoutHint === "table") {
+    const table = parseTableText(text);
+    if (table) return { kind: "table", rows: table.rows.map((row) => row.cells), caption: table.caption || undefined, note: table.note || undefined, spanRows: table.rows.map((row) => row.span), columns: table.columns };
+  }
+
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
 
   const pipeRows = lines.map((line) => line.split("|").map((cell) => cell.trim()));

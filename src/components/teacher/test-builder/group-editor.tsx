@@ -3,7 +3,9 @@
 import { useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
 
-import { GROUP_KIND_META, LETTERS, countBlanks, emptyItem, moveWithin, optionLabel, type BuilderGroup, type GroupLayout, type PreviewGroupInfo, type PreviewRow, type Skill } from "@/lib/exam/builder-model";
+import { chooseWord } from "@/lib/exam/choose-many";
+import { TableGridEditor } from "@/components/teacher/test-builder/table-grid-editor";
+import { GROUP_KIND_META, LETTERS, countBlanks, emptyItem, moveWithin, optionLabel, padBlanks, reconcileBlanks, type BuilderGroup, type GroupLayout, type PreviewGroupInfo, type PreviewRow, type Skill } from "@/lib/exam/builder-model";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -160,19 +162,35 @@ function ItemsEditor({ group, layout, skill, domId, onChange }: { group: Builder
   return (
     <div className="space-y-3">
       {multipleChoice && (
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={group.allowMultiple} onChange={(event) => onChange((g) => void (g.allowMultiple = event.target.checked))} data-testid="allow-multiple" />
-          More than one correct answer (&quot;choose TWO&quot; - it still counts as one numbered question)
-        </label>
+        <div className="space-y-1.5">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={group.allowMultiple} onChange={(event) => onChange((g) => void (g.allowMultiple = event.target.checked))} data-testid="allow-multiple" />
+            More than one correct answer (&quot;Choose TWO letters&quot;)
+          </label>
+          {group.allowMultiple && (
+            <div className="text-muted-foreground flex flex-wrap items-center gap-2 pl-6 text-xs">
+              <label htmlFor={`choose-${domId}`}>Each question asks for</label>
+              <NativeSelect id={`choose-${domId}`} className="w-24" value={group.chooseCount} onChange={(event) => onChange((g) => void (g.chooseCount = Number(event.target.value)))} data-testid="choose-count">
+                {[2, 3, 4].map((count) => (
+                  <option key={count} value={count}>
+                    {chooseWord(count)}
+                  </option>
+                ))}
+              </NativeSelect>
+              <span>letters. It then covers that many question numbers, one mark for each correct letter, in any order.</span>
+            </div>
+          )}
+        </div>
       )}
 
       {group.items.map((item, index) => {
         const itemId = item.questionId ?? item.key;
-        const number = layout.itemNumbers[index];
+        const range = layout.itemRanges[index] ?? { first: layout.itemNumbers[index] ?? 0, last: layout.itemNumbers[index] ?? 0 };
+        const number = range.first;
         return (
           <div key={item.key} id={`focus-question-${itemId}`} className="border-border/60 bg-secondary/30 scroll-mt-24 space-y-2 rounded-xl border p-3" data-testid="question-item">
             <div className="flex items-start gap-2">
-              <NumberBadge first={number} />
+              <NumberBadge first={range.first} last={range.last} />
               <Textarea
                 aria-label={`Question ${number} text`}
                 rows={2}
@@ -212,6 +230,7 @@ function ItemsEditor({ group, layout, skill, domId, onChange }: { group: Builder
                       name={`correct-${domId}-${item.key}`}
                       aria-label={`Option ${choice.id} is correct`}
                       checked={item.correctChoiceIds.includes(choice.id)}
+                      disabled={group.allowMultiple && !item.correctChoiceIds.includes(choice.id) && item.correctChoiceIds.length >= group.chooseCount}
                       onChange={(event) =>
                         onChange((g) => {
                           const target = g.items[index];
@@ -409,37 +428,48 @@ function BlanksEditor({ group, layout, domId, onChange }: { group: BuilderGroup;
     });
   }
 
+  const numbering = (
+    <p className="text-muted-foreground text-xs">
+      Click where an answer box belongs and press &quot;Insert blank&quot;: each <code>{"{{}}"}</code> is one answer box and one numbered question. They are numbered for you ({blanks} blank{blanks === 1 ? "" : "s"}
+      {blanks > 0 ? ` = Question${blanks === 1 ? "" : "s"} ${layout.first}${blanks > 1 ? `–${layout.first + blanks - 1}` : ""}` : ""}).
+    </p>
+  );
+
   return (
     <div className="space-y-3">
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <label className="text-sm font-medium" htmlFor={`text-${domId}`}>
-            {table ? "Table (one row per line, cells separated by |)" : "Text with blanks"}
-          </label>
-          <Button type="button" variant="outline" size="sm" onClick={insertBlank} data-testid="insert-blank">
-            <Plus className="size-3.5" /> Insert blank
-          </Button>
+      {table ? (
+        <div className="space-y-1.5">
+          <TableGridEditor group={group} domId={domId} onChange={onChange} />
+          {numbering}
         </div>
-        <textarea
-          ref={areaRef}
-          id={`text-${domId}`}
-          className={`${FIELD} min-h-32 font-mono`}
-          value={group.text}
-          placeholder={table ? "Country | Capital | Population\nFrance | {{}} | 67 million" : "The study found that {{}} was the main cause of the change."}
-          onChange={(event) =>
-            onChange((g) => {
-              const before = g.text;
-              g.text = event.target.value;
-              g.blanks = reconcileBlanks(before, g.text, g.blanks);
-            })
-          }
-          data-testid="blanks-text"
-        />
-        <p className="text-muted-foreground text-xs">
-          Click where an answer box belongs and press &quot;Insert blank&quot;: each <code>{"{{}}"}</code> is one answer box and one numbered question. They are numbered for you ({blanks} blank{blanks === 1 ? "" : "s"}
-          {blanks > 0 ? ` = Question${blanks === 1 ? "" : "s"} ${layout.first}${blanks > 1 ? `–${layout.first + blanks - 1}` : ""}` : ""}).
-        </p>
-      </div>
+      ) : (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-sm font-medium" htmlFor={`text-${domId}`}>
+              Text with blanks
+            </label>
+            <Button type="button" variant="outline" size="sm" onClick={insertBlank} data-testid="insert-blank">
+              <Plus className="size-3.5" /> Insert blank
+            </Button>
+          </div>
+          <textarea
+            ref={areaRef}
+            id={`text-${domId}`}
+            className={`${FIELD} min-h-32 font-mono`}
+            value={group.text}
+            placeholder="The study found that {{}} was the main cause of the change."
+            onChange={(event) =>
+              onChange((g) => {
+                const before = g.text;
+                g.text = event.target.value;
+                g.blanks = reconcileBlanks(before, g.text, g.blanks);
+              })
+            }
+            data-testid="blanks-text"
+          />
+          {numbering}
+        </div>
+      )}
 
       {blanks > 0 && (
         <div className="space-y-2">
@@ -467,26 +497,3 @@ function BlanksEditor({ group, layout, domId, onChange }: { group: BuilderGroup;
   );
 }
 
-/**
- * Keeps each blank's answers with its blank when the text is edited: a blank added before others pushes their answers along, a blank removed
- * takes its answers with it (found from where the old and the new text first differ).
- */
-function reconcileBlanks(oldText: string, newText: string, blanks: string[][]): string[][] {
-  const oldCount = countBlanks(oldText);
-  const newCount = countBlanks(newText);
-  if (oldCount === newCount) return padBlanks(blanks, newCount);
-  let at = 0;
-  while (at < oldText.length && at < newText.length && oldText[at] === newText[at]) at++;
-  const before = countBlanks(oldText.slice(0, at));
-  const next = blanks.slice();
-  if (newCount > oldCount) next.splice(before, 0, ...Array.from({ length: newCount - oldCount }, () => [] as string[]));
-  else next.splice(before, oldCount - newCount);
-  return padBlanks(next, newCount);
-}
-
-/** Keeps one list of answers per blank, however many blanks the text has now. */
-function padBlanks(blanks: string[][], count: number): string[][] {
-  const next = blanks.slice(0, Math.max(count, 0));
-  while (next.length < count) next.push([]);
-  return next;
-}

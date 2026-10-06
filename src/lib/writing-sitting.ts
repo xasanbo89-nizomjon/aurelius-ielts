@@ -8,6 +8,7 @@ import { recordStudentActivity } from "@/lib/study-activity";
 import { getAssignedTaskForStudent, type AssignedWritingTask } from "@/lib/writing-tasks";
 import { getOrCreateOpenDraft, runAnalysis, saveDraftVersioned, submitFullMockEssay } from "@/lib/ai/writing";
 import { recordLateText } from "@/lib/writing-late-text";
+import { getAssignedBundleForStudent } from "@/lib/writing-bundle-sitting";
 import { WRITING_PART_MINUTES, WRITING_SAVE_GRACE_SECONDS, type WritingTaskKey } from "@/lib/writing/constants";
 import type { DraftSaveResult } from "@/lib/writing/save-types";
 
@@ -188,13 +189,13 @@ export async function submitWritingSitting(
  * handed in with the draft that was saved, exactly as when its student next opens it. Sittings with no start time (the old screen's drafts) have no
  * clock and are never touched. Returns how many were handed in.
  */
-export async function settleExpiredWritingSittings(options: { now?: Date; limit?: number } = {}): Promise<number> {
+export async function settleExpiredWritingSittings(options: { now?: Date; limit?: number; /** only these students (the checks use it so they can never touch anyone else); the scheduled job passes none */ studentIds?: string[] } = {}): Promise<number> {
   const now = options.now ?? new Date();
   // Cheap pre-filter: nothing started less than the shortest allowance (+ grace) ago can be over yet.
   const shortest = Math.min(...Object.values(WRITING_PART_MINUTES)) * 60 + WRITING_SAVE_GRACE_SECONDS;
   const candidates = await prisma.writingSubmission.findMany({
-    where: { status: "DRAFT", startedAt: { not: null, lt: new Date(now.getTime() - shortest * 1000) } },
-    select: { id: true, studentId: true, startedAt: true, task: { select: { taskNumber: true } } },
+    where: { status: "DRAFT", startedAt: { not: null, lt: new Date(now.getTime() - shortest * 1000) }, ...(options.studentIds ? { studentId: { in: options.studentIds } } : {}) },
+    select: { id: true, studentId: true, taskId: true, startedAt: true, task: { select: { taskNumber: true, bundleId: true } } },
     orderBy: { startedAt: "asc" },
     take: options.limit ?? 100,
   });
@@ -202,6 +203,8 @@ export async function settleExpiredWritingSittings(options: { now?: Date; limit?
   for (const draft of candidates) {
     if (!draft.task || !isLate(draft.startedAt, draft.task.taskNumber, now.getTime())) continue;
     try {
+      // Phase L3 - a task of a Writing TEST is sat as both parts under one 60-minute clock: settleExpiredWritingBundleSittings hands those in, not this 20 / 40 minute rule.
+      if (draft.task.bundleId && draft.taskId && (await getAssignedBundleForStudent(draft.studentId, draft.taskId))) continue;
       const done = await submitWritingSitting(draft.studentId, { submissionId: draft.id }, { serverExpiry: true });
       if (done.success) handedIn++;
     } catch (error) {

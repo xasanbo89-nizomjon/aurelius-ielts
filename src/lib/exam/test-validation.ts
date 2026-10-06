@@ -1,6 +1,7 @@
 import type { QuestionType } from "@prisma/client";
 
 import { numberQuestions, summaryBlankKeys, type NumberedQuestion } from "@/lib/exam/question-numbering";
+import { chooseCountOf, chooseWord } from "@/lib/exam/choose-many";
 import { answerKeysOf, parseSummaryText } from "@/lib/exam/summary-blanks";
 
 /**
@@ -125,6 +126,17 @@ function checkQuestion(row: Numbered, groupInstructions: string | null): TestIss
       if (answer.length === 0) issues.push(issue("ANSWER_MISSING", "no correct answer is chosen."));
       else if (answer.some((id) => !choices.some((choice) => choice.id === id))) issues.push(issue("ANSWER_INVALID", "the correct answer is not one of the choices."));
       else if (options.allowMultiple !== true && answer.length !== 1) issues.push(issue("ANSWER_INVALID", `a single-answer question has ${answer.length} correct answers.`));
+      else {
+        // Phase L3 - "Choose TWO": it asks for exactly that many different letters (one mark each), so the key must have exactly that many, from enough choices.
+        const asked = chooseCountOf("MULTIPLE_CHOICE", options);
+        if (asked > 1) {
+          const word = `Choose ${chooseWord(asked)}`;
+          if (new Set(answer).size !== answer.length) issues.push(issue("ANSWER_INVALID", `"${word}": a letter is chosen twice.`));
+          else if (answer.length < asked) issues.push(issue("ANSWER_MISSING", `"${word}" needs ${asked} correct letters; ${answer.length} chosen.`));
+          else if (answer.length > asked) issues.push(issue("ANSWER_INVALID", `"${word}" needs ${asked} correct letters; ${answer.length} are chosen.`));
+          if (choices.length <= asked) issues.push(issue("OPTIONS", `"${word}" needs more than ${asked} answer choices to choose from.`));
+        }
+      }
       break;
     }
     case "TRUE_FALSE_NOT_GIVEN": {

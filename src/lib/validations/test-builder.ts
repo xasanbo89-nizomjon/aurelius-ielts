@@ -42,6 +42,8 @@ const group = z.object({
   maxWords: z.number().int().positive().max(20).nullable(),
   wordBank: z.array(text(80)).max(30),
   allowMultiple: z.boolean(),
+  /** Phase L3 - "choose TWO": how many letters each question of an allowMultiple group asks for. Absent in a payload from an older page: 2. */
+  chooseCount: z.number().int().min(2).max(6).default(2),
   items: z.array(item).max(60),
   text: text(20000),
   blanks: z.array(z.array(text(300)).max(24)).max(60),

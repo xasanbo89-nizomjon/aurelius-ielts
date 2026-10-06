@@ -11,7 +11,8 @@ import {
 } from "@/lib/exam/question-types";
 import { completeBlankIds, detectSummaryLayout, parseSummaryText, splitSummaryPart, type SummaryPart } from "@/lib/exam/summary-blanks";
 import { buildGroupViews, findPromptBlank, isYesNoInstructions, matchingListLabel, promptRepeatsInstructions, type GroupView, type QuestionGroupInfo } from "@/lib/exam/question-groups";
-import type { NumberedQuestion } from "@/lib/exam/question-numbering";
+import { formatNumberRange, type NumberedQuestion } from "@/lib/exam/question-numbering";
+import { chooseCountOf } from "@/lib/exam/choose-many";
 import type { ExamQuestion } from "@/components/exam/exam-runner";
 import { OfficialQuestionText } from "@/components/exam/official/official-text";
 import { OfficialBlank, OfficialDrop, OfficialWordBank, ignoreClickThatEndsASelection } from "@/components/exam/official/official-answer-controls";
@@ -138,15 +139,17 @@ const TrueFalseRow = memo(function TrueFalseRow({ row, value, onAnswer, yesNo }:
 });
 
 /** Multiple choice: one answer is a radio list, "Choose TWO" style tasks are checkboxes. The stored answer is the list of chosen choice ids. */
-const ChoiceRow = memo(function ChoiceRow({ row, value, onAnswer, choices, allowMultiple }: RowProps & { choices: { id: string; text: string }[]; allowMultiple: boolean }) {
+const ChoiceRow = memo(function ChoiceRow({ row, value, onAnswer, choices, allowMultiple, chooseCount }: RowProps & { choices: { id: string; text: string }[]; allowMultiple: boolean; chooseCount: number }) {
   const selected = Array.isArray(value) ? (value as string[]) : [];
+  // "Choose TWO" covers two numbers (21-22): both are shown, and no more letters than that can be picked (a further box stays off until one is unticked).
+  const limit = allowMultiple && chooseCount > 1 ? chooseCount : null;
   return (
     <RowShell row={row}>
       <p className="ex-item-text">
-        <span className="ex-number">{row.startNumber}</span>
+        <span className="ex-number">{formatNumberRange(row.startNumber, row.endNumber)}</span>
         <OfficialQuestionText questionId={row.id} part="prompt" text={row.prompt} />
       </p>
-      <ul className="ex-options" role={allowMultiple ? "group" : "radiogroup"} aria-label={`Answer for question ${row.startNumber}`}>
+      <ul className="ex-options" role={allowMultiple ? "group" : "radiogroup"} aria-label={limit ? `Answer for questions ${row.startNumber} to ${row.endNumber}` : `Answer for question ${row.startNumber}`} data-choose-count={limit ?? undefined}>
         {choices.map((choice, index) => {
           const id = `${row.id}-${choice.id}`;
           const checked = selected.includes(choice.id);
@@ -158,6 +161,7 @@ const ChoiceRow = memo(function ChoiceRow({ row, value, onAnswer, choices, allow
                   type={allowMultiple ? "checkbox" : "radio"}
                   name={row.id}
                   checked={checked}
+                  disabled={limit !== null && !checked && selected.length >= limit}
                   onChange={() => onAnswer(row.id, allowMultiple ? (checked ? selected.filter((c) => c !== choice.id) : [...selected, choice.id]) : [choice.id])}
                   data-question-number={index === 0 ? row.startNumber : undefined}
                 />
@@ -302,12 +306,12 @@ const SummaryRow = memo(function SummaryRow({
   onAnswer,
   options,
   showPrompt,
-}: RowProps & { options: { text: string; blankCount: number; wordBank?: string[] }; showPrompt: boolean }) {
+}: RowProps & { options: { text: string; blankCount: number; wordBank?: string[]; layout?: "table" }; showPrompt: boolean }) {
   const answers = asRecord(value);
   const [armed, setArmed] = useState<string | null>(null);
 
   const parsed = useMemo(() => parseSummaryText(options.text), [options.text]);
-  const layout = useMemo(() => detectSummaryLayout(options.text), [options.text]);
+  const layout = useMemo(() => detectSummaryLayout(options.text, options.layout), [options.text, options.layout]);
   const blankIds = useMemo(() => {
     const resolved = row.slotKeys.filter((key): key is string => key != null);
     if (resolved.length === row.slotKeys.length && resolved.length > 0) return resolved;
@@ -358,7 +362,8 @@ const SummaryRow = memo(function SummaryRow({
     const bodyRows = headerIsPlain ? rest : layout.rows;
     body = (
       <div style={{ overflowX: "auto" }}>
-        <table className="ex-table">
+        <table className="ex-table" data-testid="summary-table">
+          {layout.caption && <caption>{layout.caption}</caption>}
           {headerIsPlain && (
             <thead>
               <tr>
@@ -371,13 +376,18 @@ const SummaryRow = memo(function SummaryRow({
           <tbody>
             {bodyRows.map((cells, r) => (
               <tr key={r}>
-                {cells.map((cell, c) => (
-                  <td key={c}>{renderParts(partsOf(cell), `r${r}c${c}`)}</td>
-                ))}
+                {layout.spanRows?.[headerIsPlain ? r + 1 : r] ? (
+                  <td colSpan={layout.columns ?? cells.length} style={{ fontWeight: 600 }}>
+                    {renderParts(partsOf(cells[0] ?? ""), `r${r}c0`)}
+                  </td>
+                ) : (
+                  cells.map((cell, c) => <td key={c}>{renderParts(partsOf(cell), `r${r}c${c}`)}</td>)
+                )}
               </tr>
             ))}
           </tbody>
         </table>
+        {layout.note && <p className="ex-table-note">{layout.note}</p>}
       </div>
     );
   } else if (layout.kind === "flow") {
@@ -429,9 +439,9 @@ type ParsedRow =
   | { kind: "gap" }
   | { kind: "short" }
   | { kind: "trueFalse" }
-  | { kind: "choice"; choices: { id: string; text: string }[]; allowMultiple: boolean }
+  | { kind: "choice"; choices: { id: string; text: string }[]; allowMultiple: boolean; chooseCount: number }
   | { kind: "matching"; prompts: { id: string; text: string }[]; options: { id: string; text: string }[] }
-  | { kind: "summary"; options: { text: string; blankCount: number; wordBank?: string[] } }
+  | { kind: "summary"; options: { text: string; blankCount: number; wordBank?: string[]; layout?: "table" } }
   | { kind: "unavailable" };
 
 /** A question whose stored options don't parse must not take the whole exam down with it: it becomes "could not be displayed" and the rest carries on. */
@@ -447,7 +457,7 @@ function parseRow(row: OfficialRow): ParsedRow {
         return { kind: "trueFalse" };
       case "MULTIPLE_CHOICE": {
         const options = multipleChoiceOptionsSchema.parse(row.options);
-        return { kind: "choice", choices: options.choices, allowMultiple: options.allowMultiple };
+        return { kind: "choice", choices: options.choices, allowMultiple: options.allowMultiple, chooseCount: chooseCountOf("MULTIPLE_CHOICE", row.options) };
       }
       case "MATCHING": {
         const options = matchingOptionsSchema.parse(row.options);
@@ -474,7 +484,7 @@ const RowView = memo(function RowView({ row, value, onAnswer, instructions, yesN
     case "trueFalse":
       return <TrueFalseRow row={row} value={value} onAnswer={onAnswer} yesNo={yesNo} />;
     case "choice":
-      return <ChoiceRow row={row} value={value} onAnswer={onAnswer} choices={parsed.choices} allowMultiple={parsed.allowMultiple} />;
+      return <ChoiceRow row={row} value={value} onAnswer={onAnswer} choices={parsed.choices} allowMultiple={parsed.allowMultiple} chooseCount={parsed.chooseCount} />;
     case "matching":
       return (
         <MatchingRow

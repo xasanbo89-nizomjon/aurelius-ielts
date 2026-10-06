@@ -6,15 +6,17 @@ Planned work that is not built yet. When a phase ships, delete its section.
 
 Phase L1 and L2 are done (`docs/test-builder.md`). Known limits and what could come next:
 
-- **Writing tasks belong to one teacher.** Tests, Full Mocks and access codes are managed by a Root Teacher for everyone; the Writing task bank
-  (`/teacher/writing`) still lists and edits only the tasks the signed-in teacher created, Root Teacher included. ("Preview as student" follows the
-  test rule: a Root Teacher can preview any task.) Bringing the bank under the same access rule is a small change in `src/lib/writing-tasks.ts`.
-- **A Writing test is sat as two tasks.** Task 1 + Task 2 made together are previewed as one paper, but a student takes each task on its own screen
-  (20 and 40 minutes); a standalone sitting of both under one clock needs a change to the student's Writing screen and was out of scope.
-- **"Choose TWO" counts as one number.** In the editor (and for the student) a multiple-choice question with "more than one correct answer" is one numbered
-  question, as `numberQuestions` has always counted it. A real IELTS "choose TWO" takes two numbers; a teacher who wants that makes two questions.
-- **Table completion is drawn as lines.** The editor takes a table as rows of cells separated by `|` with `{{}}` boxes, stores it as a summary-style question,
-  and the student's screen shows it line by line, not as a grid. A real table editor and a grid on the student's screen are a later step.
+- **The PDF importer still reads a "Choose TWO" as two separate questions.** The editor, the validator, the screens and the scoring treat a Choose TWO as one
+  question covering two numbers (one mark per correct letter, any order), but the importer takes the AI reader's answer one number at a time: a PDF's "Questions 21
+  and 22 - Choose TWO letters" arrives as two single-answer questions (21 = one letter, 22 = the other), which are order-dependent. Fix: when a group's instructions
+  say "Choose TWO / THREE" and consecutive questions share the same choices, merge them into one `chooseCount` question. Until then, open an imported test in the
+  editor and turn the pair into one Choose TWO question.
+- **A table is cells of text and answer boxes.** The grid has a header row, rows, columns, a title and a note; no merged cells (a heading across the whole width is
+  kept if a table has one, but the grid cannot make one) and no formatting inside a cell.
+- **A Writing test has two reports.** Both parts are sat together and handed in together, but each is stored, marked and reported as its own submission (the student
+  lands on the task list and opens each report); there is no single combined result page for a Writing test.
+- **The Root Teacher's Writing analytics are still "your students".** The task bank and the student pickers show everything to a Root Teacher; the analytics cards at
+  the top of `/teacher/writing` still count only the Root Teacher's own students.
 - **One picture per Writing task.** A Task 1 with two charts needs a second picture; the screen draws one.
 - **The PDF page is rendered by WebAssembly (PDFium).** It works with `next build && next start`; it has not been run on Vercel itself. If the first
   Writing PDF there fails, check that `next.config.ts` (`serverExternalPackages`, `outputFileTracingIncludes`) is applied and that the function has enough memory

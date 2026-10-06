@@ -53,6 +53,11 @@ function ActiveTaskCard({ task, isBookmarked }: { task: StudentTaskWithProgress;
             <p className="font-medium">{task.title}</p>
             <Badge variant="outline">{WRITING_TASK_NUMBER_LABELS[task.taskNumber]}</Badge>
             <Badge variant="outline">{WRITING_TASK_CATEGORY_LABELS[task.category]}</Badge>
+            {task.bundleId && (
+              <Badge variant="outline" title="Task 1 and Task 2 are sat together, in one sitting of 60 minutes" data-testid="writing-test-badge">
+                Writing test · Task 1 + Task 2, 60 min
+              </Badge>
+            )}
             {isDraft && <Badge variant="accent">Draft in progress</Badge>}
           </div>
           <TaskMeta task={task} />
@@ -78,6 +83,7 @@ function CompletedTaskCard({ task }: { task: StudentTaskWithProgress }) {
             <p className="font-medium">{task.title}</p>
             <Badge variant="outline">{WRITING_TASK_NUMBER_LABELS[task.taskNumber]}</Badge>
             <Badge variant="outline">{WRITING_TASK_CATEGORY_LABELS[task.category]}</Badge>
+            {task.bundleId && <Badge variant="outline" title="Task 1 and Task 2 were sat together, in one sitting">Writing test</Badge>}
             {submittedAttempts.length > 1 && <Badge variant="secondary">{submittedAttempts.length} attempts</Badge>}
           </div>
           <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">

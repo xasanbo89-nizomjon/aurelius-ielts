@@ -11,7 +11,8 @@
 //   2. an attempt past its deadline (+ the 90 s grace) is scored with the answers that were SAVED and marked handed in "time expired", as of its
 //      deadline. A Full Mock sitting is carried on exactly as if the student had clicked on: the next section's "Continue" wait, or - past the wait -
 //      its automatic start, which may itself be over already.
-//   3. a Writing task taken on its own, started on the exam screen and past its clock, is handed in with the draft that was saved.
+//   3. a Writing task taken on its own, started on the exam screen and past its clock, is handed in with the draft that was saved; a Writing TEST (Task 1 + Task 2
+//      sat together, one 60-minute clock) past its hour is handed in, both parts, with the drafts that were saved.
 // Saved answers and essays are NEVER changed - they are only graded / handed in. The AI marker is not called (a later visit to the report does it).
 // This is the same code the scheduled job and the lazy checks run, so it is safe to run again: a second run finds nothing left to do.
 import { PrismaClient } from "@prisma/client";
@@ -22,6 +23,7 @@ import { EXPIRY_GRACE_SECONDS, WRITING_ALLOWED_SECONDS, deadlineFrom, isPastDead
 import { settleFullMockAttempt } from "@/lib/full-mock-attempts";
 import { WRITING_SAVE_GRACE_SECONDS } from "@/lib/writing/constants";
 import { sittingAllowedSeconds, submitWritingSitting } from "@/lib/writing-sitting";
+import { bundleSittingIsLate, getAssignedBundleForStudent, submitWritingBundleSitting } from "@/lib/writing-bundle-sitting";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
@@ -124,17 +126,29 @@ try {
     await db.writingSubmission.findMany({
       where: { status: "DRAFT", startedAt: { not: null } },
       orderBy: { startedAt: "asc" },
-      select: { id: true, studentId: true, startedAt: true, wordCount: true, task: { select: { title: true, taskNumber: true, fullMockUse: { select: { id: true } } } }, student: { select: { user: { select: { name: true, email: true } } } } },
+      select: { id: true, studentId: true, taskId: true, startedAt: true, wordCount: true, task: { select: { title: true, taskNumber: true, bundleId: true, fullMockUse: { select: { id: true } } } }, student: { select: { user: { select: { name: true, email: true } } } } },
     })
   ).filter((draft) => draft.task && !draft.task.fullMockUse && inScope(draft.task.title));
-  const lateDrafts = drafts.filter((draft) => {
+  // Phase L3 - a task of a Writing TEST (Task 1 + Task 2 assigned together) is sat as both parts under ONE 60-minute clock: those drafts are judged below, as sittings.
+  const bundleDrafts = [];
+  const singleDrafts = [];
+  for (const draft of drafts) (draft.task.bundleId && draft.taskId && (await getAssignedBundleForStudent(draft.studentId, draft.taskId)) ? bundleDrafts : singleDrafts).push(draft);
+  const bundleSittings = new Map(); // student + the pair of tasks -> its open drafts
+  for (const draft of bundleDrafts) {
+    const key = `${draft.studentId}:${draft.task.bundleId}`;
+    bundleSittings.set(key, [...(bundleSittings.get(key) ?? []), draft]);
+  }
+  const lateBundles = [...bundleSittings.values()].filter((group) => bundleSittingIsLate(group.map((d) => d.startedAt).sort((a, b) => a - b)[0], now.getTime()));
+  const lateDrafts = singleDrafts.filter((draft) => {
     const allowed = sittingAllowedSeconds(draft.startedAt, draft.task.taskNumber);
     return allowed != null && now.getTime() > draft.startedAt.getTime() + (allowed + WRITING_SAVE_GRACE_SECONDS) * 1000;
   });
-  console.log(`\nWriting sittings on their own, still open: ${drafts.length}, of which past their clock: ${lateDrafts.length}`);
+  console.log(`\nWriting sittings on their own, still open: ${singleDrafts.length}, of which past their clock: ${lateDrafts.length}`);
   for (const draft of lateDrafts) console.log(`• ${draft.id}  "${draft.task.title.slice(0, 32)}"  ${who(draft.student)}  started ${fmtDate(draft.startedAt)}  ${draft.wordCount ?? 0} word(s) saved - would be handed in with the saved draft`);
+  console.log(`\nWriting tests (Task 1 + Task 2, one 60-minute sitting) still open: ${bundleSittings.size}, of which past their clock: ${lateBundles.length}`);
+  for (const group of lateBundles) console.log(`• ${group[0].id}  "${group[0].task.title.slice(0, 32)}"  ${who(group[0].student)}  started ${fmtDate(group.map((d) => d.startedAt).sort((a, b) => a - b)[0])}  ${group.reduce((sum, d) => sum + (d.wordCount ?? 0), 0)} word(s) saved - both parts would be handed in with the saved drafts`);
 
-  const todo = plans.filter((plan) => plan.sets || plan.overdue).length + sittings.length + lateDrafts.length;
+  const todo = plans.filter((plan) => plan.sets || plan.overdue).length + sittings.length + lateDrafts.length + lateBundles.length;
   if (!apply) {
     console.log(todo ? "\nDry run only - nothing was changed. To apply:  npm run attempts:finalize-expired -- --apply" : "\nNothing to do.");
   } else {
@@ -178,7 +192,18 @@ try {
         log.push(`writing ${draft.id}: ${error.message}`);
       }
     }
-    console.log(`\nStored ${stored} deadline(s); handed in ${handedIn} standalone attempt(s); ${settledSteps} Full Mock step(s); handed in ${essays} essay(s).`);
+    // 4. Writing tests (both parts together)
+    let bundlesHandedIn = 0;
+    for (const group of lateBundles) {
+      try {
+        const done = await submitWritingBundleSitting(group[0].studentId, { submissionId: group[0].id, drafts: [] }, { serverExpiry: true });
+        if (done.success) bundlesHandedIn++;
+        else log.push(`writing test ${group[0].id}: ${done.error}`);
+      } catch (error) {
+        log.push(`writing test ${group[0].id}: ${error.message}`);
+      }
+    }
+    console.log(`\nStored ${stored} deadline(s); handed in ${handedIn} standalone attempt(s); ${settledSteps} Full Mock step(s); handed in ${essays} essay(s) and ${bundlesHandedIn} Writing test sitting(s).`);
     if (log.length) console.log(`Problems:\n  ${log.join("\n  ")}`);
   }
 } finally {

@@ -66,7 +66,7 @@ export function PasteKeyDialog({ open, onOpenChange, model, onApply }: { open: b
                   {preview.rows.map((row) => (
                     <tr key={row.number} className={cn("border-border/50 border-t", row.status === "mismatch" && "bg-destructive/10", row.status === "missing" && "text-muted-foreground")} data-testid="paste-key-row" data-status={row.status}>
                       <td className="px-2 py-1.5 whitespace-nowrap">
-                        <span className="font-medium tabular-nums">{row.number}</span> <span className="text-muted-foreground">{row.label}</span>
+                        <span className="font-medium tabular-nums">{row.numberLabel ?? row.number}</span> <span className="text-muted-foreground">{row.label}</span>
                       </td>
                       <td className="px-2 py-1.5 whitespace-nowrap">{row.kindLabel}</td>
                       <td className="px-2 py-1.5">{row.raw ?? "—"}</td>

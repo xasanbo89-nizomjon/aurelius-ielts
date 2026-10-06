@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { settleExpiredAttempts } from "@/lib/full-mock-attempts";
 import { settleExpiredWritingSittings } from "@/lib/writing-sitting";
+import { settleExpiredWritingBundleSittings } from "@/lib/writing-bundle-sitting";
 
 /**
  * Phase K - the scheduled job that finalises what has run past its deadline for students nobody is looking at (see docs/server-expiry.md):
@@ -36,7 +37,9 @@ export async function GET(request: Request) {
   try {
     const attempts = await settleExpiredAttempts();
     const writingSittings = await settleExpiredWritingSittings();
-    return NextResponse.json({ ok: true, ...attempts, writingSittings, tookMs: Date.now() - startedAt });
+    // Phase L3 - Writing tests (Task 1 + Task 2 in one 60-minute sitting)
+    const writingTestSittings = await settleExpiredWritingBundleSittings();
+    return NextResponse.json({ ok: true, ...attempts, writingSittings, writingTestSittings, tookMs: Date.now() - startedAt });
   } catch (error) {
     console.error("[cron] finalize-expired failed:", error);
     return NextResponse.json({ ok: false, error: "The run failed; see the server log." }, { status: 500 });

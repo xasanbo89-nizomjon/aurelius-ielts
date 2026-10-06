@@ -2,6 +2,7 @@ import "server-only";
 import type { WritingTaskCategory, WritingTaskNumber, WritingTaskStatus, WritingTrainingType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { authorScope, getTestActor } from "@/lib/exam/test-access";
 import { recordMediaUsage, removeMediaUsage, uploadMediaFile } from "@/lib/media-library";
 import { WRITING_TASK_IMAGE_MAX_BYTES, validateWritingTaskImageFile } from "@/lib/uploads/image-constraints";
 import { inspectImage } from "@/lib/uploads/image-processing";
@@ -13,7 +14,9 @@ import type { CreateWritingTaskInput, WritingTaskStatusValue } from "@/lib/valid
 
 /** Never trusts client-supplied student ids blindly — a teacher may only ever assign their OWN students, same single-tenant rule as everywhere else in this codebase. */
 async function assertOwnStudents(teacherId: string, studentIds: string[]): Promise<void> {
-  const owned = await prisma.studentProfile.count({ where: { id: { in: studentIds }, teacherId } });
+  // Phase L3 - a Root Teacher manages every task of every teacher (the one rule of src/lib/exam/test-access.ts), so may assign any real student.
+  const actor = await getTestActor(teacherId);
+  const owned = await prisma.studentProfile.count({ where: { id: { in: studentIds }, ...(actor.isRootTeacher ? {} : { teacherId }) } });
   if (owned !== studentIds.length) {
     throw new Error("One or more selected students aren't assigned to you.");
   }
@@ -82,7 +85,7 @@ export async function uploadWritingTaskImage(
  * in the teacher's Media Library for reuse.
  */
 export async function setWritingTaskImage(taskId: string, teacherId: string, mediaFileId: string | null): Promise<void> {
-  const task = await prisma.writingTask.findFirst({ where: { id: taskId, createdById: teacherId }, select: { id: true, taskNumber: true } });
+  const task = await prisma.writingTask.findFirst({ where: { id: taskId, ...(await authorScope(teacherId)) }, select: { id: true, taskNumber: true } });
   if (!task) throw new Error("Writing task not found.");
   const columns = await resolveTaskImageColumns(teacherId, task.taskNumber, mediaFileId);
   await prisma.writingTask.update({ where: { id: taskId }, data: columns });
@@ -125,11 +128,14 @@ export async function createWritingTask(teacherId: string, input: CreateWritingT
 export async function updateWritingTask(taskId: string, teacherId: string, input: CreateWritingTaskInput): Promise<void> {
   await assertOwnStudents(teacherId, input.assignedStudentIds);
   const task = await prisma.writingTask.findFirst({
-    where: { id: taskId, createdById: teacherId },
-    select: { id: true, assignments: { select: { studentId: true } } },
+    where: { id: taskId, ...(await authorScope(teacherId)) },
+    select: { id: true, imageMediaFileId: true, assignments: { select: { studentId: true } } },
   });
   if (!task) throw new Error("Writing task not found.");
-  const image = await resolveTaskImageColumns(teacherId, input.taskNumber, input.imageMediaFileId);
+  // Phase L3 - a Root Teacher saving another teacher's task keeps its picture as it is (it sits in that teacher's library, not the Root Teacher's);
+  // only a different picture is looked up, and that one must be in the signed-in teacher's own library.
+  const keepsPicture = input.taskNumber === "TASK_1" && !!input.imageMediaFileId && input.imageMediaFileId === task.imageMediaFileId;
+  const image = keepsPicture ? null : await resolveTaskImageColumns(teacherId, input.taskNumber, input.imageMediaFileId);
 
   const currentStudentIds = new Set(task.assignments.map((a) => a.studentId));
   const nextStudentIds = new Set(input.assignedStudentIds);
@@ -146,7 +152,7 @@ export async function updateWritingTask(taskId: string, teacherId: string, input
         category: input.category,
         prompt: input.prompt,
         visualDescription: input.visualDescription || null,
-        ...image,
+        ...(image ?? {}),
         coverImagePath: input.coverImagePath || null,
         targetBand: input.targetBand ?? null,
         dueDate: input.dueDate ?? null,
@@ -162,9 +168,9 @@ export async function updateWritingTask(taskId: string, teacherId: string, input
 
   // Real reuse-tracking stays correct on every save, not just create: clear
   // the old link (harmless no-op if there wasn't one) and record the new one.
-  await removeMediaUsage("WRITING_TASK_VISUAL", taskId);
-  if (image.imageMediaFileId) {
-    await recordMediaUsage(image.imageMediaFileId, "WRITING_TASK_VISUAL", taskId);
+  if (image) {
+    await removeMediaUsage("WRITING_TASK_VISUAL", taskId);
+    if (image.imageMediaFileId) await recordMediaUsage(image.imageMediaFileId, "WRITING_TASK_VISUAL", taskId);
   }
 }
 
@@ -176,7 +182,7 @@ const VALID_STATUS_TRANSITIONS: Record<WritingTaskStatus, WritingTaskStatus[]> =
 
 /** Publish / Archive. Only the transitions a Root Teacher can actually take from the current status are allowed — never an arbitrary status jump. */
 export async function setWritingTaskStatus(taskId: string, teacherId: string, nextStatus: WritingTaskStatusValue): Promise<void> {
-  const task = await prisma.writingTask.findFirst({ where: { id: taskId, createdById: teacherId }, select: { status: true } });
+  const task = await prisma.writingTask.findFirst({ where: { id: taskId, ...(await authorScope(teacherId)) }, select: { status: true } });
   if (!task) throw new Error("Writing task not found.");
   if (!VALID_STATUS_TRANSITIONS[task.status].includes(nextStatus)) {
     throw new Error(`Can't move a task from ${task.status} to ${nextStatus}.`);
@@ -186,7 +192,7 @@ export async function setWritingTaskStatus(taskId: string, teacherId: string, ne
 
 /** Blocked once a task has real student submissions — deleting it would orphan real work. Unpublish instead. */
 export async function deleteWritingTask(taskId: string, teacherId: string): Promise<void> {
-  const task = await prisma.writingTask.findFirst({ where: { id: taskId, createdById: teacherId } });
+  const task = await prisma.writingTask.findFirst({ where: { id: taskId, ...(await authorScope(teacherId)) } });
   if (!task) throw new Error("Writing task not found.");
 
   const submissionCount = await prisma.writingSubmission.count({ where: { taskId } });
@@ -199,11 +205,13 @@ export async function deleteWritingTask(taskId: string, teacherId: string): Prom
   if (pdf && pdf.kind === "supabase" && pdf.bucket === WRITING_TASK_PDF_BUCKET) await deleteBucketObjects(WRITING_TASK_PDF_BUCKET, [pdf.path]).catch(() => undefined);
 }
 
+/** The Writing task bank: a teacher's own tasks; a Root Teacher sees and manages every teacher's (each task says who made it). */
 export async function listWritingTasksForTeacher(teacherId: string) {
   return prisma.writingTask.findMany({
-    where: { createdById: teacherId },
+    where: { ...(await authorScope(teacherId)) },
     orderBy: { createdAt: "desc" },
     include: {
+      createdBy: { select: { id: true, user: { select: { name: true, email: true } } } },
       _count: { select: { submissions: true } },
       assignments: { select: { studentId: true, student: { select: { user: { select: { name: true, email: true } } } } } },
       imageMediaFile: { select: { id: true, path: true, mimeType: true, width: true, height: true, size: true, fileName: true } },
@@ -213,7 +221,7 @@ export async function listWritingTasksForTeacher(teacherId: string) {
 
 export async function getWritingTaskForTeacher(taskId: string, teacherId: string) {
   return prisma.writingTask.findFirst({
-    where: { id: taskId, createdById: teacherId },
+    where: { id: taskId, ...(await authorScope(teacherId)) },
     include: {
       assignments: { select: { studentId: true } },
       imageMediaFile: { select: { id: true, path: true, mimeType: true, width: true, height: true, size: true, fileName: true } },
@@ -299,6 +307,8 @@ export type StudentTaskWithProgress = {
   visualDescription: string | null;
   targetBand: number | null;
   dueDate: Date | null;
+  /** Phase L3 - set when this task is one of a Writing test (Task 1 + Task 2): the two are sat together, in one sitting. */
+  bundleId: string | null;
   /** The single attempt to act on next — the open draft if one exists, otherwise the most recent submitted attempt, otherwise "not started". */
   latest: StudentTaskAttempt | null;
   /** Every past attempt at this task, most recent first — Writing History's "previous versions". */
@@ -327,6 +337,7 @@ export async function listWritingTasksForStudentWithProgress(studentId: string):
       visualDescription: true,
       targetBand: true,
       dueDate: true,
+      bundleId: true,
     },
   });
   if (tasks.length === 0) return [];
@@ -375,6 +386,7 @@ export async function listWritingTasksForStudentWithProgress(studentId: string):
       visualDescription: task.visualDescription,
       targetBand: task.targetBand,
       dueDate: task.dueDate,
+      bundleId: task.bundleId,
       latest,
       attempts,
     };

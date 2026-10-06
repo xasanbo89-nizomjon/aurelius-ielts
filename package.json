@@ -19,6 +19,8 @@
     "check:expiry": "node --import ./scripts/register-ts.mjs scripts/check-expiry.mjs",
     "check:publish": "node --import ./scripts/register-ts.mjs scripts/check-publish.mjs",
     "check:builder": "node --import ./scripts/register-ts.mjs scripts/check-builder.mjs",
+    "check:choose": "node --import ./scripts/register-ts.mjs scripts/check-choose-two.mjs",
+    "check:tables": "node --import ./scripts/register-ts.mjs scripts/check-tables.mjs",
     "check:grading": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-grading.mjs",
     "check:l1": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-l1.mjs",
     "tests:validate": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/validate-tests.mjs",

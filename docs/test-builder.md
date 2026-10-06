@@ -99,7 +99,7 @@ read-only, exactly as in L1 (`getTestEditState`).
 
 - **Numbers are never typed.** The editor works out every number with the student's own `numberQuestions`; a group's range ("Questions 14-17") and title
   are derived from its rows when it is saved. Moving a group or a question changes the stored `orderIndex` of the rows, so the student's order changes
-  with it. A "choose TWO" question is one numbered question.
+  with it. A "Choose TWO" question covers two numbers (Phase L3, below).
 - **Every Reading and Listening type**: multiple choice (one answer, or "more than one correct answer"), True / False / Not Given, Yes / No / Not Given,
   matching headings, matching (features, endings), summary / note / table completion, form / sentence completion, short answer, map / plan / diagram
   labelling. **Insert blank** puts a `{{}}` at the caret; each is one answer box and one numbered question, numbered on save.
@@ -133,14 +133,65 @@ read-only, exactly as in L1 (`getTestEditState`).
 
 - The New test wizard's **Writing** step offers **Task 1 + Task 2 together** (a Writing test) and the existing task bank (`/teacher/writing`) - one place for
   Writing tasks, not a second copy. A Writing test is two `WritingTask` rows that share a `bundleId`; the bank shows them with a "Writing test" chip, and
-  **Preview as student** shows them as the two parts of one paper. A student still sits each task on its own screen (Task 1 with its 20 minutes, Task 2 with 40),
-  exactly as before: the two-part screen under one clock exists inside a Full Mock only, and the exam screens were not changed in this phase.
+  **Preview as student** shows them as the two parts of one paper. (From Phase L3 a student sits them as one paper too - see "A Writing test is one sitting" below.)
 - **Task 1's picture can be one page of a PDF** (`src/lib/writing-pdf-visual.ts`): the teacher uploads the PDF, sees a thumbnail of each page, chooses the page
   and sees it as it will be saved. The page is rendered on the server with **PDFium compiled to WebAssembly** (`@hyzyla/pdfium`) and encoded with `sharp` -
   no poppler or system binary, so it runs on serverless. It is stored as a PNG exactly like any other task picture (Media Library file, `imageUrl`,
   `imageType`, `imageWidth`, `imageHeight`), so **the student's screen still draws a picture only**. The original PDF is kept in its own bucket
   (`writing-task-pdfs`) as `WritingTask.visualPdfUrl` with the chosen page in `visualPdfPage`. Limits: the PDF at most 10 MB and 40 pages; a page is drawn at most 1800 px wide and 2000 px tall (the Media Library keeps every picture's longest side at 2000 px, so the size the page picker shows is the size that is saved).
   `next.config.ts` lists the package as an external server package and traces its `.wasm` file into the serverless bundle.
+
+## "Choose TWO" covers two numbers (Phase L3)
+
+In IELTS a "Choose TWO letters" question takes **two question numbers** (21 and 22), each worth one mark, and the marks are given **per correct letter, in any
+order**. One definition (`src/lib/exam/choose-many.ts`) is read by everything that cares:
+
+- **Stored**: a multiple-choice row with `options.allowMultiple: true` and `options.chooseCount` (2 or more); its key has that many letters, it is worth that many
+  points. A multiple-choice row **without** `chooseCount` is exactly what it always was: one number, all-or-nothing (no stored question or answer used choose-TWO
+  when this was changed, so no stored score moved; `npm run check:grading` re-grades every stored answer and agrees).
+- **Numbering** (`numberQuestions`): the row spans `chooseCount` numbers, so 40 numbers are still 40 (the editor, the validator, the student's count, the teacher's count).
+- **Scoring** (`grading.ts`): 2 letters right = 2 marks, 1 right = 1 mark, none = 0, whatever the order. More letters than allowed, or a letter twice, earns nothing
+  (the screens do not allow it: once N letters are ticked the other boxes are off). The stored verdict is `isCorrect` (all right) and `pointsAwarded` (0 / 1 / 2).
+- **Review and results** (`evaluateSlots`): the row's numbers show how many were right (the stored marks decide, as for matching and summaries): "Questions 21-22,
+  1/2 correct"; the "x of 40" totals add up to the raw score.
+- **Editor**: ticking "More than one correct answer" asks how many letters (TWO, THREE, FOUR); each question then shows its range (1-2, 3-4) and the group's range
+  follows; ticking more correct letters than the question asks for is not possible; the checklist says "Choose TWO needs 2 correct letters; 1 chosen".
+- **Student screens** (official and older): the question shows both numbers, the footer has a button for each number (answered after one letter / after two),
+  and no more than N boxes can be ticked.
+- **Paste answer key**: "1 A 2 D", "1-2 A, D", "1&2 A D" and "1 A, D" (one question per line) all fill the same question; the table has one row per question
+  ("21-22"), and the wrong number of letters is a mismatch.
+
+## Tables are real tables (Phase L3)
+
+Table completion is stored like every summary-style question (one row, `{{n}}` blanks, scored per blank) with `options.layout: "table"`. Both exam screens and the
+preview then **always draw it as a table** (`src/lib/exam/table-text.ts`): the lines with `|` are the rows, a short row is padded, a line before the first row is the
+table's **title** (a caption), a line after the last row is a **note** under it, a line without cells between rows is a heading across the table. The answer boxes
+sit inside the cells. A table written without the flag (older tests, imports) is recognised only when every line is a row of the same width - exactly as before.
+
+The editor builds a table as a **grid** (`table-grid-editor.tsx`, logic in `src/lib/exam/table-grid.ts`): the first row is the header, **Insert blank** puts an answer
+box in the cell the teacher is in, rows and columns can be added and removed, and cells copied from a spreadsheet or a document table can be pasted. Every blank keeps
+its own answers when rows, columns or cells change. The teacher never types a `|` or a `{{ }}`.
+
+## A Writing test is one sitting (Phase L3)
+
+When **both tasks of a Writing test are assigned to a student** (and neither is written for a Full Mock), the student sits them as one paper
+(`src/lib/writing-bundle-sitting.ts`): one start screen (60 minutes, Part 1 and Part 2), **one 60-minute clock counted on the server**, the official two-part footer,
+and one hand-in for both parts (the tick, or the clock reaching zero), exactly like the Writing paper of a Full Mock but with no Full Mock around it.
+
+- The sitting is its two draft submissions: "Start test" creates both with the same `startedAt`; opening either task goes back to the same sitting. No schema change:
+  the pair is the tasks' `bundleId`.
+- Saves name the draft version they were typed on (an older window is refused, `conflict`); a hand-in with a window that is behind hands in **nothing** and says which
+  part is behind; text typed after the hour (+ the 90 s grace) is not part of the submission (it is kept as late text); a part with no text is handed in blank.
+- The scheduled job (`/api/cron/finalize-expired`) and `npm run attempts:finalize-expired` (dry run by default) hand in a sitting whose hour is over with the saved
+  drafts; the single-task job leaves Writing test drafts alone (it would use 20 / 40 minutes).
+- **A single task - or a Writing test task whose partner is not assigned - is sat on its own as before** (20 minutes for Task 1, 40 for Task 2, its own screen).
+- Each part is still marked and reported as its own submission.
+
+## Who manages Writing tasks (Phase L3)
+
+The Writing task bank follows the same rule as tests (`src/lib/exam/test-access.ts`): a teacher sees and manages the tasks they made; a **Root Teacher sees and manages
+every teacher's** (each task says who made it): edit, assign any real student, publish, archive, delete. A task still belongs to its author. When a Root Teacher
+saves another teacher's Task 1 the picture it has stays as it is.
 
 ## Preview as student (Phase L2)
 
@@ -165,6 +216,8 @@ nothing. A new detail route with a `loading.tsx` needs a rule in that file.
 | Command | What it checks |
 | --- | --- |
 | `npm run check:builder` | no database: the editor's model (every type -> rows -> the student's numbers), the answer-key paste, the start-time rules and part switching |
+| `npm run check:choose` | no database: "Choose TWO" - numbering, 0 / 1 / 2 marks in any order, review, validator, editor round trip, key paste |
+| `npm run check:tables` | no database: tables - reading a title / note / short row, the grid's row and column operations, storage, scoring, and both exam screens drawn to HTML |
 | `npm run tests:validate` | read-only: what the publish rules say about every test already in the database |
 | `npm run check:publish` | no database: the validator (39 / 41 questions, gap, missing answer, invalid True/False/Not Given, Listening without audio, a complete test passes), alternatives and the importer, reviews vs stored scores |
 | `npm run check:grading` | read-only, real data: every stored answer key still validates and scores itself, and every stored student answer re-grades to the verdict stored at hand-in |

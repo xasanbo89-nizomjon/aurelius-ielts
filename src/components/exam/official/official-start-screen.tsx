@@ -83,7 +83,12 @@ export function OfficialPreTest({
   soundHref?: string;
   audioSources?: readonly string[];
   /** Phase J - a Writing task taken on its own: which part it is and the length the test asks for. */
-  writing?: { partLabel: string; minWords: number };
+  writing?: {
+    partLabel: string;
+    minWords: number;
+    /** Phase L3 - a Writing TEST (Task 1 + Task 2 in one sitting): one entry per part, with the time suggested for each. The instructions then speak of both parts. */
+    parts?: { label: string; minWords: number; minutes: number }[];
+  };
 }) {
   if (step === "details") {
     return (
@@ -168,7 +173,7 @@ export function OfficialPreTest({
           <div>
             <dt>Task</dt>
             <dd data-testid="pretest-questions">
-              {writing.partLabel} · at least {writing.minWords} words
+              {writing.parts ? writing.parts.map((part) => `${part.label} · at least ${part.minWords} words`).join(" · ") : `${writing.partLabel} · at least ${writing.minWords} words`}
             </dd>
           </div>
         </dl>
@@ -176,9 +181,18 @@ export function OfficialPreTest({
         <h2 style={{ margin: "0 0 0.25em", fontSize: "1.1em" }}>Instructions</h2>
         <ul>
           <li>Read the task on the left of the screen and write your answer in the box on the right. Drag the line between them to give either side more room.</li>
-          <li>
-            You should spend about {minutes} minutes on this task and write at least {writing.minWords} words. The number of words you have written is shown under the box.
-          </li>
+          {writing.parts ? (
+            <>
+              <li>
+                There are two parts and ONE clock for both: you have {minutes} minutes in all. {writing.parts.map((part) => `You should spend about ${part.minutes} minutes on ${part.label} and write at least ${part.minWords} words.`).join(" ")} How you share the time is up to you. The number of words you have written is shown under the box.
+              </li>
+              <li>Use the Part buttons at the bottom of the screen to move between the two parts. The clock keeps running, and what you have written in each part is kept.</li>
+            </>
+          ) : (
+            <li>
+              You should spend about {minutes} minutes on this task and write at least {writing.minWords} words. The number of words you have written is shown under the box.
+            </li>
+          )}
           <li>Your writing is saved as you type, and a small &ldquo;Saved&rdquo; appears under the box. If the connection is lost, keep writing: it is saved again when the connection returns.</li>
           <li>Spell check and suggestions are switched off, as in the real test. You can cut, copy, paste and undo.</li>
           <li>To highlight text in the task or add a note, select it, then right-click (or use the small button above the selection) and choose &ldquo;Highlight&rdquo; or &ldquo;Notes&rdquo;.</li>

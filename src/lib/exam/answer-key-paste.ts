@@ -1,3 +1,4 @@
+import { chooseWord } from "@/lib/exam/choose-many";
 import { GROUP_KIND_META, expandAlternatives, layoutOf, type BuilderGroup, type BuilderModel } from "@/lib/exam/builder-model";
 
 /**
@@ -30,8 +31,16 @@ export function parseAnswerKey(text: string): ParsedKey {
 
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const lineStart = /^[Qq]?(\d{1,3})\s*[.):\-–]?\s+(.*)$/;
-  if (lines.length > 1 && lines.every((line) => lineStart.test(line) || /^[Qq]?\d{1,3}[.):]?$/.test(line))) {
+  // Phase L3 - "21-22 A, D", "21&22 B E", "21 and 22 A D": one answer for the two numbers of a "Choose TWO" question
+  const rangeStart = /^[Qq]?(\d{1,3})\s*(?:[-–&,]|and)\s*[Qq]?(\d{1,3})\s*[.):]?\s+(.*)$/i;
+  if (lines.length > 1 && lines.every((line) => rangeStart.test(line) || lineStart.test(line) || /^[Qq]?\d{1,3}[.):]?$/.test(line))) {
     for (const line of lines) {
+      const range = rangeStart.exec(line);
+      if (range && Number(range[2]) > Number(range[1])) {
+        add(Number(range[1]), range[3]);
+        for (let n = Number(range[1]) + 1; n <= Number(range[2]); n++) add(n, "");
+        continue;
+      }
       const match = lineStart.exec(line);
       if (match) add(Number(match[1]), match[2]);
       else add(Number(line.replace(/\D/g, "")), "");
@@ -71,6 +80,8 @@ export type KeyStatus = "ok" | "mismatch" | "missing";
 
 export type KeyRow = {
   number: number;
+  /** "21–22" for a "Choose TWO" question (it has two numbers); absent for a one-number question. */
+  numberLabel?: string;
   /** A short piece of the question, so the teacher can see which one this is. */
   label: string;
   /** What kind of question it is ("True / False / Not Given"). */
@@ -82,7 +93,8 @@ export type KeyRow = {
   reason: string | null;
 };
 
-type Slot = { number: number; group: BuilderGroup; groupIndex: number; partIndex: number; index: number; label: string };
+/** One thing the key answers: a question (a "Choose TWO" question has two numbers), a matching item or a blank. */
+type Slot = { number: number; numbers: number[]; group: BuilderGroup; groupIndex: number; partIndex: number; index: number; label: string };
 
 function slotsOf(model: BuilderModel): Slot[] {
   const layout = layoutOf(model);
@@ -91,13 +103,27 @@ function slotsOf(model: BuilderModel): Slot[] {
     part.groups.forEach((group, groupIndex) => {
       const info = layout.parts[partIndex].groups[groupIndex];
       const meta = GROUP_KIND_META[group.kind];
+      if (meta.perNumber) {
+        info.itemRanges.forEach((range, index) => {
+          const numbers = Array.from({ length: Math.max(0, range.last - range.first + 1) }, (_, i) => range.first + i);
+          slots.push({ number: range.first, numbers, group, groupIndex, partIndex, index, label: group.items[index]?.prompt ?? "" });
+        });
+        return;
+      }
       info.itemNumbers.forEach((number, index) => {
-        const label = meta.perNumber ? (group.items[index]?.prompt ?? "") : meta.stored === "MATCHING" ? (group.prompts[index]?.text ?? "") : `Blank ${index + 1} of the ${meta.label.toLowerCase()}`;
-        slots.push({ number, group, groupIndex, partIndex, index, label });
+        const label = meta.stored === "MATCHING" ? (group.prompts[index]?.text ?? "") : `Blank ${index + 1} of the ${meta.label.toLowerCase()}`;
+        slots.push({ number, numbers: [number], group, groupIndex, partIndex, index, label });
       });
     });
   });
   return slots;
+}
+
+/** What the pasted key says for a slot: the answers written against any of its numbers, in order ("21 A 22 D" -> "A D"; "21-22 A, D" -> "A, D"). */
+function rawOf(key: ParsedKey, slot: Slot): string | undefined {
+  const pieces = slot.numbers.map((n) => key.entries.get(n)).filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  if (pieces.length > 0) return pieces.join(" ");
+  return slot.numbers.some((n) => key.entries.has(n)) ? "" : undefined;
 }
 
 const TFNG: Record<string, string> = { T: "TRUE", TRUE: "TRUE", F: "FALSE", FALSE: "FALSE", NG: "NOT_GIVEN", N: "NOT_GIVEN", NOTGIVEN: "NOT_GIVEN", NOT_GIVEN: "NOT_GIVEN" };
@@ -139,6 +165,8 @@ function parseOne(slot: Slot, raw: string): Parsed {
     const bad = letters.filter((letter) => !known.has(letter));
     if (letters.length === 0 || bad.length > 0) return { ok: false, reason: `"${raw}" is not one of the choices (${item.choices.map((c) => c.id).join(", ") || "none yet"}).` };
     if (!group.allowMultiple && letters.length > 1) return { ok: false, reason: `"${raw}" has several letters; this question has one answer.` };
+    if (group.allowMultiple && new Set(letters).size !== letters.length) return { ok: false, reason: `"${raw}" repeats a letter; "Choose ${chooseWord(group.chooseCount)}" needs ${group.chooseCount} different letters.` };
+    if (group.allowMultiple && letters.length !== group.chooseCount) return { ok: false, reason: `"${raw}" has ${letters.length} letter${letters.length === 1 ? "" : "s"}; "Choose ${chooseWord(group.chooseCount)}" needs ${group.chooseCount}.` };
     return { ok: true, patch: { kind: "choices", ids: letters.map((l) => item.choices.find((c) => c.id.toUpperCase() === l)!.id) }, display: letters.join(", ") };
   }
   if (meta.stored === "MATCHING") {
@@ -166,16 +194,17 @@ function parseOne(slot: Slot, raw: string): Parsed {
 /** The table shown before anything is saved: every numbered question of the test with the answer parsed for it. */
 export function previewAnswerKey(model: BuilderModel, key: ParsedKey): { rows: KeyRow[]; extra: number[] } {
   const slots = slotsOf(model);
-  const known = new Set(slots.map((slot) => slot.number));
+  const known = new Set(slots.flatMap((slot) => slot.numbers));
   const rows: KeyRow[] = slots.map((slot) => {
     const kindLabel = GROUP_KIND_META[slot.group.kind].label;
     const label = slot.label.replace(/\s+/g, " ").trim().slice(0, 70);
-    const raw = key.entries.get(slot.number);
-    if (raw === undefined) return { number: slot.number, label, kindLabel, raw: null, parsed: null, status: "missing", reason: "This question is not in the pasted key." };
+    const raw = rawOf(key, slot);
+    const numberLabel = slot.numbers.length > 1 ? `${slot.numbers[0]}–${slot.numbers[slot.numbers.length - 1]}` : undefined;
+    if (raw === undefined) return { number: slot.number, numberLabel, label, kindLabel, raw: null, parsed: null, status: "missing", reason: "This question is not in the pasted key." };
     const parsed = parseOne(slot, raw);
     return parsed.ok
-      ? { number: slot.number, label, kindLabel, raw, parsed: parsed.display, status: "ok", reason: null }
-      : { number: slot.number, label, kindLabel, raw, parsed: null, status: "mismatch", reason: parsed.reason };
+      ? { number: slot.number, numberLabel, label, kindLabel, raw, parsed: parsed.display, status: "ok", reason: null }
+      : { number: slot.number, numberLabel, label, kindLabel, raw, parsed: null, status: "mismatch", reason: parsed.reason };
   });
   return { rows, extra: key.numbers.filter((n) => !known.has(n)) };
 }
@@ -186,7 +215,7 @@ export function applyAnswerKey(model: BuilderModel, key: ParsedKey): { model: Bu
   const next: BuilderModel = JSON.parse(JSON.stringify(model));
   let applied = 0;
   for (const slot of slots) {
-    const raw = key.entries.get(slot.number);
+    const raw = rawOf(key, slot);
     if (raw === undefined) continue;
     const parsed = parseOne(slot, raw);
     if (!parsed.ok) continue;

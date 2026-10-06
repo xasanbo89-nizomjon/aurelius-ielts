@@ -23,6 +23,17 @@ import { canManageTest, canViewTest, authorScope, getTestActor } from "@/lib/exa
 import { TestLockedError } from "@/lib/exam/test-lock";
 import { PublishValidationError, validateTestForPublish } from "@/lib/exam/test-publish";
 import * as tm from "@/lib/exam/test-management";
+import * as writingTasks from "@/lib/writing-tasks";
+import { settleExpiredWritingSittings, startWritingSitting } from "@/lib/writing-sitting";
+import {
+  bundleSittingIsLate,
+  getAssignedBundleForStudent,
+  getWritingBundleSitting,
+  saveWritingBundleDraft,
+  settleExpiredWritingBundleSittings,
+  startWritingBundleSitting,
+  submitWritingBundleSitting,
+} from "@/lib/writing-bundle-sitting";
 import {
   copyTest,
   getFullMockVersionHints,
@@ -622,6 +633,294 @@ async function sectionReview() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
+// Phase L3 - "Choose TWO" through real attempts: 0, 1 and 2 marks, the stored verdicts, the review and the counts all agree
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+async function sectionChooseTwo() {
+  const CHOICES = ["A", "B", "C", "D", "E"].map((id) => ({ id, text: `Option ${id}` }));
+  const chooseTwo = { type: "MULTIPLE_CHOICE", prompt: "Which TWO things does the writer recommend?", options: { choices: CHOICES, allowMultiple: true, chooseCount: 2 }, correctAnswer: ["A", "D"], points: 2 };
+  // the first group of the standard paper (3 single multiple-choice questions = numbers 1-3) becomes: 1 single + 1 "Choose TWO" (numbers 2-3): still 40 numbers
+  const layout = readingLayout();
+  layout[0].rows = [mc(1), chooseTwo];
+  const t = await insertTest({ teacherId: ctx.A, name: "choose two", layout });
+  await tm.setPublished(t.testId, ctx.A, true);
+  const rows = await db.question.findMany({ where: { mockTestId: t.testId }, orderBy: { orderIndex: "asc" } });
+  const two = rows.find((q) => q.prompt.startsWith("Which TWO"));
+  const students = await Promise.all([newStudent("two-0"), newStudent("two-1"), newStudent("two-2"), newStudent("two-3")]);
+
+  async function sit(studentId, picks) {
+    const attempt = await attempts.getOrCreateAttempt(studentId, t.testId);
+    assert.ok(attempt, "the student could start the published test");
+    if (picks) await attempts.saveAnswer(attempt.id, studentId, two.id, picks);
+    const done = await attempts.finalizeAttempt(attempt.id, {});
+    const stored = await db.answer.findFirst({ where: { resultId: attempt.id, questionId: two.id }, select: { isCorrect: true, pointsAwarded: true } });
+    return { attempt, done, stored };
+  }
+
+  await check("choose TWO: the paper still has 40 numbers for the student, the teacher and the validator, and the question covers numbers 2-3", async () => {
+    assert.equal(await getQuestionNumberCount(t.testId), 40);
+    const validation = await validateTestForPublish(t.testId);
+    assert.equal(validation.ok, true);
+    assert.equal(validation.total, 40);
+    const numbered = numberQuestions(rows.map((q) => ({ id: q.id, type: q.type, options: q.options, blankKeys: null })));
+    const row = numbered.find((n) => n.id === two.id);
+    assert.deepEqual([row.startNumber, row.endNumber, row.span], [2, 3, 2]);
+  });
+
+  await check("choose TWO: both letters right (in either order) = 2 marks; the verdict is stored as correct", async () => {
+    const { done, stored } = await sit(students[0], ["D", "A"]);
+    assert.equal(done.rawScore, 2);
+    assert.deepEqual([stored.isCorrect, stored.pointsAwarded], [true, 2]);
+  });
+
+  await check("choose TWO: one letter right = 1 mark (isCorrect false, 1 point); the review shows 1 of its 2 numbers right and the totals add up", async () => {
+    const { attempt, done, stored } = await sit(students[1], ["A", "B"]);
+    assert.equal(done.rawScore, 1);
+    assert.deepEqual([stored.isCorrect, stored.pointsAwarded], [false, 1]);
+    const answers = await db.answer.findMany({ where: { resultId: attempt.id }, select: { questionId: true, response: true, isCorrect: true, pointsAwarded: true } });
+    const responses = new Map(answers.map((a) => [a.questionId, a.response]));
+    const verdicts = new Map(answers.map((a) => [a.questionId, { isCorrect: a.isCorrect, pointsAwarded: a.pointsAwarded, points: rows.find((q) => q.id === a.questionId).points }]));
+    const { rows: reviewed, totals } = summarizeAttemptSlots(rows, responses, verdicts);
+    assert.equal(totals.total, 40);
+    assert.equal(totals.correct, done.rawScore, "the review's right answers equal the stored raw score");
+    const slots = reviewed.find((r) => r.id === two.id).slots;
+    assert.deepEqual(slots.map((s) => [s.number, s.correct]), [[2, true], [3, false]]);
+  });
+
+  await check("choose TWO: no letter right = 0 marks; not answered = 0 marks and skipped", async () => {
+    const wrong = await sit(students[2], ["B", "C"]);
+    assert.equal(wrong.done.rawScore, 0);
+    assert.deepEqual([wrong.stored.isCorrect, wrong.stored.pointsAwarded], [false, 0]);
+    const skipped = await sit(students[3], undefined);
+    assert.equal(skipped.done.rawScore, 0);
+  });
+
+  await check("choose TWO: three letters for a TWO question earn nothing (the screen does not allow it, and the server does not reward it)", async () => {
+    const student = await newStudent("two-4");
+    const { done, stored } = await sit(student, ["A", "D", "B"]);
+    assert.equal(done.rawScore, 0);
+    assert.deepEqual([stored.isCorrect, stored.pointsAwarded], [false, 0]);
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// Phase L3 - the Writing task bank follows the same access rule as tests: a Root Teacher sees and manages every teacher's tasks
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+async function sectionWritingBank() {
+  const input = (title, extra = {}) => ({ title: `${TAG} ${title}`, trainingType: "ACADEMIC", taskNumber: "TASK_2", category: "OPINION", prompt: "Some people think museums should be free. Do you agree or disagree?", assignedStudentIds: [], ...extra });
+  const own = await newStudent("writing-own");
+  await db.studentProfile.update({ where: { id: own }, data: { teacherId: ctx.A } });
+  const [taskA, taskB] = await Promise.all([writingTasks.createWritingTask(ctx.A, input("task of A")), writingTasks.createWritingTask(ctx.B, input("task of B"))]);
+
+  await check("writing bank: a teacher lists only their own tasks; a Root Teacher lists every teacher's, each with its author", async () => {
+    const mineA = (await writingTasks.listWritingTasksForTeacher(ctx.A)).filter((t) => t.title.includes(TAG) && t.title.includes(" task of ")).map((t) => t.id);
+    assert.deepEqual(mineA, [taskA.id]);
+    const mineB = (await writingTasks.listWritingTasksForTeacher(ctx.B)).filter((t) => t.title.includes(TAG) && t.title.includes(" task of ")).map((t) => t.id);
+    assert.deepEqual(mineB, [taskB.id]);
+    const all = (await writingTasks.listWritingTasksForTeacher(ctx.R)).filter((t) => t.title.includes(TAG) && t.title.includes(" task of "));
+    assert.deepEqual(all.map((t) => t.id).sort(), [taskA.id, taskB.id].sort());
+    assert.ok(all.every((t) => t.createdBy?.user?.email), "every task says who made it");
+  });
+
+  await check("writing bank: a teacher cannot read, change, publish or delete another teacher's task", async () => {
+    assert.equal(await writingTasks.getWritingTaskForTeacher(taskA.id, ctx.B), null);
+    await assert.rejects(() => writingTasks.updateWritingTask(taskA.id, ctx.B, input("hijacked")), /not found/i);
+    await assert.rejects(() => writingTasks.setWritingTaskStatus(taskA.id, ctx.B, "PUBLISHED"), /not found/i);
+    await assert.rejects(() => writingTasks.deleteWritingTask(taskA.id, ctx.B), /not found/i);
+    assert.equal((await db.writingTask.findUnique({ where: { id: taskA.id } })).title, `${TAG} task of A`);
+  });
+
+  await check("writing bank: a Root Teacher reads, edits, assigns, publishes and archives another teacher's task; the author stays the author", async () => {
+    assert.ok(await writingTasks.getWritingTaskForTeacher(taskA.id, ctx.R));
+    await writingTasks.updateWritingTask(taskA.id, ctx.R, input("task of A (edited by Root)", { assignedStudentIds: [own] }));
+    const edited = await db.writingTask.findUnique({ where: { id: taskA.id }, include: { assignments: true } });
+    assert.equal(edited.title, `${TAG} task of A (edited by Root)`);
+    assert.deepEqual(edited.assignments.map((a) => a.studentId), [own]);
+    assert.equal(edited.createdById, ctx.A, "the task still belongs to the teacher who made it");
+    await writingTasks.setWritingTaskStatus(taskA.id, ctx.R, "PUBLISHED");
+    assert.equal((await db.writingTask.findUnique({ where: { id: taskA.id } })).status, "PUBLISHED");
+    await writingTasks.setWritingTaskStatus(taskA.id, ctx.R, "ARCHIVED");
+    assert.equal((await db.writingTask.findUnique({ where: { id: taskA.id } })).status, "ARCHIVED");
+  });
+
+  await check("writing bank: a teacher may still assign only their own students; a Root Teacher may assign any", async () => {
+    const stranger = await newStudent("writing-stranger"); // belongs to nobody
+    await assert.rejects(() => writingTasks.updateWritingTask(taskB.id, ctx.B, input("task of B", { assignedStudentIds: [stranger] })), /aren't assigned to you/);
+    await writingTasks.updateWritingTask(taskB.id, ctx.R, input("task of B", { assignedStudentIds: [stranger] }));
+    assert.deepEqual((await db.writingTaskAssignment.findMany({ where: { taskId: taskB.id } })).map((a) => a.studentId), [stranger]);
+  });
+
+  await check("writing bank: a Root Teacher saving another teacher's Task 1 keeps its picture (it is in the author's library); a different picture must be the Root Teacher's own", async () => {
+    const file = (owner, label) => db.mediaFile.create({ data: { fileName: `${label}.png`, type: "IMAGE", mimeType: "image/png", path: `https://example.test/${TAG}-${label}.png`, size: 1000, width: 800, height: 600, ownerId: owner } });
+    const [authorsPicture, rootsPicture] = await Promise.all([file(ctx.A, "authors"), file(ctx.R, "roots")]);
+    const task1 = await writingTasks.createWritingTask(ctx.A, input("task 1 of A", { taskNumber: "TASK_1", category: "GRAPH", imageMediaFileId: authorsPicture.id }));
+    await writingTasks.updateWritingTask(task1.id, ctx.R, input("task 1 of A (edited)", { taskNumber: "TASK_1", category: "GRAPH", imageMediaFileId: authorsPicture.id }));
+    const kept = await db.writingTask.findUnique({ where: { id: task1.id } });
+    assert.deepEqual([kept.title, kept.imageMediaFileId], [`${TAG} task 1 of A (edited)`, authorsPicture.id], "the author's picture is kept");
+    await assert.rejects(() => writingTasks.updateWritingTask(task1.id, ctx.B, input("x", { taskNumber: "TASK_1", category: "GRAPH" })), /not found/i);
+    await writingTasks.updateWritingTask(task1.id, ctx.R, input("task 1 of A (own picture)", { taskNumber: "TASK_1", category: "GRAPH", imageMediaFileId: rootsPicture.id }));
+    assert.equal((await db.writingTask.findUnique({ where: { id: task1.id } })).imageMediaFileId, rootsPicture.id);
+  });
+
+  await check("writing bank: a Root Teacher deletes another teacher's task (a task with submissions still cannot be deleted)", async () => {
+    await writingTasks.deleteWritingTask(taskB.id, ctx.R);
+    assert.equal(await db.writingTask.count({ where: { id: taskB.id } }), 0);
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// Phase L3 - a Writing test (Task 1 + Task 2 made together) is ONE sitting of both parts under one 60-minute clock; a single task is untouched
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+async function sectionWritingBundleSitting() {
+  const bundleId = randomUUID();
+  const [s1, s2, s3, s4, s5, solo] = await Promise.all(["bs-1", "bs-2", "bs-3", "bs-4", "bs-5", "bs-solo"].map(newStudent));
+  const everyone = [s1, s2, s3, s4, s5, solo];
+  await db.studentProfile.updateMany({ where: { id: { in: everyone } }, data: { teacherId: ctx.A } });
+  const make = (title, taskNumber, studentIds, extras = {}) =>
+    writingTasks.createWritingTask(ctx.A, { title: `${TAG} ${title}`, trainingType: "ACADEMIC", taskNumber, category: taskNumber === "TASK_1" ? "GRAPH" : "OPINION", prompt: "The chart shows how many people visited the museum. Summarise the information.", assignedStudentIds: studentIds }, extras);
+  // Task 1 is assigned to everyone, Task 2 to everyone except `solo` (who therefore sits Task 1 on its own, as before)
+  const [t1, t2, plain] = await Promise.all([make("Writing test - Task 1", "TASK_1", everyone, { bundleId }), make("Writing test - Task 2", "TASK_2", everyone.filter((id) => id !== solo), { bundleId }), make("a single task", "TASK_2", [s1])]);
+  await Promise.all([t1, t2, plain].map((t) => writingTasks.setWritingTaskStatus(t.id, ctx.A, "PUBLISHED")));
+  const backdate = (studentId, minutes) => db.writingSubmission.updateMany({ where: { studentId, taskId: { in: [t1.id, t2.id] }, status: "DRAFT" }, data: { startedAt: new Date(Date.now() - minutes * 60_000) } });
+  const draftsOf = (studentId) => db.writingSubmission.findMany({ where: { studentId, taskId: { in: [t1.id, t2.id] } }, select: { id: true, taskId: true, status: true, content: true, startedAt: true, updatedAt: true, wordCount: true }, orderBy: { taskId: "asc" } });
+  const byTask = (rows, task) => rows.find((r) => r.taskId === task.id);
+
+  await check("writing test: both tasks assigned = a pair sat together (Task 1 first); one task assigned, a plain task or a task outside a pair = sat on its own", async () => {
+    const pair = await getAssignedBundleForStudent(s1, t2.id);
+    assert.deepEqual(pair.tasks.map((t) => t.id), [t1.id, t2.id]);
+    assert.deepEqual((await getAssignedBundleForStudent(s1, t1.id)).tasks.map((t) => t.id), [t1.id, t2.id]);
+    assert.equal(await getAssignedBundleForStudent(solo, t1.id), null, "only Task 1 is assigned to this student");
+    assert.equal(await getAssignedBundleForStudent(s1, plain.id), null, "a plain task has no pair");
+  });
+
+  await check("writing test: 'Start test' opens BOTH parts at the same moment; pressing it again goes back to the same sitting", async () => {
+    const started = await startWritingBundleSitting(s1, t2.id);
+    assert.equal(started.success, true);
+    const rows = await draftsOf(s1);
+    assert.equal(rows.length, 2);
+    assert.ok(rows.every((r) => r.status === "DRAFT" && r.startedAt));
+    assert.ok(Math.abs(rows[0].startedAt.getTime() - rows[1].startedAt.getTime()) < 2000, "one start for both");
+    assert.equal(started.submissionId, byTask(rows, t1).id, "the sitting opens at Part 1");
+    const again = await startWritingBundleSitting(s1, t1.id);
+    assert.deepEqual([again.success, again.resumed, again.submissionId], [true, true, started.submissionId]);
+    assert.equal((await draftsOf(s1)).length, 2, "no third draft");
+  });
+
+  await check("writing test: the clock is ONE hour from the earliest start, counted on the server (a sitting begun 30 minutes ago has 30 minutes left)", async () => {
+    const fresh = await getWritingBundleSitting(s1, byTask(await draftsOf(s1), t1).id);
+    assert.equal(fresh.kind, "open");
+    assert.ok(fresh.remainingSeconds > 3480 && fresh.remainingSeconds <= 3600, String(fresh.remainingSeconds)); // a little less than the hour: the database is a few seconds away
+    assert.deepEqual(fresh.parts.map((p) => p.task.id), [t1.id, t2.id]);
+    await startWritingBundleSitting(s2, t1.id);
+    await backdate(s2, 30);
+    const half = await getWritingBundleSitting(s2, byTask(await draftsOf(s2), t2).id);
+    assert.ok(Math.abs(half.remainingSeconds - 1800) < 120, String(half.remainingSeconds));
+    assert.equal(bundleSittingIsLate(new Date(Date.now() - 59 * 60_000)), false);
+    assert.equal(bundleSittingIsLate(new Date(Date.now() - 61 * 60_000)), false, "the grace after the hour");
+    assert.equal(bundleSittingIsLate(new Date(Date.now() - 62 * 60_000)), true);
+  });
+
+  await check("writing test: saves are versioned - the part moves on, a stale window is refused (conflict), the next save on the new version works", async () => {
+    const rows = await draftsOf(s1);
+    const p1 = byTask(rows, t1);
+    const first = await saveWritingBundleDraft(s1, { submissionId: p1.id, content: "The chart shows visitors.", baseUpdatedAt: p1.updatedAt.toISOString() });
+    assert.equal(first.success, true);
+    const stale = await saveWritingBundleDraft(s1, { submissionId: p1.id, content: "older window text", baseUpdatedAt: p1.updatedAt.toISOString() });
+    assert.equal(stale.success, false);
+    assert.ok(stale.conflict, "the stale window is told what the server holds");
+    assert.equal((await db.writingSubmission.findUnique({ where: { id: p1.id } })).content, "The chart shows visitors.", "the older text did not overwrite the newer");
+    const next = await saveWritingBundleDraft(s1, { submissionId: p1.id, content: "The chart shows visitors in four years.", baseUpdatedAt: first.updatedAt });
+    assert.equal(next.success, true);
+  });
+
+  await check("writing test: Task 2 is saved on its own - the two parts keep separate text", async () => {
+    const p2 = byTask(await draftsOf(s1), t2);
+    const saved = await saveWritingBundleDraft(s1, { submissionId: p2.id, content: "Museums should be free for everyone.", baseUpdatedAt: p2.updatedAt.toISOString() });
+    assert.equal(saved.success, true);
+    const rows = await draftsOf(s1);
+    assert.deepEqual([byTask(rows, t1).content, byTask(rows, t2).content], ["The chart shows visitors in four years.", "Museums should be free for everyone."]);
+  });
+
+  await check("writing test: both parts are handed in together with the text the browser holds; handing in twice changes nothing", async () => {
+    const rows = await draftsOf(s1);
+    const drafts = [
+      { taskId: t1.id, content: "The chart shows visitors in four years, and August was the busiest month.", baseUpdatedAt: byTask(rows, t1).updatedAt.toISOString() },
+      { taskId: t2.id, content: "Museums should be free for everyone because culture belongs to all.", baseUpdatedAt: byTask(rows, t2).updatedAt.toISOString() },
+    ];
+    const done = await submitWritingBundleSitting(s1, { submissionId: byTask(rows, t1).id, drafts }, { analyse: false });
+    assert.equal(done.success, true);
+    assert.equal(done.submissionIds.length, 2);
+    const after = await draftsOf(s1);
+    assert.ok(after.every((r) => r.status !== "DRAFT"), "neither part is a draft any more");
+    assert.equal(byTask(after, t1).content, drafts[0].content);
+    assert.equal(byTask(after, t2).content, drafts[1].content);
+    assert.ok(byTask(after, t1).wordCount > 5 && byTask(after, t2).wordCount > 5, "the shared word counter ran for both");
+    const again = await submitWritingBundleSitting(s1, { submissionId: byTask(rows, t1).id, drafts }, { analyse: false });
+    assert.equal(again.success, true);
+    assert.equal((await draftsOf(s1)).length, 2, "still exactly two submissions");
+  });
+
+  await check("writing test: a window that is behind is refused and NOTHING is handed in (both parts stay drafts)", async () => {
+    const rows = await draftsOf(s2);
+    const p1 = byTask(rows, t1);
+    await saveWritingBundleDraft(s2, { submissionId: p1.id, content: "newer text from another tab", baseUpdatedAt: p1.updatedAt.toISOString() });
+    const refused = await submitWritingBundleSitting(s2, { submissionId: p1.id, drafts: [{ taskId: t1.id, content: "older text", baseUpdatedAt: p1.updatedAt.toISOString() }] }, { analyse: false });
+    assert.equal(refused.success, false);
+    assert.deepEqual(refused.conflicts, [t1.id]);
+    assert.ok((await draftsOf(s2)).every((r) => r.status === "DRAFT"), "nothing was handed in");
+  });
+
+  await check("writing test: a part with no text is handed in blank (band 0 later), the other part keeps its words", async () => {
+    await startWritingBundleSitting(s4, t1.id);
+    const rows = await draftsOf(s4);
+    const done = await submitWritingBundleSitting(s4, { submissionId: byTask(rows, t1).id, drafts: [{ taskId: t1.id, content: "Only the first part was written in time." }] }, { analyse: false });
+    assert.equal(done.success, true);
+    assert.equal(done.blank, 1);
+    const after = await draftsOf(s4);
+    assert.deepEqual([byTask(after, t1).content, byTask(after, t2).content, byTask(after, t2).status === "DRAFT"], ["Only the first part was written in time.", "", false]);
+  });
+
+  await check("writing test: after the hour (and its grace) only what was SAVED in time counts; the browser's late words do not go into the submission; saving is refused", async () => {
+    await startWritingBundleSitting(s3, t1.id);
+    const rows = await draftsOf(s3);
+    await saveWritingBundleDraft(s3, { submissionId: byTask(rows, t1).id, content: "Saved before the end.", baseUpdatedAt: byTask(rows, t1).updatedAt.toISOString() });
+    await backdate(s3, 63);
+    const refused = await saveWritingBundleDraft(s3, { submissionId: byTask(rows, t1).id, content: "typed after the end", baseUpdatedAt: null });
+    assert.deepEqual([refused.success, refused.timeUp], [false, true]);
+    assert.equal((await getWritingBundleSitting(s3, byTask(rows, t1).id)).kind, "settle", "the page finishes the hand-in on opening");
+    const done = await submitWritingBundleSitting(s3, { submissionId: byTask(rows, t1).id, drafts: [{ taskId: t1.id, content: "Words typed long after the time was up." }] }, { analyse: false });
+    assert.equal(done.success, true);
+    assert.equal(byTask(await draftsOf(s3), t1).content, "Saved before the end.");
+  });
+
+  await check("writing test: the scheduled job hands in a sitting whose hour is over (both parts, no AI), and leaves one that is still running alone - even past the 20 minutes a single Task 1 gets", async () => {
+    await startWritingBundleSitting(s5, t1.id);
+    const rows = await draftsOf(s5);
+    await saveWritingBundleDraft(s5, { submissionId: byTask(rows, t1).id, content: "Saved while the student was still there.", baseUpdatedAt: byTask(rows, t1).updatedAt.toISOString() });
+    // s2's sitting is 30 minutes old: over a single Task 1's 20 minutes, well inside the 60 of the Writing test
+    assert.equal(await settleExpiredWritingSittings({ studentIds: [s2] }), 0, "the single-task rule does not touch a Writing test sitting");
+    assert.equal(await settleExpiredWritingBundleSittings({ studentIds: [s2] }), 0, "30 minutes into a 60-minute sitting is not over");
+    assert.ok((await draftsOf(s2)).every((r) => r.status === "DRAFT"));
+    await backdate(s5, 63);
+    assert.equal(await settleExpiredWritingBundleSittings({ studentIds: [s5] }), 1);
+    const after = await draftsOf(s5);
+    assert.ok(after.every((r) => r.status !== "DRAFT"));
+    assert.equal(byTask(after, t1).content, "Saved while the student was still there.");
+  });
+
+  await check("writing test: a task whose partner is NOT assigned is still sat on its own with its 20 minutes - the single-task rules are unchanged", async () => {
+    const started = await startWritingSitting(solo, t1.id);
+    assert.equal(started.success, true);
+    assert.equal(await settleExpiredWritingBundleSittings({ studentIds: [solo] }), 0, "not a Writing test sitting");
+    const late = new Date(Date.now() + 25 * 60_000);
+    assert.equal(await settleExpiredWritingSittings({ studentIds: [solo], now: late }), 1, "25 minutes: past Task 1's 20 + grace");
+    assert.equal((await db.writingSubmission.findUnique({ where: { id: started.submissionId } })).status === "DRAFT", false);
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
 
 try {
   ctx.A = await newTeacher("teacher-a", false);
@@ -631,7 +930,7 @@ try {
   ctx.S2 = await newStudent("student-2");
   console.log(`fixtures: ${TAG} (teachers A, B, Root; two students)\n`);
 
-  await Promise.all([sectionAccess(), sectionValidator(), sectionEditRule(), sectionVersions(), sectionReview()]);
+  await Promise.all([sectionAccess(), sectionValidator(), sectionEditRule(), sectionVersions(), sectionReview(), sectionChooseTwo(), sectionWritingBank(), sectionWritingBundleSitting()]);
 } catch (error) {
   failed++;
   console.log("FATAL", error?.stack ?? error);

@@ -27,6 +27,8 @@ import { FallbackImage } from "@/components/ui/fallback-image";
 export type WritingTaskRow = ExistingWritingTask & {
   /** Phase L2 - set when Task 1 and Task 2 were made together as a Writing test. */
   bundleId?: string | null;
+  /** Phase L3 - for a Root Teacher, who made the task (the bank then lists every teacher's tasks). */
+  authorName?: string | null;
   status: WritingTaskStatus;
   submissionCount: number;
   assignedStudentNames: string[];
@@ -115,6 +117,11 @@ export function WritingTasksManager({ tasks, students }: { tasks: WritingTaskRow
                       <Badge variant="outline" className="text-[11px]" data-testid="bundle-chip" title="Task 1 and Task 2 were made together as one Writing test">
                         Writing test
                       </Badge>
+                    )}
+                    {task.authorName && (
+                      <span className="text-muted-foreground text-[11px] font-normal" data-testid="task-author">
+                        by {task.authorName}
+                      </span>
                     )}
                   </div>
                 </TableCell>

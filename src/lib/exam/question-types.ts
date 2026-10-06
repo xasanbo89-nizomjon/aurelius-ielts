@@ -20,6 +20,8 @@ const choiceSchema = z.object({
 export const multipleChoiceOptionsSchema = z.object({
   choices: z.array(choiceSchema).min(2, "Add at least 2 answer choices."),
   allowMultiple: z.boolean().default(false),
+  /** Phase L3 - "Choose TWO": how many letters the question asks for (2 or more); it then covers that many question numbers (see choose-many.ts). */
+  chooseCount: z.number().int().min(2).max(6).optional(),
 });
 export const multipleChoiceAnswerSchema = z.array(z.string()).min(1, "Select at least one correct answer.");
 
@@ -50,6 +52,8 @@ export const summaryCompletionOptionsSchema = z.object({
   blankCount: z.number().int().positive("Set how many blanks the summary has."),
   wordBank: z.array(z.string()).optional(),
   maxWords: z.number().int().positive().optional(),
+  /** Phase L3 - "table": the text is a table (rows on lines, cells separated by |) and is always drawn as one (see table-text.ts). Absent: drawn as before. */
+  layout: z.enum(["table"]).optional(),
 });
 export const summaryCompletionAnswerSchema = z.record(z.string(), textAnswerSchema); // each blank: one answer, or a list of accepted alternatives
 

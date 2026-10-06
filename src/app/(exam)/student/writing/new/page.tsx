@@ -13,6 +13,9 @@ import { examPreferencesCookieName, parseExamPreferences } from "@/lib/exam/ui-p
 import { WRITING_PART_MINUTES, WRITING_PART_MIN_WORDS, partLabelOfTask } from "@/lib/writing/constants";
 import { toWritingExamPart } from "@/lib/writing/exam-part";
 import { startWritingSittingAction } from "@/actions/writing-sitting.actions";
+import { startWritingBundleSittingAction } from "@/actions/writing-bundle-sitting.actions";
+import { BUNDLE_SITTING_MINUTES, getAssignedBundleForStudent, getWritingBundleSitting, submitWritingBundleSitting } from "@/lib/writing-bundle-sitting";
+import { OfficialWritingBundle } from "@/components/student/official-writing-bundle";
 import { WritingExamWorkspace } from "@/components/student/writing-exam-workspace";
 import { OfficialPreTest } from "@/components/exam/official/official-start-screen";
 import { OfficialWritingStandalone } from "@/components/student/official-writing-standalone";
@@ -45,6 +48,27 @@ export default async function NewWritingSubmissionPage({ searchParams }: { searc
     const preferences = parseExamPreferences(cookieStore.get(examPreferencesCookieName(profile.id))?.value);
 
     if (draftId) {
+      // Phase L3 - a draft of a Writing TEST (Task 1 + Task 2 assigned together) is one sitting of both parts under one 60-minute clock.
+      const bundleSitting = await getWritingBundleSitting(profile.id, draftId);
+      if (bundleSitting) {
+        // The hour is over, or a part was already handed in: what is saved is handed in now (both parts), exactly as if the clock had reached zero here.
+        if (bundleSitting.kind === "settle") {
+          await submitWritingBundleSitting(profile.id, { submissionId: draftId, drafts: [] });
+          redirect("/student/writing/tasks");
+        }
+        return (
+          <OfficialWritingBundle
+            candidateName={user.name ?? ""}
+            preferencesCookieName={examPreferencesCookieName(profile.id)}
+            initialPreferences={preferences}
+            firstSubmissionId={bundleSitting.parts[0].submissionId}
+            parts={bundleSitting.parts.map((p) => toWritingExamPart(p.task, { submissionId: p.submissionId, content: p.content, updatedAt: p.updatedAt }))}
+            initialRemainingSeconds={bundleSitting.remainingSeconds}
+            doneHref="/student/writing/tasks"
+          />
+        );
+      }
+
       const sitting = await getWritingSitting(profile.id, draftId);
       if (!sitting) {
         // Handed in already (from another window, or when the time ran out): its report. Anything else - gone, or still a draft of a task
@@ -75,11 +99,39 @@ export default async function NewWritingSubmissionPage({ searchParams }: { searc
     // A task written for a Full Mock is sat inside that mock, never on its own (Phase K).
     if (await prisma.fullMockWritingSection.findUnique({ where: { writingTaskId: task.id }, select: { id: true } })) redirect("/student/writing/tasks");
 
+    const askedStep = Array.isArray(stepParam) ? stepParam[0] : stepParam;
+
+    // Phase L3 - a Writing TEST (both of its tasks assigned): one sitting of both parts, 60 minutes. Any other task is sat on its own, below.
+    const bundle = await getAssignedBundleForStudent(profile.id, task.id);
+    if (bundle) {
+      const openPart = await prisma.writingSubmission.findFirst({ where: { studentId: profile.id, taskId: { in: bundle.tasks.map((t) => t.id) }, status: "DRAFT" }, orderBy: { updatedAt: "desc" }, select: { id: true } });
+      if (openPart) redirect(`/student/writing/new?draftId=${openPart.id}${carryUi}`);
+      return (
+        <OfficialPreTest
+          module="Writing"
+          step={askedStep === "instructions" ? "instructions" : "details"}
+          candidateName={user.name ?? ""}
+          title={task.title.replace(/ - Task [12]$/, "")}
+          description={null}
+          minutes={BUNDLE_SITTING_MINUTES}
+          questionCount={0}
+          writing={{
+            partLabel: "Part 1 and Part 2",
+            minWords: WRITING_PART_MIN_WORDS.TASK_1,
+            parts: bundle.tasks.map((t) => ({ label: partLabelOfTask(t.taskNumber), minWords: WRITING_PART_MIN_WORDS[t.taskNumber], minutes: WRITING_PART_MINUTES[t.taskNumber] })),
+          }}
+          preferences={preferences}
+          canStart={await hasActiveAccess(profile.id)}
+          instructionsHref={`?taskId=${task.id}&step=instructions${carryUi}`}
+          startAction={startWritingBundleSittingAction.bind(null, task.id, uiValue)}
+        />
+      );
+    }
+
     // A task already in progress goes straight back into it: its clock keeps running from its own start.
     const open = await prisma.writingSubmission.findFirst({ where: { studentId: profile.id, taskId: task.id, status: "DRAFT" }, orderBy: { updatedAt: "desc" }, select: { id: true } });
     if (open) redirect(`/student/writing/new?draftId=${open.id}${carryUi}`);
 
-    const askedStep = Array.isArray(stepParam) ? stepParam[0] : stepParam;
     return (
       <OfficialPreTest
         module="Writing"

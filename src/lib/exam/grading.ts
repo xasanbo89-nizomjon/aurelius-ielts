@@ -1,5 +1,7 @@
 import type { QuestionType } from "@prisma/client";
 
+import { MIN_CHOOSE, chooseMarks } from "@/lib/exam/choose-many";
+
 /**
  * Whether a stored/in-progress response counts as an actual answer (vs an
  * empty string, empty array, or an object with only blank values — which
@@ -83,6 +85,8 @@ export function isAnswerCorrect(type: QuestionType, correctAnswer: unknown, resp
       case "MULTIPLE_CHOICE": {
         if (!isStringArray(correctAnswer) || !isStringArray(response)) return false;
         if (correctAnswer.length === 0 || response.length !== correctAnswer.length) return false;
+        // every letter once (["A","A"] is not "A and D"), each one of the right letters: the order of the picks never matters
+        if (new Set(response).size !== response.length) return false;
         const correctSet = new Set(correctAnswer);
         return response.every((choiceId) => correctSet.has(choiceId));
       }
@@ -126,6 +130,12 @@ export type GradedAnswer = {
  * points than it has items keeps its old all-or-nothing behavior.
  */
 function partialPoints(question: { type: QuestionType; correctAnswer: unknown; points: number }, response: unknown): number {
+  // Phase L3 - "Choose TWO": one mark per correct letter, in any order (a row worth N points: N letters in its key). A hand-made row worth fewer points than
+  // it has letters keeps the old all-or-nothing behaviour, exactly like the grouped types below.
+  if (question.type === "MULTIPLE_CHOICE" && Array.isArray(question.correctAnswer) && question.correctAnswer.length >= MIN_CHOOSE) {
+    if (response === undefined) return 0;
+    return Math.floor((question.points * chooseMarks(question.correctAnswer, response)) / question.correctAnswer.length);
+  }
   if (response === undefined || !isGroupedQuestionType(question.type)) return 0;
   const items = gradeItems(question.type, question.correctAnswer, response);
   if (items.length === 0) return 0;

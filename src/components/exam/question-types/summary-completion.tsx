@@ -36,7 +36,7 @@ export function SummaryCompletionAnswer({
   const [armedWord, setArmedWord] = useState<string | null>(null);
 
   const parsed = useMemo(() => parseSummaryText(options.text), [options.text]);
-  const layout = useMemo(() => detectSummaryLayout(options.text), [options.text]);
+  const layout = useMemo(() => detectSummaryLayout(options.text, options.layout), [options.text, options.layout]);
   const blankIds = useMemo(() => {
     const resolved = slotKeys?.filter((key): key is string => key != null);
     if (resolved && resolved.length === (slotKeys?.length ?? 0) && resolved.length > 0) return resolved;
@@ -91,7 +91,8 @@ export function SummaryCompletionAnswer({
     const bodyRows = headerIsPlain ? rest : layout.rows;
     body = (
       <div className="overflow-x-auto">
-        <table className="border-border w-full min-w-[28rem] border-collapse text-[15px] leading-[2]">
+        <table className="border-border w-full min-w-[28rem] border-collapse text-[15px] leading-[2]" data-testid="summary-table">
+          {layout.caption && <caption className="pb-1.5 text-left font-medium">{layout.caption}</caption>}
           {headerIsPlain && (
             <thead>
               <tr>
@@ -106,15 +107,22 @@ export function SummaryCompletionAnswer({
           <tbody>
             {bodyRows.map((row, r) => (
               <tr key={r}>
-                {row.map((cell, c) => (
-                  <td key={c} className="border-border border px-3 py-1.5 align-top">
-                    {renderParts(partsOf(cell), `r${r}c${c}`)}
+                {layout.spanRows?.[headerIsPlain ? r + 1 : r] ? (
+                  <td colSpan={layout.columns ?? row.length} className="border-border border px-3 py-1.5 align-top font-medium">
+                    {renderParts(partsOf(row[0] ?? ""), `r${r}c0`)}
                   </td>
-                ))}
+                ) : (
+                  row.map((cell, c) => (
+                    <td key={c} className="border-border border px-3 py-1.5 align-top">
+                      {renderParts(partsOf(cell), `r${r}c${c}`)}
+                    </td>
+                  ))
+                )}
               </tr>
             ))}
           </tbody>
         </table>
+        {layout.note && <p className="text-muted-foreground mt-2 text-sm whitespace-pre-line">{layout.note}</p>}
       </div>
     );
   } else if (layout.kind === "flow") {

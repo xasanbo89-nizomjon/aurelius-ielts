@@ -24,10 +24,11 @@ this page is the map. When a phase ships, move it to "Done".
 
 | L2 | **Teacher test builder, part 2** (see `docs/test-builder.md`): a **structured editor** for Reading and Listening drafts (parts → groups → questions, every question type, "Insert blank", reorder by moving the stored rows, live student view and checklist, one autosave that upserts by id and deletes only what was removed, protection against conflicts and unsaved changes); **paste an answer key** with a mismatch table; the importer turns every spelling of a numbered gap into a `{{n}}` box and the validator checks them; **Listening**: one signed direct upload for every recording, its length measured on upload, start times for Parts 2-4 of a shared recording that the student's screen follows; **Writing**: the task bank inside the wizard, **Task 1 + Task 2 as one Writing test**, Task 1's picture from a **PDF page** (rendered in pure WebAssembly, stored as a PNG like any picture); **Preview as student** on the real exam screens, writing nothing; versions keep their title (**v2** labels for teachers), **"Archive previous version"** when publishing a new one and **"Use newest version"** for Full Mocks and assignments; **a missing or not-yours record answers HTTP 404** |
 
+| L3 | **Test builder correctness** (see `docs/test-builder.md`): **"Choose TWO" covers two question numbers**, one mark per correct letter in any order, agreed by numbering, scoring, review, validator, editor, key paste and both exam screens (no stored test or answer used it, so no stored score moved); **table completion is a real table** (title, header, rows, answer boxes in the cells, a note) on the exam screens and the preview, built in the editor as a grid; **a Writing test (Task 1 + Task 2) is sat as one 60-minute sitting** on the official two-part screen, like in a Full Mock; **a Root Teacher sees and manages every teacher's Writing tasks**; the two real Reading tests are named "Academic Reading — Test 1" and "Test 2" |
+
 ## Next
 
-- **Phase L3 - what Phase L2 left over** (see the backlog): Writing tasks that a Root Teacher manages for everyone, a real table editor
-  for table completion, more than one picture per Writing task.
+- **The importer and Choose TWO** (see the backlog): a PDF's "Choose TWO letters" should arrive as one question covering two numbers; more than one picture per Writing task.
 - **Phase N - practice mode**: hints and warnings that the exam screens deliberately do not have (for Writing: the
   minimum-length and word-count notices; the exam screen never blocks or warns).
 - **Listening follow-ups** (see the backlog): time used for a standalone Listening, the first click after a reload.
