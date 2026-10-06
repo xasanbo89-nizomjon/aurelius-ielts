@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, Gem, Newspaper, ShieldCheck, TrendingUp } from "lucide-react";
+import { Activity, ClipboardCheck, Gem, Newspaper, ShieldCheck, TrendingUp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/button";
 export function AnalyticsSubNav({ isRootTeacher }: { isRootTeacher: boolean }) {
   return (
     <div className="flex flex-wrap gap-2">
+      {/* Phase M - question-by-question analysis of finished tests (own students; a Root Teacher: every student). */}
+      <Button asChild variant="outline" size="sm">
+        <Link href="/teacher/analytics/results">
+          <ClipboardCheck className="size-4" /> Results analysis
+        </Link>
+      </Button>
       <Button asChild variant="outline" size="sm">
         <Link href="/teacher/analytics/growth">
           <TrendingUp className="size-4" /> Growth Tracker

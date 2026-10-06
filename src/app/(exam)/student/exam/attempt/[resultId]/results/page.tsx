@@ -10,7 +10,7 @@ import { formatNumberRange, summarizeAttemptSlots } from "@/lib/exam/question-nu
 import { getResultInsights } from "@/lib/exam/result-insights";
 import { findInProgressFullMockLinkForResult } from "@/lib/full-mock-attempts";
 import { isScaledToTable, officialBandForScore } from "@/lib/analytics/band-conversion";
-import { formatDuration } from "@/lib/format";
+import { formatDuration, formatTimeUsed } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -180,6 +180,12 @@ export default async function ExamResultsPage({
                         {part.correct}/{part.total}
                       </p>
                       {partPercent != null && <p className="text-muted-foreground text-xs">{partPercent}%</p>}
+                      {/* Phase M - only for an attempt that recorded when the student moved between parts; never estimated. */}
+                      {part.seconds != null && (
+                        <p className="text-muted-foreground text-xs" data-testid="part-time">
+                          {formatTimeUsed(part.seconds)} in this part
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 );

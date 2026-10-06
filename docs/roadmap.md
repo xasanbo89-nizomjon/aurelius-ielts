@@ -26,14 +26,13 @@ this page is the map. When a phase ships, move it to "Done".
 
 | L3 | **Test builder correctness** (see `docs/test-builder.md`): **"Choose TWO" covers two question numbers**, one mark per correct letter in any order, agreed by numbering, scoring, review, validator, editor, key paste and both exam screens (no stored test or answer used it, so no stored score moved); **table completion is a real table** (title, header, rows, answer boxes in the cells, a note) on the exam screens and the preview, built in the editor as a grid; **a Writing test (Task 1 + Task 2) is sat as one 60-minute sitting** on the official two-part screen, like in a Full Mock; **a Root Teacher sees and manages every teacher's Writing tasks**; the two real Reading tests are named "Academic Reading — Test 1" and "Test 2" |
 
+| M | **Results analysis** (see `docs/results-analysis.md`): **answer evidence** - a teacher marks where each answer is in the passage or transcript (any test, even a published one), optionally with AI suggestions the teacher confirms; the **review page** shows, for every number, the student's answer, the right answer with its alternatives and the stored verdict, "Show in passage", the student's own highlights and notes (read-only) and filters (all / wrong / unanswered / by type); **statistics for the student** (accuracy by question type with the number of questions behind it, band progress per module, time per part); **analytics for the teacher** (per test, per student, per group; a Root Teacher sees all). The PDF importer reads "Choose TWO" as one question; Phase N (practice mode) was dropped - exams are always official |
+
 ## Next
 
-- **The importer and Choose TWO** (see the backlog): a PDF's "Choose TWO letters" should arrive as one question covering two numbers; more than one picture per Writing task.
-- **Phase N - practice mode**: hints and warnings that the exam screens deliberately do not have (for Writing: the
-  minimum-length and word-count notices; the exam screen never blocks or warns).
+- **More than one picture per Writing task** (see the backlog).
 - **Listening follow-ups** (see the backlog): time used for a standalone Listening, the first click after a reload.
 - **Retire the legacy screens** (`NEXT_PUBLIC_EXAM_UI=legacy`, `?ui=legacy`) after a release cycle on the official ones.
-- **Notes after the test**: show a student's highlight notes on the review page and the teacher's result page.
 
 ## How a Listening sitting runs (Phase I)
 

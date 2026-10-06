@@ -3,15 +3,22 @@
 import { useMemo, useRef, useState } from "react";
 import type { QuestionType } from "@prisma/client";
 
+import { cn } from "@/lib/utils";
 import { findAnswerEvidenceOffset } from "@/lib/exam/answer-evidence";
 import { evaluateSlots, formatNumberRange, numberQuestions, slotStatus, type StoredVerdict } from "@/lib/exam/question-numbering";
+import { chooseSetView, isChooseSet, slotAnswerRows } from "@/lib/exam/slot-answers";
+import { answerKeysOf } from "@/lib/exam/summary-blanks";
+import { QUESTION_TYPE_META, QUESTION_TYPE_ORDER } from "@/lib/exam/question-types";
+import type { ReviewEvidenceRange, ReviewNote, ReviewQuestionHighlight } from "@/lib/exam/review-model";
+import { formatTimeUsed } from "@/lib/format";
 import { resolvePassageAudioSrc } from "@/lib/uploads/audio-constraints";
 import type { ExamAttachment } from "@/components/exam/passage-attachments";
 import { MobileSplitTabs } from "@/components/exam/mobile-split-tabs";
 import { ResizableSplit } from "@/components/exam/resizable-split";
-import { ReviewPassagePanel, type ReviewHighlight } from "@/components/exam/review/review-passage-panel";
+import { ReviewPassagePanel, type EvidenceSpan, type ReviewHighlight } from "@/components/exam/review/review-passage-panel";
 import { ReviewTranscriptPanel } from "@/components/exam/review/review-transcript-panel";
 import { ReviewAudioPlayer, type ReviewAudioPlayerHandle } from "@/components/exam/review/review-audio-player";
+import { scrollToVisible } from "@/components/exam/review/scroll-visible";
 import {
   ReviewQuestionNavigator,
   type ReviewNavigatorItem,
@@ -31,6 +38,10 @@ export type ReviewQuestionData = {
   status: ReviewQuestionStatus;
   /** Phase L1 - the verdict stored when the attempt was handed in; the review goes by it, and only works the answer out from the key when there is none. */
   verdict?: StoredVerdict | null;
+  /** Phase M - where a teacher CONFIRMED the answer is (never an unconfirmed suggestion): what "Show in passage" shows. */
+  evidence?: ReviewEvidenceRange[];
+  /** Phase M - what the student highlighted inside this question while sitting the test (read-only). */
+  highlights?: ReviewQuestionHighlight[];
 };
 
 export type ReviewPassageData = {
@@ -74,6 +85,12 @@ function PerformanceAnalytics({
                       {part.correct}/{part.total}
                     </p>
                     {percent != null && <p className="text-muted-foreground text-xs">{percent}%</p>}
+                    {/* Phase M - only for an attempt that recorded when the student moved between parts. */}
+                    {part.seconds != null && (
+                      <p className="text-muted-foreground text-[11px]" data-testid="part-time">
+                        {formatTimeUsed(part.seconds)}
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -102,6 +119,13 @@ function PerformanceAnalytics({
   );
 }
 
+type StatusFilter = "all" | "wrong" | "unanswered";
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "wrong", label: "Wrong" },
+  { value: "unanswered", label: "Unanswered" },
+];
+
 /**
  * Phase 46 — orchestrates the whole Cambridge-style split-screen review:
  * left panel (passage or, for Listening, transcript) with real answer-
@@ -110,12 +134,17 @@ function PerformanceAnalytics({
  * for Listening. Shared by the student's own review page and the teacher's
  * read-only attempt review — `allowExplainMore` is false for the teacher
  * view since ExplainMore is authorized to the owning student only.
+ *
+ * Phase M - every number shows the student's answer, the right answer (alternatives included) and its stored verdict; "Show in passage" scrolls to and
+ * marks the words a teacher confirmed as the evidence; the student's own highlights and notes are drawn read-only; and the list filters by all / wrong /
+ * unanswered and by question type (the navigator follows the filter).
  */
 export function ExamReviewSplit({
   testType,
   passages,
   questions,
   savedHighlights,
+  notes = [],
   resultId,
   allowExplainMore,
   partBreakdown,
@@ -125,6 +154,8 @@ export function ExamReviewSplit({
   passages: ReviewPassageData[];
   questions: ReviewQuestionData[];
   savedHighlights: ReviewHighlight[];
+  /** Free-text notes the student kept during the attempt (read-only). */
+  notes?: ReviewNote[];
   resultId: string;
   allowExplainMore: boolean;
   partBreakdown: PartBreakdown[];
@@ -133,7 +164,7 @@ export function ExamReviewSplit({
   // Phase A — a matching / summary row covers several IELTS numbers, so numbering (and the navigator) is per NUMBER, not per row: a 40-question test shows 1–40 here exactly as it did in the exam.
   const numberedQuestions = useMemo(
     () =>
-      numberQuestions(questions).map((question) => ({
+      numberQuestions(questions.map((question) => ({ ...question, blankKeys: question.type === "SUMMARY_COMPLETION" ? answerKeysOf(question.correctAnswer) : null }))).map((question) => ({
         ...question,
         slots: evaluateSlots(question, question.studentAnswer ?? undefined, question.verdict ?? (question.status === "correct")),
       })),
@@ -141,43 +172,92 @@ export function ExamReviewSplit({
   );
   const [activeQuestionId, setActiveQuestionId] = useState(numberedQuestions[0]?.id ?? "");
   const [activePassageId, setActivePassageId] = useState(passages[0]?.id ?? "");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<QuestionType | "all">("all");
+  const [shown, setShown] = useState<{ questionId: string; slot: number; nonce: number } | null>(null);
+  const [mobileTab, setMobileTab] = useState<"left" | "right">("right");
   const audioPlayerRef = useRef<ReviewAudioPlayerHandle>(null);
 
   const activeQuestion = numberedQuestions.find((question) => question.id === activeQuestionId) ?? null;
-  const displayedPassageId = activeQuestion?.passageId ?? activePassageId;
+
+  // "Show in passage": the stretch a teacher confirmed, for the question number the student asked about.
+  const shownEvidence = useMemo<(EvidenceSpan & { passageId: string }) | null>(() => {
+    if (!shown) return null;
+    const range = numberedQuestions.find((question) => question.id === shown.questionId)?.evidence?.find((candidate) => candidate.slot === shown.slot);
+    return range ? { start: range.start, end: range.end, passageId: range.passageId, nonce: shown.nonce } : null;
+  }, [shown, numberedQuestions]);
+
+  const displayedPassageId = shownEvidence?.passageId ?? activeQuestion?.passageId ?? activePassageId;
   const displayedPassage = passages.find((passage) => passage.id === displayedPassageId) ?? passages[0] ?? null;
   const displayedPassageIndex = displayedPassage ? passages.findIndex((passage) => passage.id === displayedPassage.id) : -1;
   const displayedSectionLabel =
     passages.length > 1 && displayedPassageIndex >= 0 ? `Part ${displayedPassageIndex + 1} of ${passages.length}` : undefined;
 
-  const evidence = useMemo(() => {
+  const evidence = useMemo<EvidenceSpan | null>(() => {
+    if (shownEvidence) return shownEvidence;
+    // No teacher evidence for this question: the older, honest fallback - the answer's own words, where they literally stand in the passage.
     if (!activeQuestion || !displayedPassage || activeQuestion.passageId !== displayedPassage.id) return null;
+    if ((activeQuestion.evidence?.length ?? 0) > 0) return null;
     return findAnswerEvidenceOffset(displayedPassage.content, activeQuestion.type, activeQuestion.options, activeQuestion.correctAnswer);
-  }, [activeQuestion, displayedPassage]);
+  }, [shownEvidence, activeQuestion, displayedPassage]);
 
   const passageHighlights = useMemo(
     () => (displayedPassage ? savedHighlights.filter((highlight) => highlight.passageId === displayedPassage.id) : []),
     [savedHighlights, displayedPassage]
   );
+  const passageNotes = useMemo(
+    () => (displayedPassage ? notes.filter((note) => note.passageId === displayedPassage.id || (note.passageId == null && displayedPassage.id === passages[0]?.id)) : []),
+    [notes, displayedPassage, passages]
+  );
+
+  // ---- filters --------------------------------------------------------------------------------------------------------------------------------------
+  const typesPresent = useMemo(
+    () => QUESTION_TYPE_ORDER.filter((type) => numberedQuestions.some((question) => question.type === type)).map((type) => ({ type, numbers: numberedQuestions.filter((question) => question.type === type).reduce((sum, question) => sum + question.span, 0) })),
+    [numberedQuestions]
+  );
+  const inType = (question: { type: QuestionType }) => typeFilter === "all" || question.type === typeFilter;
+  const slotMatches = (slot: { correct: boolean; answered: boolean }) => {
+    const status = slotStatus(slot as Parameters<typeof slotStatus>[0]);
+    return statusFilter === "all" || (statusFilter === "wrong" && status === "incorrect") || (statusFilter === "unanswered" && status === "skipped");
+  };
+  const counts = useMemo(() => {
+    const slots = numberedQuestions.filter(inType).flatMap((question) => question.slots);
+    return { all: slots.length, wrong: slots.filter((slot) => slotStatus(slot) === "incorrect").length, unanswered: slots.filter((slot) => slotStatus(slot) === "skipped").length };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numberedQuestions, typeFilter]);
+  const visibleQuestions = numberedQuestions.filter((question) => inType(question) && question.slots.some(slotMatches));
 
   function activateQuestion(id: string) {
     setActiveQuestionId(id);
+    setShown(null);
     const question = numberedQuestions.find((item) => item.id === id);
     if (question?.passageId) setActivePassageId(question.passageId);
   }
 
   function jumpToQuestion(id: string) {
     activateQuestion(id);
-    document.getElementById(`review-question-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setMobileTab("right");
+    requestAnimationFrame(() => scrollToVisible(`[id="review-question-${id}"]`, "start"));
   }
 
-  const navigatorItems: ReviewNavigatorItem[] = numberedQuestions.flatMap((question) =>
-    question.slots.map((slot) => ({
-      id: `${question.id}:${slot.number}`,
-      questionId: question.id,
-      number: slot.number,
-      status: slotStatus(slot),
-    }))
+  function showEvidence(questionId: string, slot: number) {
+    const range = numberedQuestions.find((question) => question.id === questionId)?.evidence?.find((candidate) => candidate.slot === slot);
+    if (!range) return;
+    setActiveQuestionId(questionId);
+    setActivePassageId(range.passageId);
+    setShown({ questionId, slot, nonce: Date.now() });
+    setMobileTab("left");
+  }
+
+  const navigatorItems: ReviewNavigatorItem[] = visibleQuestions.flatMap((question) =>
+    question.slots
+      .filter(slotMatches)
+      .map((slot) => ({
+        id: `${question.id}:${slot.number}`,
+        questionId: question.id,
+        number: slot.number,
+        status: slotStatus(slot),
+      }))
   );
 
   const audioSrc = displayedPassage ? resolvePassageAudioSrc(displayedPassage) : null;
@@ -198,36 +278,84 @@ export function ExamReviewSplit({
         savedHighlights={passageHighlights}
         evidence={evidence}
         attachments={displayedPassage?.attachments ?? []}
+        notes={passageNotes}
       />
     );
 
   const rightPanel = (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="border-border/70 shrink-0 border-b px-4 py-3 sm:px-6">
-        <ReviewQuestionNavigator questions={navigatorItems} currentQuestionId={activeQuestionId} onSelect={jumpToQuestion} />
+      <div className="border-border/70 shrink-0 space-y-3 border-b px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-center gap-2" data-testid="review-filters" role="group" aria-label="Filter the questions">
+          {STATUS_FILTERS.map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              onClick={() => setStatusFilter(filter.value)}
+              aria-pressed={statusFilter === filter.value}
+              data-testid={`review-filter-${filter.value}`}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                statusFilter === filter.value ? "bg-primary text-primary-foreground border-primary" : "border-border/70 hover:bg-secondary"
+              )}
+            >
+              {filter.label} <span className="tabular-nums opacity-80">{counts[filter.value]}</span>
+            </button>
+          ))}
+          {typesPresent.length > 1 && (
+            <select
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value as QuestionType | "all")}
+              aria-label="Filter by question type"
+              data-testid="review-type-filter"
+              className="border-border/70 bg-background ml-auto max-w-[14rem] rounded-full border px-3 py-1 text-xs"
+            >
+              <option value="all">All question types</option>
+              {typesPresent.map(({ type, numbers }) => (
+                <option key={type} value={type}>
+                  {QUESTION_TYPE_META[type].label} ({numbers})
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {navigatorItems.length > 0 ? <ReviewQuestionNavigator questions={navigatorItems} currentQuestionId={activeQuestionId} onSelect={jumpToQuestion} /> : null}
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-        <div className="space-y-3">
-          {numberedQuestions.map((question) => (
-            <ReviewQuestionCard
-              key={question.id}
-              numberLabel={formatNumberRange(question.startNumber, question.endNumber)}
-              grouped={question.span > 1}
-              correctInRow={question.slots.filter((slot) => slot.correct).length}
-              span={question.span}
-              prompt={question.prompt}
-              type={question.type}
-              options={question.options}
-              studentAnswer={question.studentAnswer}
-              correctAnswer={question.correctAnswer}
-              status={question.status}
-              resultId={resultId}
-              questionId={question.id}
-              allowExplainMore={allowExplainMore}
-              active={question.id === activeQuestionId}
-              onActivate={() => activateQuestion(question.id)}
-            />
-          ))}
+        <div className="space-y-3" data-testid="review-list">
+          {visibleQuestions.length === 0 && (
+            <p className="text-muted-foreground py-8 text-center text-sm" data-testid="review-empty">
+              {statusFilter === "wrong" ? "No wrong answers here - well done." : statusFilter === "unanswered" ? "Every question here was answered." : "No questions of this type."}
+            </p>
+          )}
+          {visibleQuestions.map((question) => {
+            const choiceLabelOf = (id: string) => {
+              const choices = (typeof question.options === "object" && question.options !== null ? (question.options as { choices?: { id: string }[] }).choices : undefined) ?? [];
+              return choices.some((choice) => choice.id === id) ? `Option ${id}` : null;
+            };
+            return (
+              <ReviewQuestionCard
+                key={question.id}
+                numberLabel={formatNumberRange(question.startNumber, question.endNumber)}
+                grouped={question.span > 1}
+                correctInRow={question.slots.filter((slot) => slot.correct).length}
+                span={question.span}
+                prompt={question.prompt}
+                type={question.type}
+                lines={slotAnswerRows(question, question.studentAnswer ?? undefined, question.slots)}
+                chooseSet={isChooseSet(question.type, question.options) ? chooseSetView(question, question.studentAnswer ?? undefined) : null}
+                evidenceSlots={new Set((question.evidence ?? []).map((range) => range.slot))}
+                onShowEvidence={(slot) => showEvidence(question.id, slot)}
+                highlights={question.highlights ?? []}
+                choiceLabelOf={choiceLabelOf}
+                status={question.status}
+                resultId={resultId}
+                questionId={question.id}
+                allowExplainMore={allowExplainMore}
+                active={question.id === activeQuestionId}
+                onActivate={() => activateQuestion(question.id)}
+              />
+            );
+          })}
         </div>
       </div>
     </div>
@@ -259,7 +387,7 @@ export function ExamReviewSplit({
           />
         </div>
         <div className="h-full md:hidden">
-          <MobileSplitTabs leftLabel={testType === "LISTENING" ? "Transcript" : "Passage"} left={leftPanel} right={rightPanel} />
+          <MobileSplitTabs leftLabel={testType === "LISTENING" ? "Transcript" : "Passage"} left={leftPanel} right={rightPanel} value={mobileTab} onValueChange={setMobileTab} />
         </div>
       </div>
     </div>

@@ -38,7 +38,7 @@ export async function loadValidatorInput(testId: string): Promise<(ValidateTestI
           questionGroups: { select: { id: true, passageId: true, instructions: true, startQuestion: true, endQuestion: true } },
         },
       },
-      questions: { orderBy: { orderIndex: "asc" }, select: { id: true, passageId: true, questionGroupId: true, type: true, prompt: true, options: true, correctAnswer: true, orderIndex: true } },
+      questions: { orderBy: { orderIndex: "asc" }, select: { id: true, passageId: true, questionGroupId: true, type: true, prompt: true, options: true, correctAnswer: true, orderIndex: true, evidence: true } },
     },
   });
   if (!test || (test.type !== "READING" && test.type !== "LISTENING")) return null;
@@ -64,6 +64,7 @@ export async function loadValidatorInput(testId: string): Promise<(ValidateTestI
       options: question.options,
       correctAnswer: question.correctAnswer,
       order: question.orderIndex,
+      evidence: question.evidence,
     })),
   };
 }

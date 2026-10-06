@@ -61,7 +61,7 @@ export function describeAnalysisFailure(error: unknown): string {
 /** The one place a stored import's rows are turned into a validation — used by the review page (to show it) and confirmImport (to enforce it), so what the teacher sees is exactly what is checked. */
 export function validateImportedTestRows(importedTest: {
   type: TestType;
-  passages: { id: string; title: string; questionGroups: { id: string; startNumber: number; endNumber: number; questionType: QuestionType; questionsJson: unknown }[] }[];
+  passages: { id: string; title: string; questionGroups: { id: string; startNumber: number; endNumber: number; questionType: QuestionType; questionsJson: unknown; instructions?: string | null }[] }[];
   answers: { questionNumber: number; answerText?: string | null }[];
 }): ImportValidation {
   return validateImportedTest(
@@ -74,6 +74,7 @@ export function validateImportedTestRows(importedTest: {
         endNumber: group.endNumber,
         questionType: group.questionType,
         questionsJson: group.questionsJson,
+        instructions: group.instructions,
       })),
     })),
     // A staged answer with no text (the answer key was unreadable at that number — common in scanned PDFs) is an answer that is MISSING: a question with an empty key can never be marked correct, so it must block the import instead of counting as "40 answers".

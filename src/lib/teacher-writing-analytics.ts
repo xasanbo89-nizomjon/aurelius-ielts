@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { studentScopeOf } from "@/lib/exam/test-access";
 import type { GrammarIssueCategory } from "@/lib/ai/prompts/writing-analysis";
 
 export type MistakeFrequency = { category: GrammarIssueCategory; count: number };
@@ -26,12 +27,13 @@ function monthLabel(date: Date): string {
 
 /**
  * Root Teacher Writing analytics (Phase 14, section 9) — every number here is
- * a real query/aggregation over this teacher's own students' real
- * submissions and analyses, scoped exactly like every other teacher
- * dashboard (student.teacherId), never platform-wide.
+ * a real query/aggregation over the real submissions and analyses of the
+ * students this teacher sees: their own students, or - for a Root Teacher,
+ * who sees everyone (Phase M, the same rule as tests and students lists) -
+ * every student.
  */
 export async function getTeacherWritingAnalytics(teacherId: string): Promise<TeacherWritingAnalytics> {
-  const where = { student: { teacherId }, status: { not: "DRAFT" as const } };
+  const where = { student: await studentScopeOf(teacherId), status: { not: "DRAFT" as const } };
 
   const [totalSubmissions, analyzed] = await Promise.all([
     prisma.writingSubmission.count({ where }),

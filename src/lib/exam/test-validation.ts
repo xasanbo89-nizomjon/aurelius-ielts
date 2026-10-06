@@ -2,6 +2,7 @@ import type { QuestionType } from "@prisma/client";
 
 import { numberQuestions, summaryBlankKeys, type NumberedQuestion } from "@/lib/exam/question-numbering";
 import { chooseCountOf, chooseWord } from "@/lib/exam/choose-many";
+import { evidenceCoverage } from "@/lib/exam/answer-evidence-store";
 import { answerKeysOf, parseSummaryText } from "@/lib/exam/summary-blanks";
 
 /**
@@ -58,6 +59,8 @@ export type ValidatorQuestion = {
   correctAnswer: unknown;
   /** Position in the test (ascending). */
   order: number;
+  /** Phase M - the stored `questions.evidence`. LEFT OUT (undefined) by callers that do not know it (the editor's live checklist): the evidence warning is then not given. */
+  evidence?: unknown;
 };
 
 export type IssueTarget = { kind: "test" | "part" | "group" | "question" | "audio" | "times"; partId?: string; groupId?: string; questionId?: string };
@@ -82,6 +85,7 @@ export type TestIssue = {
     | "SUMMARY_BLANKS"
     | "AUDIO_DURATION"
     | "AUDIO_START_TIMES"
+    | "EVIDENCE_MISSING"
     | "PARITY";
   severity: IssueSeverity;
   message: string;
@@ -106,6 +110,20 @@ const hasTextAnswer = (value: unknown): boolean => (typeof value === "string" ? 
 export const TRUE_FALSE_VALUES = ["TRUE", "FALSE", "NOT_GIVEN"] as const;
 
 type Numbered = NumberedQuestion<ValidatorQuestion & { blankKeys: string[] | null }>;
+
+/** [3, 4, 5, 9] -> "3–5, 9" (at most the first few runs, then "…"). */
+export function numberRangesText(numbers: readonly number[], maxRuns = 6): string {
+  const sorted = [...new Set(numbers)].sort((a, b) => a - b);
+  const runs: string[] = [];
+  let i = 0;
+  while (i < sorted.length) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+    runs.push(j > i ? `${sorted[i]}–${sorted[j]}` : String(sorted[i]));
+    i = j + 1;
+  }
+  return runs.length > maxRuns ? `${runs.slice(0, maxRuns).join(", ")}, …` : runs.join(", ");
+}
 
 /** "Question 7" / "Questions 14–18": where a problem sits, in the numbers the student sees. */
 export const questionLabel = (row: { startNumber: number; endNumber: number }) => (row.startNumber === row.endNumber ? `Question ${row.startNumber}` : `Questions ${row.startNumber}–${row.endNumber}`);
@@ -278,6 +296,20 @@ export function validateTestStructure(input: ValidateTestInput): TestValidation 
 
   // ---- questions: text, answers, options ---------------------------------------------------------------------------------------------------------
   for (const row of numbered) issues.push(...checkQuestion(row, row.groupId ? (groupById.get(row.groupId)?.instructions ?? null) : null));
+
+  // ---- Phase M: answer evidence. A WARNING only - a test without evidence is complete; students just get no "Show in passage" for those numbers. ------------
+  if (input.questions.some((question) => question.evidence !== undefined)) {
+    const coverage = evidenceCoverage(sorted.map((question) => ({ id: question.id, type: question.type, options: question.options, correctAnswer: question.correctAnswer, evidence: question.evidence })));
+    if (coverage.missing.length > 0 && coverage.total > 0) {
+      const noTranscript = listening && input.parts.some((part) => part.content.trim().length === 0);
+      add(
+        "EVIDENCE_MISSING",
+        `Answer evidence is not set for ${coverage.missing.length} of ${coverage.total} question${coverage.total === 1 ? "" : "s"} (${numberRangesText(coverage.missing)}): students will not get "Show in passage" for ${coverage.missing.length === 1 ? "it" : "them"}. Set it in "Answer evidence".${noTranscript ? " A Listening part needs its transcript first." : ""}`,
+        { kind: "test" },
+        "warning"
+      );
+    }
+  }
 
   // ---- Listening: the recording's length ------------------------------------------------------------------------------------------------------------
   if (listening) {

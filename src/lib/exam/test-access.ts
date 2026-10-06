@@ -30,3 +30,13 @@ export async function authorScope(teacherId: string): Promise<{ createdById?: st
 
 /** The same rule for a profile a page already holds (it has called requireTeacherProfile). */
 export const scopeFor = (profile: { id: string; isRootTeacher: boolean }): { createdById?: string } => testScope(profile);
+
+/**
+ * Phase M - the same rule for STUDENTS: the `teacherId` condition to put in a query on StudentProfile (or on the `student: { ... }` of a result / submission).
+ * Nothing for a Root Teacher (every student), "mine" for everybody else. Every results / analytics screen of Phase M goes through it.
+ */
+export const studentScope = (actor: TestActor): { teacherId?: string } => (actor.isRootTeacher ? {} : { teacherId: actor.id });
+
+export async function studentScopeOf(teacherId: string): Promise<{ teacherId?: string }> {
+  return studentScope(await getTestActor(teacherId));
+}

@@ -240,6 +240,7 @@ function toValidationPassages(passages: ExtractedPassage[]): ValidationPassageIn
       startNumber: group.startNumber,
       endNumber: group.endNumber,
       questionType: group.questionType,
+      instructions: group.instructions,
       questionsJson: {
         summaryText: group.summaryText,
         wordBank: group.wordBank,

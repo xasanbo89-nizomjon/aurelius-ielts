@@ -1,5 +1,5 @@
 import type { QuestionType, SkillType, TestType } from "@prisma/client";
-import { authorScope } from "@/lib/exam/test-access";
+import { authorScope, studentScopeOf } from "@/lib/exam/test-access";
 
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
@@ -183,12 +183,15 @@ export type MockTestAnalytics = {
 };
 
 export async function getMockTestAnalytics(testId: string, teacherId: string): Promise<MockTestAnalytics | null> {
+  // Phase M - the attempts of the teacher's own students (a Root Teacher: every student), the same scope the question-by-question analysis uses.
+  const students = await studentScopeOf(teacherId);
   const test = await prisma.mockTest.findFirst({
     where: { id: testId, ...(await authorScope(teacherId)) },
     select: {
       title: true,
       questions: { select: { points: true } },
       results: {
+        where: { student: students },
         select: { studentId: true, rawScore: true, bandScore: true, completedAt: true, durationSeconds: true },
       },
     },

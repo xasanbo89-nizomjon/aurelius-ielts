@@ -4,8 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
 import { summarizeAttemptSlots } from "@/lib/exam/question-numbering";
 import { allowedSecondsFor, timeUsedSeconds } from "@/lib/exam/timing";
+import { studentScopeOf } from "@/lib/exam/test-access";
+import { partTimesOf, type PartTime } from "@/lib/exam/part-times";
 import type { ExamAttachment } from "@/components/exam/passage-attachments";
-import type { QuestionType, SkillType, VocabularyStatus } from "@prisma/client";
+import type { HighlightColor, QuestionType, SkillType, VocabularyStatus } from "@prisma/client";
 
 export const BAND_CONVERSATION_PAGE_SIZE = 20;
 
@@ -331,6 +333,8 @@ export type AttemptReviewQuestion = {
   result: "correct" | "incorrect" | "unanswered";
   /** Phase L1 - the stored verdict and marks, so the teacher's review agrees with the stored score. */
   verdict: { isCorrect: boolean | null; pointsAwarded: number | null; points: number } | null;
+  /** Phase M - the stored `questions.evidence` (the review shows only the confirmed items). */
+  evidence: unknown;
 };
 
 export type AttemptReviewPassage = {
@@ -352,6 +356,12 @@ export type AttemptReview = {
   bandScore: number | null;
   passages: AttemptReviewPassage[];
   questions: AttemptReviewQuestion[];
+  /** Phase M - what the student highlighted and noted while sitting the test, shown read-only. */
+  highlights: { id: string; passageId: string; text: string; startOffset: number; endOffset: number; color: HighlightColor; note: string | null }[];
+  questionHighlights: { id: string; questionId: string; region: string; text: string; startOffset: number; endOffset: number; note: string | null }[];
+  notes: { id: string; passageId: string | null; content: string }[];
+  /** Phase M - time per part, only when the attempt recorded when the student moved between parts. */
+  partTimes: PartTime[] | null;
 };
 
 /**
@@ -364,7 +374,8 @@ export type AttemptReview = {
  */
 export async function getAttemptReviewForTeacher(teacherId: string, resultId: string): Promise<AttemptReview | null> {
   const result = await prisma.result.findFirst({
-    where: { id: resultId, student: { teacherId }, completedAt: { not: null }, skill: { in: ["READING", "LISTENING"] } },
+    // Phase M - a teacher sees their own students' attempts; a Root Teacher sees every student's (the same rule as tests).
+    where: { id: resultId, student: await studentScopeOf(teacherId), completedAt: { not: null }, skill: { in: ["READING", "LISTENING"] } },
     select: {
       id: true,
       skill: true,
@@ -394,11 +405,15 @@ export async function getAttemptReviewForTeacher(teacherId: string, resultId: st
           },
           questions: {
             orderBy: { orderIndex: "asc" },
-            select: { id: true, orderIndex: true, passageId: true, prompt: true, type: true, options: true, correctAnswer: true, points: true },
+            select: { id: true, orderIndex: true, passageId: true, prompt: true, type: true, options: true, correctAnswer: true, points: true, evidence: true },
           },
         },
       },
       answers: { select: { questionId: true, response: true, isCorrect: true, pointsAwarded: true } },
+      highlights: { select: { id: true, passageId: true, text: true, startOffset: true, endOffset: true, color: true, note: true } },
+      questionHighlights: { select: { id: true, questionId: true, region: true, text: true, startOffset: true, endOffset: true, note: true } },
+      notes: { select: { id: true, passageId: true, content: true } },
+      partEvents: { orderBy: { enteredAt: "asc" }, select: { passageId: true, enteredAt: true } },
     },
   });
   if (!result) return null;
@@ -433,7 +448,18 @@ export async function getAttemptReviewForTeacher(teacherId: string, resultId: st
         studentAnswer: answer?.response ?? null,
         result: !answer ? "unanswered" : answer.isCorrect ? "correct" : "incorrect",
         verdict: answer ? { isCorrect: answer.isCorrect, pointsAwarded: answer.pointsAwarded, points: question.points } : null,
+        evidence: question.evidence,
       };
+    }),
+    highlights: result.highlights,
+    questionHighlights: result.questionHighlights,
+    notes: result.notes,
+    partTimes: partTimesOf(result.partEvents, {
+      startedAt: result.startedAt,
+      endedAt: result.completedAt,
+      timeUsedSeconds: result.completedAt
+        ? timeUsedSeconds({ startedAt: result.startedAt, endedAt: result.completedAt, allowedSeconds: allowedSecondsFor({ durationMinutes: result.mockTest.durationMinutes, fullMockSection: result.fullMockSectionResult?.section }) })
+        : result.durationSeconds,
     }),
   };
 }

@@ -10,6 +10,7 @@ import { findInProgressFullMockLinkForResult } from "@/lib/full-mock-attempts";
 import { officialBandForScore } from "@/lib/analytics/band-conversion";
 import { summarizeAttemptSlots } from "@/lib/exam/question-numbering";
 import { reanchorHighlight } from "@/lib/exam/text-highlight";
+import { confirmedEvidenceRanges, type ReviewNote } from "@/lib/exam/review-model";
 import { Button } from "@/components/ui/button";
 import { ReviewHeader } from "@/components/exam/review/review-header";
 import { ExamReviewSplit, type ReviewQuestionData } from "@/components/exam/review/exam-review-split";
@@ -39,6 +40,7 @@ export default async function ExamReviewPage({
   const reviewBand = attempt.bandScore ?? officialBandForScore(attempt.skill, attempt.rawScore ?? 0, reviewTotalPoints);
 
   const answerByQuestion = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
+  const passageContent = new Map(attempt.mockTest.passages.map((passage) => [passage.id, passage.content]));
 
   const questions: ReviewQuestionData[] = attempt.mockTest.questions.map((question) => {
     const answer = answerByQuestion.get(question.id);
@@ -53,6 +55,11 @@ export default async function ExamReviewPage({
       status: !answer ? "skipped" : answer.isCorrect ? "correct" : "incorrect",
       // Phase L1 - what the attempt was scored with, so the review always agrees with the stored score.
       verdict: answer ? { isCorrect: answer.isCorrect, pointsAwarded: answer.pointsAwarded, points: question.points } : null,
+      // Phase M - where a teacher CONFIRMED the answer is (a suggestion nobody confirmed never reaches the student), and what this student marked in the question.
+      evidence: confirmedEvidenceRanges(question.evidence, passageContent),
+      highlights: attempt.questionHighlights
+        .filter((highlight) => highlight.questionId === question.id)
+        .map((highlight) => ({ id: highlight.id, questionId: highlight.questionId, region: highlight.region, text: highlight.text, startOffset: highlight.startOffset, endOffset: highlight.endOffset, note: highlight.note })),
     };
   });
 
@@ -68,12 +75,12 @@ export default async function ExamReviewPage({
   const skippedCount = totals.skipped;
 
   // Highlights saved by the old engine were shifted by the passage's paragraph labels; put every one back on the words it was made on (new ones pass through unchanged).
-  const passageContent = new Map(attempt.mockTest.passages.map((passage) => [passage.id, passage.content]));
   const savedHighlights: ReviewHighlight[] = attempt.highlights.flatMap((highlight) => {
     const content = passageContent.get(highlight.passageId);
     const range = content == null ? null : reanchorHighlight(content, highlight);
-    return range ? [{ id: highlight.id, passageId: highlight.passageId, startOffset: range.start, endOffset: range.end, color: highlight.color }] : [];
+    return range ? [{ id: highlight.id, passageId: highlight.passageId, startOffset: range.start, endOffset: range.end, color: highlight.color, text: highlight.text, note: highlight.note }] : [];
   });
+  const notes: ReviewNote[] = attempt.notes.map((note) => ({ id: note.id, passageId: note.passageId, content: note.content }));
 
   const skillLabel = attempt.skill === "LISTENING" ? "Listening" : "Reading";
 
@@ -102,6 +109,7 @@ export default async function ExamReviewPage({
           passages={attempt.mockTest.passages}
           questions={questions}
           savedHighlights={savedHighlights}
+          notes={notes}
           resultId={resultId}
           allowExplainMore
           partBreakdown={insights?.partBreakdown ?? []}

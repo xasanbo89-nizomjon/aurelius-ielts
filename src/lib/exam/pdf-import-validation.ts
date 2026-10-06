@@ -1,7 +1,7 @@
 import type { QuestionType } from "@prisma/client";
 
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
-import { importedQuestionGroupJsonSchema, missingSummaryBlankNumbers, type ImportedQuestionGroupJson } from "@/lib/exam/pdf-import-conversion";
+import { chooseChunks, importedQuestionGroupJsonSchema, missingSummaryBlankNumbers, type ImportedQuestionGroupJson } from "@/lib/exam/pdf-import-conversion";
 import { LISTENING_PART_COUNT, LISTENING_TOTAL_QUESTIONS, listeningPartOf, listeningPartRange } from "@/lib/exam/listening-structure";
 
 /**
@@ -23,6 +23,8 @@ export type ValidationGroupInput = {
   endNumber: number;
   questionType: QuestionType;
   questionsJson: unknown;
+  /** Phase M - the block's printed instructions: "Choose TWO letters" makes a block of whole pairs (see chooseChunks). */
+  instructions?: string | null;
 };
 
 export type ValidationPassageInput = { id: string; title: string; questionGroups: ValidationGroupInput[] };
@@ -112,7 +114,14 @@ export function extractedQuestionNumbers(group: {
   summaryText: string | null;
   matchingPrompts: { id: string }[];
   items: { number: number }[];
+  instructions?: string | null;
 }): number[] {
+  // Phase M - a "Choose TWO" question covers both of its numbers: one item for the pair is enough (the reader often repeats it for the second number, and sometimes does not).
+  const pairs = chooseChunks(group);
+  if (pairs) {
+    const have = new Set(group.items.map((item) => item.number));
+    return pairs.filter((numbers) => numbers.some((n) => have.has(n))).flat();
+  }
   if (group.questionType === "SUMMARY_COMPLETION") {
     if (!group.summaryText || group.summaryText.trim().length === 0) return [];
     const numbers: number[] = [];
@@ -162,6 +171,20 @@ function groupImportProblems(group: ValidationGroupInput, json: ImportedQuestion
     if (json.matchingPrompts.length < 1) problems.push("has no items to match");
     if (json.matchingOptions.length < 2) problems.push("needs at least 2 options (fewer were detected)");
     if (json.matchingPrompts.some((p) => !p.text.trim()) || json.matchingOptions.some((o) => !o.text.trim())) problems.push("has an item or option with no text");
+    return problems;
+  }
+
+  // Phase M - a "Choose TWO" pair is ONE question: it needs its wording and its choices once, from either of its numbers.
+  const pairs = type === "MULTIPLE_CHOICE" ? chooseChunks(group) : null;
+  if (pairs) {
+    for (const numbers of pairs) {
+      const own = json.items.filter((item) => numbers.includes(item.number));
+      if (own.length === 0) continue;
+      const label = questionsLabel(numbers).toLowerCase();
+      if (own.every((item) => !item.prompt.trim())) problems.push(`${label} ha${numbers.length === 1 ? "s" : "ve"} no text`);
+      if (own.some((item) => item.prompt.length > 4000)) problems.push(`${label} ${numbers.length === 1 ? "is" : "are"} longer than 4000 characters`);
+      if (!own.some((item) => item.choices.length >= 2 && item.choices.every((c) => c.text.trim()))) problems.push(`${label} need${numbers.length === 1 ? "s" : ""} at least 2 answer choices with text`);
+    }
     return problems;
   }
 
@@ -239,6 +262,12 @@ export function validateImportedTest(
 
   const questionSet = new Set<number>(owners.keys());
   const answerSet = new Set<number>(answerNumbers);
+  // Phase M - a "Choose TWO" pair is answered by one key entry ("21-22 A, C", "21&22 A/C") as often as by two ("21 A", "22 C"): one entry covers both numbers.
+  for (const passage of passages) {
+    for (const group of passage.questionGroups) {
+      for (const numbers of chooseChunks(group) ?? []) if (numbers.some((n) => answerSet.has(n))) for (const n of numbers) answerSet.add(n);
+    }
+  }
 
   // ---- the test's whole number space: from the lowest to the highest number either side mentions ----
   const everything = [...questionSet, ...answerSet];

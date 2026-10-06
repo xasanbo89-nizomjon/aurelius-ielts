@@ -18,6 +18,9 @@ import { evaluateSlots, numberQuestions, slotAnswered, summarizeAttemptSlots, su
 import { emptyGroup, emptyPart, fromRows, layoutOf, toRows } from "@/lib/exam/builder-model";
 import { applyAnswerKey, parseAnswerKey, previewAnswerKey } from "@/lib/exam/answer-key-paste";
 import { validateTestStructure } from "@/lib/exam/test-validation";
+import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
+import { buildQuestionPayloadsFromGroup, chooseChunks, chooseCountOfInstructions, lettersGiven } from "@/lib/exam/pdf-import-conversion";
+import { extractedQuestionNumbers, validateImportedTest } from "@/lib/exam/pdf-import-validation";
 
 let passed = 0;
 let failed = 0;
@@ -236,6 +239,116 @@ test("key paste: the table has one row per question (21-22 is one row) and a wro
   assert.deepEqual(preview.extra, [], "numbers 2 and 4 belong to the Choose TWO questions, so they are not 'numbers with no question'");
   assert.deepEqual(keyOf(model, "1-2 A\n3 B C\n5 E"), [[], ["B", "C"], ["E"]], "the mismatch is not written");
   assert.match(previewAnswerKey(model, parseAnswerKey("1 A A")).rows[0].reason, /repeats a letter/);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------
+// Phase M - the PDF importer reads "Questions 21 and 22 - Choose TWO letters" as ONE question covering both numbers.
+const CHOOSE_INSTRUCTIONS = "Choose TWO letters, A-E.";
+const blockJson = (items) => ({ summaryText: null, wordBank: [], maxWords: null, matchingPrompts: [], matchingOptions: [], items });
+const itemOf = (number, prompt = "Which TWO things does the writer recommend?", choices = CHOICES) => ({ number, prompt, choices });
+const groupOf = (start, end, items, instructions = CHOOSE_INSTRUCTIONS) => ({ questionType: "MULTIPLE_CHOICE", instructions, startNumber: start, endNumber: end, questionsJson: blockJson(items) });
+const keyMap = (entries) => new Map(Object.entries(entries).map(([n, text]) => [Number(n), text]));
+
+test("importer: a Choose TWO block of two numbers becomes ONE question - two numbers, two marks, the letters from the key in any layout", () => {
+  for (const key of [{ 21: "A", 22: "D" }, { 21: "A, D" }, { 21: "A/D", 22: "A/D" }, { 21: "D and A" }, { 21: "AD" }, { 22: "A,D" }]) {
+    const payloads = buildQuestionPayloadsFromGroup(groupOf(21, 22, [itemOf(21), itemOf(22)]), keyMap(key));
+    assert.equal(payloads.length, 1, JSON.stringify(key));
+    const [payload] = payloads;
+    assert.equal(payload.type, "MULTIPLE_CHOICE");
+    assert.deepEqual(payload.options, { choices: CHOICES, allowMultiple: true, chooseCount: 2 });
+    assert.deepEqual(payload.correctAnswer, ["A", "D"], JSON.stringify(key));
+    assert.equal(payload.points, 2);
+    assert.deepEqual(payload.sourceNumbers, [21, 22]);
+    assert.equal(payload.hasUnmatchedAnswer, false, JSON.stringify(key));
+  }
+});
+
+test("importer: the stored question is a real Choose TWO (two numbers, scores 0 / 1 / 2 marks) and passes the editor's own payload rules", () => {
+  const [payload] = buildQuestionPayloadsFromGroup(groupOf(21, 22, [itemOf(21), itemOf(22)]), keyMap({ 21: "A", 22: "D" }));
+  const row = { id: "q", type: payload.type, prompt: payload.prompt, options: payload.options, correctAnswer: payload.correctAnswer, points: payload.points };
+  // the very schemas tm.validateQuestionPayload runs before anything is written
+  assert.deepEqual(QUESTION_TYPE_META.MULTIPLE_CHOICE.optionsSchema.parse(payload.options), payload.options);
+  assert.deepEqual(QUESTION_TYPE_META.MULTIPLE_CHOICE.responseSchema.parse(payload.correctAnswer), payload.correctAnswer);
+  assert.equal(numberQuestions([row])[0].span, 2);
+  assert.equal(chooseMarks(row.correctAnswer, ["D", "A"]), 2);
+  assert.equal(chooseMarks(row.correctAnswer, ["A", "C"]), 1);
+  assert.equal(chooseMarks(row.correctAnswer, ["B", "C"]), 0);
+  assert.equal(isAnswerCorrect("MULTIPLE_CHOICE", row.correctAnswer, ["D", "A"]), true);
+});
+
+test("importer: one item for the pair is enough (the reader often leaves the second number empty), and the second item may carry no choices", () => {
+  const onlyFirst = buildQuestionPayloadsFromGroup(groupOf(21, 22, [itemOf(21)]), keyMap({ 21: "A", 22: "D" }));
+  assert.equal(onlyFirst.length, 1);
+  assert.deepEqual(onlyFirst[0].sourceNumbers, [21, 22]);
+  const emptySecond = buildQuestionPayloadsFromGroup(groupOf(21, 22, [itemOf(21), itemOf(22, "", [])]), keyMap({ 21: "A", 22: "D" }));
+  assert.equal(emptySecond.length, 1);
+  assert.equal(emptySecond[0].prompt, "Which TWO things does the writer recommend?");
+  assert.deepEqual(emptySecond[0].options.choices, CHOICES);
+});
+
+test("importer: four numbers of 'Choose TWO' are TWO questions of two numbers each; THREE letters make one question of three numbers", () => {
+  const items = [21, 22, 23, 24].map((n) => itemOf(n, n < 23 ? "Which TWO about trees?" : "Which TWO about birds?"));
+  const payloads = buildQuestionPayloadsFromGroup(groupOf(21, 24, items), keyMap({ 21: "A", 22: "B", 23: "C", 24: "E" }));
+  assert.deepEqual(payloads.map((p) => [p.sourceNumbers, p.correctAnswer, p.prompt.slice(-6)]), [[[21, 22], ["A", "B"], "trees?"], [[23, 24], ["C", "E"], "birds?"]]);
+  const three = buildQuestionPayloadsFromGroup(groupOf(25, 27, [25, 26, 27].map((n) => itemOf(n)), "Choose THREE letters, A-E."), keyMap({ 25: "A, C, E" }));
+  assert.deepEqual([three.length, three[0].options.chooseCount, three[0].points, three[0].correctAnswer], [1, 3, 3, ["A", "C", "E"]]);
+});
+
+test("importer: a key that does not name exactly N different letters is flagged for the teacher (never a silent guess), and the import stays valid", () => {
+  const oneLetter = buildQuestionPayloadsFromGroup(groupOf(21, 22, [itemOf(21), itemOf(22)]), keyMap({ 21: "A" }))[0];
+  assert.equal(oneLetter.hasUnmatchedAnswer, true);
+  assert.deepEqual(oneLetter.unmatchedNumbers, [21, 22]);
+  assert.equal(oneLetter.correctAnswer.length, 2, "padded to the number of letters asked so the stored row is still valid");
+  const noKey = buildQuestionPayloadsFromGroup(groupOf(21, 22, [itemOf(21), itemOf(22)]), keyMap({}))[0];
+  assert.equal(noKey.hasUnmatchedAnswer, true);
+  const tooMany = buildQuestionPayloadsFromGroup(groupOf(21, 22, [itemOf(21), itemOf(22)]), keyMap({ 21: "A, B, C" }))[0];
+  assert.equal(tooMany.hasUnmatchedAnswer, true, "three letters for a Choose TWO is a key to check, not an answer to guess from");
+  assert.equal(tooMany.correctAnswer.length, 2, "the stored row still has exactly the number of letters asked");
+  const repeated = buildQuestionPayloadsFromGroup(groupOf(21, 22, [itemOf(21), itemOf(22)]), keyMap({ 21: "A", 22: "A" }))[0];
+  assert.equal(repeated.hasUnmatchedAnswer, true, "the same letter twice is one letter, not two");
+});
+
+test("importer: everything that is NOT a Choose-N block of whole pairs is converted exactly as before", () => {
+  const plain = buildQuestionPayloadsFromGroup(groupOf(21, 22, [itemOf(21, "Which is right?"), itemOf(22, "And this?")], "Choose the correct letter, A, B, C or D."), keyMap({ 21: "A", 22: "D" }));
+  assert.deepEqual(plain.map((p) => [p.sourceNumbers, p.correctAnswer, p.options.allowMultiple, p.options.chooseCount, p.points]), [[[21], ["A"], false, undefined, 1], [[22], ["D"], false, undefined, 1]]);
+  const odd = buildQuestionPayloadsFromGroup(groupOf(21, 23, [21, 22, 23].map((n) => itemOf(n))), keyMap({ 21: "A", 22: "B", 23: "C" }));
+  assert.equal(odd.length, 3, "three numbers do not make whole pairs: left as read");
+  assert.equal(chooseChunks({ questionType: "TRUE_FALSE_NOT_GIVEN", startNumber: 1, endNumber: 2, instructions: CHOOSE_INSTRUCTIONS }), null);
+  assert.equal(chooseCountOfInstructions("Choose the correct letter, A, B, C or D."), 0);
+  assert.equal(chooseCountOfInstructions("Choose TWO letters, A-E."), 2);
+  assert.equal(chooseCountOfInstructions("choose three answers"), 3);
+  assert.equal(chooseCountOfInstructions(null), 0);
+});
+
+test("importer: lettersGiven reads every way a key prints letters", () => {
+  const ids = ["A", "B", "C", "D", "E"];
+  assert.deepEqual(lettersGiven("A, C", ids), ["A", "C"]);
+  assert.deepEqual(lettersGiven("c / e", ids), ["C", "E"]);
+  assert.deepEqual(lettersGiven("A and C", ids), ["A", "C"], "the word 'and' is not a letter");
+  assert.deepEqual(lettersGiven("BD", ids), ["B", "D"]);
+  assert.deepEqual(lettersGiven("21 A 22 C", ids), ["A", "C"], "question numbers are not letters");
+  assert.deepEqual(lettersGiven("A A", ids), ["A"]);
+  assert.deepEqual(lettersGiven("", ids), []);
+});
+
+test("importer validation: both numbers of a pair count as extracted and as answered from one item and one key entry", () => {
+  const group = { ...groupOf(21, 22, [itemOf(21)]), id: "g1" };
+  const withPairs = { id: "p1", title: "Part 3", questionGroups: [{ id: "g1", startNumber: 21, endNumber: 22, questionType: "MULTIPLE_CHOICE", instructions: CHOOSE_INSTRUCTIONS, questionsJson: group.questionsJson }] };
+  assert.deepEqual(extractedQuestionNumbers({ ...group, summaryText: null, matchingPrompts: [], items: group.questionsJson.items }), [21, 22]);
+  const ok = validateImportedTest([withPairs], [21]);
+  assert.deepEqual([ok.totalQuestions, ok.answerCount, ok.questionsWithoutAnswer, ok.missingNumbers], [2, 2, [], []]);
+  assert.deepEqual(ok.issues, []);
+  const same = validateImportedTest([{ ...withPairs, questionGroups: [{ ...withPairs.questionGroups[0], instructions: "Choose the correct letter." }] }], [21]);
+  assert.deepEqual(same.questionsWithoutAnswer, [], "without the Choose TWO wording the block stays what it was: item 21 only; the range's 22 is simply missing");
+  assert.deepEqual(same.passages[0].groups[0].missingNumbers, [22]);
+});
+
+test("importer validation: a pair needs its text and its choices once - an empty second item is no problem, an empty pair is", () => {
+  const ok = validateImportedTest([{ id: "p1", title: "Part 3", questionGroups: [{ id: "g1", startNumber: 21, endNumber: 22, questionType: "MULTIPLE_CHOICE", instructions: CHOOSE_INSTRUCTIONS, questionsJson: blockJson([itemOf(21), itemOf(22, "", [])]) }] }], [21, 22]);
+  assert.deepEqual(ok.issues, []);
+  const bad = validateImportedTest([{ id: "p1", title: "Part 3", questionGroups: [{ id: "g1", startNumber: 21, endNumber: 22, questionType: "MULTIPLE_CHOICE", instructions: CHOOSE_INSTRUCTIONS, questionsJson: blockJson([itemOf(21, "", []), itemOf(22, "", [])]) }] }], [21, 22]);
+  assert.match(bad.issues.map((i) => i.message).join(" | "), /no text/);
+  assert.match(bad.issues.map((i) => i.message).join(" | "), /at least 2 answer choices/);
 });
 
 console.log(`\n${passed} passed${failed ? `, ${failed} FAILED` : ""}`);

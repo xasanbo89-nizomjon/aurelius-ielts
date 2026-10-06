@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { newRowId } from "@/lib/exam/row-ids";
+import { remapEvidencePassages } from "@/lib/exam/answer-evidence-store";
 import { authorScope, canManageTest, getTestActor } from "@/lib/exam/test-access";
 import { OwnershipError, setArchived, setPublished } from "@/lib/exam/test-management";
 import { versionNumbersFor } from "@/lib/exam/version-numbers";
@@ -90,6 +91,8 @@ export async function copyTest(testId: string, teacherId: string, mode: CopyMode
     correctAnswer: json(question.correctAnswer),
     orderIndex: question.orderIndex,
     points: question.points,
+    // Phase M - the copy has the same passage text, so where the answers are carries over (the passages have new ids).
+    evidence: json(remapEvidencePassages(question.evidence, passageIds)),
   }));
 
   const title = `${source.title}${TITLE_SUFFIX[mode]}`;

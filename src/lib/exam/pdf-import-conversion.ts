@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { QuestionType } from "@prisma/client";
 
 import { splitAlternatives, storedAnswer } from "@/lib/exam/answer-alternatives";
+import { MAX_CHOOSE, MIN_CHOOSE } from "@/lib/exam/choose-many";
 
 // Phase L1 - an answer key that prints several accepted answers ("colour / color") keeps all of them (see answer-alternatives).
 export { splitAlternatives };
@@ -117,6 +118,79 @@ export function missingSummaryBlankNumbers(text: string, startNumber: number, en
   return missing;
 }
 
+// ---------------------------------------------------------------------------
+// Phase M - "Choose TWO letters"
+//
+// A printed "Questions 21 and 22 - Choose TWO letters, A-E" is ONE question that covers two numbers (Phase L3): the student ticks two boxes and each correct letter is
+// one mark. The reader hands the block over number by number (an item for 21 and an item for 22, usually the same wording and the same choices), and the answer key
+// prints the pair as "21 A  22 C" or "21-22 A, C" or "21&22 A/C". Everything below turns that back into one question - when the block's own instructions say
+// "Choose TWO" and its numbers make whole pairs. Any other block is converted exactly as before.
+// ---------------------------------------------------------------------------
+
+const CHOOSE_NUMBER_WORDS: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, six: 6, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6 };
+
+/** How many letters a block's printed instructions ask for: "Choose TWO letters, A-E." -> 2, "Choose THREE answers" -> 3; 0 for the usual "Choose the correct letter". */
+export function chooseCountOfInstructions(instructions: string | null | undefined): number {
+  const found = /\bchoose\s+(two|three|four|five|six|[2-6])\b/i.exec((instructions ?? "").replace(/\s+/g, " "));
+  const count = found ? (CHOOSE_NUMBER_WORDS[found[1].toLowerCase()] ?? 0) : 0;
+  return count >= MIN_CHOOSE && count <= MAX_CHOOSE ? count : 0;
+}
+
+/**
+ * The question numbers each "Choose N" question of a block covers - Questions 21-22 with "Choose TWO" = [[21, 22]], Questions 23-26 = [[23, 24], [25, 26]].
+ * Null when the block is not a multiple-choice "Choose N" block, or its numbers are not a whole number of such questions (then it stays as it was read).
+ */
+export function chooseChunks(group: { questionType: QuestionType; startNumber: number; endNumber: number; instructions?: string | null }): number[][] | null {
+  if (group.questionType !== "MULTIPLE_CHOICE") return null;
+  const asked = chooseCountOfInstructions(group.instructions);
+  const size = group.endNumber - group.startNumber + 1;
+  if (asked === 0 || size < asked || size % asked !== 0) return null;
+  return Array.from({ length: size / asked }, (_, index) => rangeArray(group.startNumber + index * asked, group.startNumber + (index + 1) * asked - 1));
+}
+
+/** The choice ids named in an answer-key text, in the order they appear, each once: "A, C", "A/C", "A and C", "AC", "21 A 22 C" all give A and C. */
+export function lettersGiven(raw: string, choiceIds: readonly string[]): string[] {
+  const byUpper = new Map(choiceIds.map((id) => [id.toUpperCase(), id]));
+  const found: string[] = [];
+  const add = (token: string) => {
+    const id = byUpper.get(token.toUpperCase());
+    if (id && !found.includes(id)) found.push(id);
+  };
+  for (const token of raw.split(/[^A-Za-z0-9]+/).filter(Boolean)) {
+    if (byUpper.has(token.toUpperCase())) add(token);
+    else if (/^[A-Za-z]{2,6}$/.test(token) && [...token].every((letter) => byUpper.has(letter.toUpperCase()))) for (const letter of token) add(letter);
+  }
+  return found;
+}
+
+/** One "Choose N" question from the numbers it covers (see chooseChunks). */
+function buildChooseQuestion(numbers: number[], json: ImportedQuestionGroupJson, answersByNumber: Map<number, string>): ConvertedQuestionPayload {
+  const asked = numbers.length;
+  const own = json.items.filter((item) => numbers.includes(item.number));
+  // the same wording and the same choices are printed once; the reader may have repeated them for each number, or left the second number empty
+  const withChoices = own.find((item) => item.choices.length >= 2) ?? own[0];
+  const choices = withChoices?.choices ?? [];
+  const prompt = own.map((item) => item.prompt.trim()).find(Boolean) ?? "";
+  const ids = choices.map((choice) => choice.id);
+
+  const given = lettersGiven(numbers.map((n) => answersByNumber.get(n) ?? "").join(" "), ids);
+  const complete = given.length === asked;
+  // A key that does not name exactly N letters is shown to the teacher as unmatched; the stored placeholder only keeps the import valid (never a guess presented as real).
+  const letters = complete ? given : [...given.slice(0, asked), ...ids.filter((id) => !given.includes(id))].slice(0, asked);
+  const correctAnswer = ids.filter((id) => letters.includes(id));
+
+  return {
+    type: "MULTIPLE_CHOICE",
+    prompt,
+    options: { choices, allowMultiple: true, chooseCount: asked },
+    correctAnswer,
+    points: asked,
+    sourceNumbers: numbers,
+    unmatchedNumbers: complete ? [] : numbers,
+    hasUnmatchedAnswer: !complete,
+  };
+}
+
 function normalizeTrueFalseNotGiven(raw: string): "TRUE" | "FALSE" | "NOT_GIVEN" | null {
   const v = raw.trim().toUpperCase().replace(/\s+/g, "_");
   if (["TRUE", "T", "YES"].includes(v)) return "TRUE";
@@ -195,6 +269,10 @@ export function buildQuestionPayloadsFromGroup(
       },
     ];
   }
+
+  // Phase M - "Choose TWO letters": one question per pair of numbers (see chooseChunks), not one per number.
+  const chooseQuestions = chooseChunks({ questionType: type, startNumber: group.startNumber, endNumber: group.endNumber, instructions: group.instructions });
+  if (chooseQuestions) return chooseQuestions.filter((numbers) => json.items.some((item) => numbers.includes(item.number))).map((numbers) => buildChooseQuestion(numbers, json, answersByNumber));
 
   // Per-number types: MULTIPLE_CHOICE, TRUE_FALSE_NOT_GIVEN, FILL_IN_BLANK, SHORT_ANSWER, SENTENCE_COMPLETION — one Question row per number, same as a teacher authoring them by hand.
   return json.items.map((item) => {

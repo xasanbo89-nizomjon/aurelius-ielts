@@ -12,6 +12,8 @@ import { getWritingBandTrend, getSpeakingBandTrend } from "@/lib/analytics/stude
 import { getWeeklyActivityBreakdown } from "@/lib/study-activity";
 import { getSubscriptionHistory } from "@/lib/subscription-history";
 import { getStudentResultsHistory } from "@/lib/analytics/teacher-results";
+import { getTypeAccuracy } from "@/lib/analytics/results-analysis";
+import { AccuracyByType } from "@/components/analytics/accuracy-by-type";
 import { VOCABULARY_STATUS_LABELS, VOCABULARY_STATUS_EMOJI } from "@/lib/labels";
 import { formatRelativeTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -44,7 +46,7 @@ export default async function TeacherStudentDetailPage({
   const student = await getStudentForTeacher(profile.id, studentId, profile.isRootTeacher);
   if (!student) notFound();
 
-  const [stats, activity, trends, progressHistory, writingTrend, speakingTrend, weeklyActivity, subscriptionHistory, resultsHistory] = await Promise.all([
+  const [stats, activity, trends, progressHistory, writingTrend, speakingTrend, weeklyActivity, subscriptionHistory, resultsHistory, typeAccuracy] = await Promise.all([
     getStudentVocabularyStats(studentId),
     getStudentVocabularyActivity(studentId),
     getStudentVocabularyTrends(studentId),
@@ -55,6 +57,8 @@ export default async function TeacherStudentDetailPage({
     getSubscriptionHistory(studentId),
     // Authorizes again on its own (the student must be this teacher's, or this is the root roster view) — see getStudentResultsHistory.
     getStudentResultsHistory(profile.id, studentId, profile.isRootTeacher),
+    // Phase M - access to this student was checked just above (their teacher, or a Root Teacher), so the analysis is for exactly this student.
+    getTypeAccuracy({ studentId }),
   ]);
 
   const readingHistory = progressHistory.filter((p) => p.skill === "READING");
@@ -71,6 +75,16 @@ export default async function TeacherStudentDetailPage({
       <PageHeader title={student.name ?? "Student"} description={student.email} />
 
       <TeacherAIReportCard studentId={studentId} />
+
+      <section className="space-y-3" data-testid="student-results-analysis">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-display text-xl font-medium tracking-tight">Accuracy by question type</h2>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/teacher/analytics/results?student=${studentId}`}>Open the full results analysis</Link>
+          </Button>
+        </div>
+        <AccuracyByType rows={typeAccuracy} emptyText="This student has not finished a Reading or Listening test yet." />
+      </section>
 
       {resultsHistory && <StudentResultsHistorySection history={resultsHistory} />}
 

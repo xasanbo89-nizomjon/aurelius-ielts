@@ -311,6 +311,8 @@ model StudentProfile {
   redeemedMockAccessCodes   MockAccessCode[]           @relation("MockAccessCodeRedeemed")
   mockAccessCodeRedemptions MockAccessCodeRedemption[] @relation("MockAccessCodeRedemptions")
 
+  // Phase M - every teacher screen is scoped by "my students" (a Root Teacher sees all).
+  @@index([teacherId])
   @@map("student_profiles")
 }
 
@@ -363,6 +365,8 @@ model TeacherProfile {
   importedTests           ImportedTest[]
   /// Phase 51 — Mock Access Code System.
   mockAccessCodes         MockAccessCode[]
+  /// Phase M - the "Suggest with AI" requests of the evidence editor (what its daily limit counts).
+  evidenceSuggestionLogs  EvidenceSuggestionLog[]
 
   @@map("teacher_profiles")
 }
@@ -551,6 +555,11 @@ model Question {
   correctAnswer Json?
   orderIndex    Int          @default(0)
   points        Int          @default(1)
+  /// Phase M - where the answer is in the passage / transcript, set by a teacher: { v: 1, items: [{ slot, passageId, start, end, quote, state, source, at }] }
+  /// (see src/lib/exam/answer-evidence-store.ts). Offsets are character offsets into Passage.content - the same text every highlight is measured in. `slot` is
+  /// the question NUMBER within this row (0 for a single question; blank / prompt / letter n for a matching, summary or Choose-TWO row). A student only ever
+  /// sees items whose state is CONFIRMED. Null = no evidence set, which is what every question had before this phase.
+  evidence      Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -561,6 +570,7 @@ model Question {
   bookmarks             QuestionBookmark[]
   highlights            QuestionHighlight[]
 
+  @@index([mockTestId])
   @@map("questions")
 }
 
@@ -735,9 +745,30 @@ model Result {
   /// Phase 34 — set only when this attempt was taken as the Reading or
   /// Listening section of a Full Mock Test, not a standalone attempt.
   fullMockSectionResult FullMockSectionResult?
+  /// Phase M - the moments the student moved to another part during this attempt (time per part on the results screens).
+  partEvents            ResultPartEvent[]
 
   @@index([completedAt, deadlineAt])
+  // Phase M - "my attempts" and "this student's attempts" (statistics, teacher analytics).
+  @@index([studentId, completedAt])
+  // Phase M - "every attempt at this test" (per-test analytics).
+  @@index([mockTestId, completedAt])
   @@map("results")
+}
+
+/// Phase M - one row each time the student's screen moved to ANOTHER part (passage / section) of an attempt, written from the navigation event the exam
+/// screens already send ("last seen question"); nothing new is asked of the exam screen. The first row of an attempt is its opening part at the moment it
+/// started. Time in a part = from its row to the next row (the last one ends when the attempt was handed in). An attempt with no rows has no part times:
+/// they are only shown for attempts that have them, never estimated. `passageId` is deliberately not a foreign key: a test with attempts is never edited.
+model ResultPartEvent {
+  id        String   @id @default(cuid())
+  resultId  String
+  result    Result   @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  passageId String
+  enteredAt DateTime @default(now())
+
+  @@index([resultId, enteredAt])
+  @@map("result_part_events")
 }
 
 model Answer {
@@ -798,6 +829,8 @@ model Highlight {
 
   createdAt DateTime @default(now())
 
+  // Phase M - the review page loads an attempt's highlights.
+  @@index([resultId])
   @@map("highlights")
 }
 
@@ -846,6 +879,8 @@ model Note {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Phase M - the review page loads an attempt's notes.
+  @@index([resultId])
   @@map("notes")
 }
 
@@ -2188,11 +2223,30 @@ model AiSettings {
   /// src/lib/speaking.ts assertWithinSpeakingRateLimit. Counted directly
   /// from SpeakingSubmission rows created today, no separate log table.
   dailySpeakingEvaluationLimit Int @default(15)
+  /// Phase M - the teacher has switched on "Suggest with AI" in the answer-evidence editor. Null = off (what every existing row and a missing row mean).
+  evidenceSuggestionsEnabled   Boolean?
+  /// Phase M - AI evidence suggestions this teacher may ask for per day. Null = the default (see src/lib/ai/evidence-suggestions.ts).
+  dailyEvidenceSuggestionLimit Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("ai_settings")
+}
+
+/// Phase M - one row per "Suggest with AI" request in the answer-evidence editor, whether or not the teacher then accepted the suggestion: this is what the
+/// teacher's daily limit counts (a rejected suggestion cost an AI call too). `mockTestId` / `questionId` are plain ids, not foreign keys: the log outlives a
+/// deleted test.
+model EvidenceSuggestionLog {
+  id         String         @id @default(cuid())
+  teacherId  String
+  teacher    TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  mockTestId String?
+  questionId String?
+  createdAt  DateTime       @default(now())
+
+  @@index([teacherId, createdAt])
+  @@map("evidence_suggestion_logs")
 }
 
 // ---------------------------------------------------------------------------

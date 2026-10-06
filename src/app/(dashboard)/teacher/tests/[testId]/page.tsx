@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BarChart3, Eye } from "lucide-react";
+import { BarChart3, Eye, Highlighter } from "lucide-react";
 
 import { scopeFor } from "@/lib/exam/test-access";
+import { getEvidenceCoverageForTest } from "@/lib/exam/answer-evidence-server";
 import { getTestEditState } from "@/lib/exam/test-lock";
 import { getTestVersionInfo } from "@/lib/exam/test-versions";
 import { getBuilderState } from "@/lib/exam/test-builder";
@@ -54,7 +55,7 @@ export default async function TestEditorPage({
 
   const testType = test.type === "LISTENING" ? "LISTENING" : "READING";
   // Phase L1 - what may still be changed (published / attempted / in a live Full Mock tests are read-only) and where this test sits among its versions.
-  const [editState, versionInfo] = await Promise.all([getTestEditState(test.id), getTestVersionInfo(test.id)]);
+  const [editState, versionInfo, evidence] = await Promise.all([getTestEditState(test.id), getTestVersionInfo(test.id), getEvidenceCoverageForTest(test.id)]);
 
   // Phase L2 - a test that may still be changed opens in the structured editor; a locked one shows its content read-only, as before.
   const editable = editState.editable && (test.type === "READING" || test.type === "LISTENING");
@@ -87,6 +88,11 @@ export default async function TestEditorPage({
             <Button asChild variant="outline" size="sm">
               <Link href={`/teacher/tests/${test.id}/analytics`}>
                 <BarChart3 className="size-4" /> Analytics
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/teacher/tests/${test.id}/evidence`} data-testid="evidence-link">
+                <Highlighter className="size-4" /> Answer evidence{evidence.total > 0 ? ` (${evidence.confirmed}/${evidence.total})` : ""}
               </Link>
             </Button>
             {!builder && (

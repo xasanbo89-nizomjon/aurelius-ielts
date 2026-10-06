@@ -6,11 +6,14 @@ export function BarChart({
   height = 160,
   color = "var(--accent)",
   ariaLabel,
+  maxBarWidth,
 }: {
   data: BarChartDatum[];
   height?: number;
   color?: string;
   ariaLabel: string;
+  /** Stops a chart with only a few bars from stretching them across the whole width; the bars are then centred. Unset = bars fill the width. */
+  maxBarWidth?: number;
 }) {
   const width = 600;
   const paddingLeft = 8;
@@ -22,7 +25,9 @@ export function BarChart({
   const plotWidth = width - paddingLeft - paddingRight;
   const plotHeight = height - paddingTop - paddingBottom;
   const barGap = 8;
-  const barWidth = data.length > 0 ? (plotWidth - barGap * (data.length - 1)) / data.length : 0;
+  const fittedWidth = data.length > 0 ? (plotWidth - barGap * (data.length - 1)) / data.length : 0;
+  const barWidth = maxBarWidth ? Math.min(fittedWidth, maxBarWidth) : fittedWidth;
+  const startOffset = maxBarWidth ? (plotWidth - (barWidth * data.length + barGap * Math.max(0, data.length - 1))) / 2 : 0;
 
   return (
     <div className="w-full">
@@ -37,7 +42,7 @@ export function BarChart({
         />
         {data.map((d, i) => {
           const barHeight = (d.value / maxValue) * plotHeight;
-          const x = paddingLeft + i * (barWidth + barGap);
+          const x = paddingLeft + startOffset + i * (barWidth + barGap);
           const y = height - paddingBottom - barHeight;
           return (
             <g key={i}>

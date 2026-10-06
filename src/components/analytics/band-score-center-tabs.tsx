@@ -12,6 +12,7 @@ import type { ReadingListeningMistake, WritingMistake, SpeakingReviewEntry } fro
 
 export function BandScoreCenterTabs({
   overviewContent,
+  resultsContent,
   resultCards,
   readingMistakes,
   listeningMistakes,
@@ -19,6 +20,8 @@ export function BandScoreCenterTabs({
   speakingReviews,
 }: {
   overviewContent: ReactNode;
+  /** Phase M - accuracy by question type, band progress per module, time per part. */
+  resultsContent: ReactNode;
   resultCards: ResultSummaryCard[];
   readingMistakes: ReadingListeningMistake[];
   listeningMistakes: ReadingListeningMistake[];
@@ -29,6 +32,7 @@ export function BandScoreCenterTabs({
     <Tabs defaultValue="overview">
       <TabsList>
         <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsTrigger value="results">Results analysis</TabsTrigger>
         <TabsTrigger value="history">Test History</TabsTrigger>
         <TabsTrigger value="mistakes">Mistakes</TabsTrigger>
         <TabsTrigger value="analysis">AI Analysis</TabsTrigger>
@@ -38,6 +42,8 @@ export function BandScoreCenterTabs({
       <TabsContent value="overview" className="space-y-8">
         {overviewContent}
       </TabsContent>
+
+      <TabsContent value="results">{resultsContent}</TabsContent>
 
       <TabsContent value="history">
         <TestHistoryTab results={resultCards} />

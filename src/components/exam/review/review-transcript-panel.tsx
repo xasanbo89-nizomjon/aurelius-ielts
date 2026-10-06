@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { EvidenceSpan } from "@/components/exam/review/review-passage-panel";
 import type { ReviewAudioPlayerHandle } from "@/components/exam/review/review-audio-player";
+import { scrollToVisible } from "@/components/exam/review/scroll-visible";
 
 type SearchMatch = { start: number; end: number };
 type TimestampMatch = { start: number; end: number; seconds: number; label: string };
@@ -71,14 +72,13 @@ export function ReviewTranscriptPanel({
 
   useEffect(() => {
     if (evidence == null) return;
-    const el = document.querySelector(`[data-evidence="true"]`);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [evidence]);
+    // Phase M - the panel is drawn twice (desktop split + phone tabs): scroll the copy that is on screen, again each time "Show in passage" is pressed.
+    scrollToVisible(`[data-evidence="true"]`);
+  }, [evidence?.start, evidence?.end, evidence?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (matches.length === 0) return;
-    const el = document.querySelector(`[data-match-index="${currentMatchIndex}"]`);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    scrollToVisible(`[data-match-index="${currentMatchIndex}"]`);
   }, [currentMatchIndex, matches.length]);
 
   function goToMatch(delta: number) {

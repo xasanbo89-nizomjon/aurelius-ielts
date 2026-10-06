@@ -4,11 +4,13 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Gauge, Percent, Timer, Users } from "lucide-react";
 
 import { requireTeacherProfile } from "@/lib/session";
-import { getMockTestAnalytics, getQuestionAnalytics } from "@/lib/analytics/teacher-insights";
+import { getMockTestAnalytics } from "@/lib/analytics/teacher-insights";
+import { studentScope } from "@/lib/exam/test-access";
+import { getBandDistribution, getQuestionAnalysis, getResultsOverview, getStudentRows, mostMissed } from "@/lib/analytics/results-analysis";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { QuestionAnalyticsTable } from "@/components/analytics/question-analytics-table";
+import { ResultsAnalysisView } from "@/components/analytics/results-analysis-view";
 
 export const metadata: Metadata = { title: "Test Analytics" };
 
@@ -20,12 +22,12 @@ export default async function TestAnalyticsPage({
   const { testId } = await params;
   const { profile } = await requireTeacherProfile();
 
-  const [mockTestAnalytics, questionAnalytics] = await Promise.all([
-    getMockTestAnalytics(testId, profile.id),
-    getQuestionAnalytics(testId, profile.id),
-  ]);
+  const mockTestAnalytics = await getMockTestAnalytics(testId, profile.id);
+  if (!mockTestAnalytics) notFound();
 
-  if (!mockTestAnalytics || !questionAnalytics) notFound();
+  // Phase M - question by question, from the stored marks of the teacher's own students' attempts (a Root Teacher: every student's).
+  const filter = { ...studentScope(profile), testId };
+  const [overview, bands, analysis, students] = await Promise.all([getResultsOverview(filter), getBandDistribution(filter), getQuestionAnalysis(filter), getStudentRows(filter)]);
 
   return (
     <>
@@ -62,10 +64,16 @@ export default async function TestAnalyticsPage({
         />
       </div>
 
-      <section className="space-y-4">
-        <h2 className="font-display text-xl font-medium tracking-tight">Question Analytics</h2>
-        <QuestionAnalyticsTable questions={questionAnalytics} />
-      </section>
+      <ResultsAnalysisView
+        overview={overview}
+        bands={bands}
+        accuracy={analysis.accuracy}
+        questions={mostMissed(analysis.questions, 10)}
+        allQuestions={analysis.questions}
+        students={students}
+        showSummary={false}
+        emptyHint="None of your students has finished this test yet."
+      />
     </>
   );
 }

@@ -6,17 +6,17 @@ Planned work that is not built yet. When a phase ships, delete its section.
 
 Phase L1 and L2 are done (`docs/test-builder.md`). Known limits and what could come next:
 
-- **The PDF importer still reads a "Choose TWO" as two separate questions.** The editor, the validator, the screens and the scoring treat a Choose TWO as one
-  question covering two numbers (one mark per correct letter, any order), but the importer takes the AI reader's answer one number at a time: a PDF's "Questions 21
-  and 22 - Choose TWO letters" arrives as two single-answer questions (21 = one letter, 22 = the other), which are order-dependent. Fix: when a group's instructions
-  say "Choose TWO / THREE" and consecutive questions share the same choices, merge them into one `chooseCount` question. Until then, open an imported test in the
-  editor and turn the pair into one Choose TWO question.
+- **The PDF importer's "Choose TWO" is tested offline only.** Since Phase M a block whose instructions say "Choose TWO / THREE letters" and whose numbers make
+  whole pairs is imported as one question per pair (`chooseCount`, one mark per letter), whichever way the answer key prints the letters ("21 A 22 C", "21-22 A, C").
+  It is covered by `check:choose` with hand-made reader output; no real PDF with a Choose TWO has been run through the AI reader yet. A key that does not name exactly
+  the right number of different letters is flagged in the import warnings (the stored question is padded so the import stays valid).
 - **A table is cells of text and answer boxes.** The grid has a header row, rows, columns, a title and a note; no merged cells (a heading across the whole width is
   kept if a table has one, but the grid cannot make one) and no formatting inside a cell.
 - **A Writing test has two reports.** Both parts are sat together and handed in together, but each is stored, marked and reported as its own submission (the student
   lands on the task list and opens each report); there is no single combined result page for a Writing test.
-- **The Root Teacher's Writing analytics are still "your students".** The task bank and the student pickers show everything to a Root Teacher; the analytics cards at
-  the top of `/teacher/writing` still count only the Root Teacher's own students.
+- **The Writing Reviews queue is still "your students".** Since Phase M the analytics cards at the top of `/teacher/writing` count every student for a Root Teacher
+  (the same `studentScope` rule as tests), like the task bank and the student pickers; the review queue, its counters and the teacher's feedback on a submission
+  (`/teacher/writing-reviews`) still cover only the Root Teacher's own students.
 - **One picture per Writing task.** A Task 1 with two charts needs a second picture; the screen draws one.
 - **The PDF page is rendered by WebAssembly (PDFium).** It works with `next build && next start`; it has not been run on Vercel itself. If the first
   Writing PDF there fails, check that `next.config.ts` (`serverExternalPackages`, `outputFileTracingIncludes`) is applied and that the function has enough memory
@@ -42,8 +42,8 @@ Phase L1 and L2 are done (`docs/test-builder.md`). Known limits and what could c
 
 ## Writing follow-ups (after Phase J)
 
-- **Practice mode (Phase N).** The exam screen has no minimum-length notice and no word-count warning on purpose; they belong
-  to a practice mode.
+- **No minimum-length notice or word-count warning, on purpose.** The platform is paid and has no practice mode: exams always run in the
+  official way, so the Writing screen never warns or blocks (a practice mode will not be built).
 - **Highlights and notes on the task text** are kept in the browser (they survive a reload on the same computer, they do not
   follow the student to another one, and the teacher does not see them). Keeping them on the server needs a table keyed by
   the submission.
@@ -79,10 +79,24 @@ Phase L1 and L2 are done (`docs/test-builder.md`). Known limits and what could c
 - **A teacher who is not the student's teacher** but made the mock sees that student's sitting in the Live Monitor (the same rule the
   Mock Results page has always had).
 
+## Phase M follow-ups (results analysis)
+
+- **Evidence is set by hand (or confirmed from an AI suggestion).** No test has any yet: the review's "Show in passage" appears number by number as teachers set it
+  (`/teacher/tests/<id>/evidence`). Without evidence the review still marks the answer's own words where they literally stand in the passage (the Phase 46 search).
+  A Listening part needs a transcript before evidence can be set. One range per question number; two places for one answer need a second range (not built).
+- **Time per part only exists for attempts taken after Phase M.** Older attempts, and attempts where the student never changed part, show none; a Listening attempt
+  records the part changes the screen makes by itself with the recording. The time in a part is counted from when the server noted the move (the screen sends it about
+  a second after the move), so it is accurate to a second or two.
+- **The older Weakness / Strength trackers** on the Band Score Center's Overview tab count answer rows (a matching or summary row counts once; a question left empty
+  does not count at all). The new Results analysis tab counts question numbers and includes left-empty questions, so its figures can differ. Moving the old trackers onto
+  the new numbers is a small change if you want one figure everywhere.
+- **Writing statistics are the teacher's mark** (with the AI estimate drawn separately). There is no per-criterion trend yet.
+- **The Writing Reviews queue is still "your students"** (see above); the results analysis is not affected.
+- **Dates in the filters are UTC** (a result finished late in the evening in Tashkent counts for the next day in UTC).
+- **`DIRECT_URL`:** the app uses Neon's pooled address; migrations should use the direct one (`directUrl` in the Prisma datasource). Not set up yet - see the report of Phase M.
+
 ## Later phases
 
-- Show a student's highlight notes after the test is handed in (the review page and the teacher's result page draw the
-  highlights but not the notes).
 - Red highlights: `HighlightColor.RED` exists in the database (Postgres cannot drop an enum value) but nothing draws or
   stores it; the menu has one highlight colour, yellow.
 - Retire the old Reading and Listening screens (`NEXT_PUBLIC_EXAM_UI=legacy`) once the official ones have had a

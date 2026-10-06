@@ -8,6 +8,7 @@ import { getTestEditState, assertTestEditable, type TestEditState } from "@/lib/
 import { OwnershipError, deleteStoredFilesIfUnreferenced } from "@/lib/exam/test-management";
 import { fromRows, toRows, type BuilderModel, type Skill } from "@/lib/exam/builder-model";
 import { newRowId } from "@/lib/exam/row-ids";
+import { parseEvidence, reanchorItems, serializeEvidence } from "@/lib/exam/answer-evidence-store";
 import { ensureRecordingLengths } from "@/lib/exam/recording-length";
 import { assertOwnListeningAudio } from "@/lib/full-mock-quick-build";
 import { resolvePassageAudioSrc } from "@/lib/uploads/audio-constraints";
@@ -210,6 +211,20 @@ export async function saveBuilder(testId: string, teacherId: string, model: Buil
       const keepGroups = rows.groups.map((g) => g.id);
       const keepPassages = rows.passages.map((p) => p.id);
       await tx.$executeRaw`DELETE FROM "questions" WHERE "mockTestId" = ${testId} AND "id" <> ALL(${keepQuestions}::text[])`;
+
+      // Phase M - answer evidence follows its words: a passage whose text was edited has the evidence of its questions looked for again by quote; where the
+      // words are gone the item is dropped (never left pointing at other words). The question upserts above never write the evidence column.
+      const oldContent = new Map(test.passages.map((p) => [p.id, p.content]));
+      const edited = rows.passages.filter((p) => oldContent.has(p.id) && oldContent.get(p.id) !== p.content);
+      if (edited.length > 0) {
+        const withEvidence = await tx.$queryRaw<{ id: string; evidence: unknown }[]>`SELECT "id", "evidence" FROM "questions" WHERE "mockTestId" = ${testId} AND "evidence" IS NOT NULL`;
+        for (const question of withEvidence) {
+          const before = parseEvidence(question.evidence);
+          if (!before.some((item) => edited.some((p) => p.id === item.passageId))) continue;
+          const after = edited.reduce((items, p) => reanchorItems(items, p.id, p.content).items, before);
+          if (JSON.stringify(after) !== JSON.stringify(before)) await tx.$executeRaw`UPDATE "questions" SET "evidence" = ${jsonb(serializeEvidence(after))}, "updatedAt" = now() WHERE "id" = ${question.id}`;
+        }
+      }
       await tx.$executeRaw`DELETE FROM "question_groups" WHERE "passageId" IN (SELECT "id" FROM "passages" WHERE "mockTestId" = ${testId}) AND "id" <> ALL(${keepGroups}::text[])`;
       if (removedAttachmentIds.length > 0) await tx.mediaUsage.deleteMany({ where: { context: "PASSAGE_ATTACHMENT", referenceId: { in: removedAttachmentIds } } });
       await tx.$executeRaw`DELETE FROM "passages" WHERE "mockTestId" = ${testId} AND "id" <> ALL(${keepPassages}::text[])`;

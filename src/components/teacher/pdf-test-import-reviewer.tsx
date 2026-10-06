@@ -20,7 +20,8 @@ import {
   upsertImportedAnswerAction,
 } from "@/actions/pdf-test-import.actions";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
-import { importedQuestionGroupJsonSchema } from "@/lib/exam/pdf-import-conversion";
+import { chooseChunks, importedQuestionGroupJsonSchema } from "@/lib/exam/pdf-import-conversion";
+import { chooseWord } from "@/lib/exam/choose-many";
 import { formatNumberRanges, type GroupStats, type ImportValidation } from "@/lib/exam/pdf-import-validation";
 import type { ImportedTestForReview } from "@/lib/pdf-test-import";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -401,6 +402,11 @@ function ImportedQuestionGroupCard({ importedTestId, group, stats }: { importedT
   }
 
   const missingToShow = (stats?.missingNumbers ?? []).filter((n) => !items.some((item) => item.number === n));
+  // Phase M - "Choose TWO letters" is imported as ONE question per pair of numbers (one mark per correct letter, any order), not one question per number.
+  const pairs = chooseChunks({ questionType: group.questionType, startNumber: group.startNumber, endNumber: group.endNumber, instructions });
+  const chooseNote = pairs
+    ? `"Choose ${chooseWord(pairs[0].length)}": ${pairs.map((numbers) => `questions ${numbers[0]}–${numbers[numbers.length - 1]}`).join(" and ")} will be imported as ${pairs.length === 1 ? "ONE question" : `${pairs.length} questions`} that ${pairs.length === 1 ? "covers" : "cover"} ${pairs[0].length} numbers each - one mark per correct letter, in any order. The answer key may list the letters under either number.`
+    : null;
   const canAddByHand = group.questionType !== "MULTIPLE_CHOICE" && group.questionType !== "MATCHING" && group.questionType !== "SUMMARY_COMPLETION";
 
   function addMissing(number: number) {
@@ -427,6 +433,11 @@ function ImportedQuestionGroupCard({ importedTestId, group, stats }: { importedT
         <div className="space-y-1.5">
           <Label className="text-xs">Instructions</Label>
           <Textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={2} className="text-sm" />
+          {chooseNote && (
+            <p className="text-muted-foreground text-[11px]" data-testid="choose-note">
+              {chooseNote}
+            </p>
+          )}
         </div>
 
         {group.questionType === "SUMMARY_COMPLETION" && (

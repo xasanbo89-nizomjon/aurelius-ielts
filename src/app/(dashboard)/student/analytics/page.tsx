@@ -26,6 +26,8 @@ import { ProgressHistoryTable } from "@/components/analytics/progress-history-ta
 import { BandScoreHeader } from "@/components/analytics/band-score-header";
 import { BandScoreCenterTabs } from "@/components/analytics/band-score-center-tabs";
 import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
+import { getStudentBandSeries, getStudentPartTimes, getTypeAccuracy } from "@/lib/analytics/results-analysis";
+import { StudentStatistics } from "@/components/analytics/student-statistics";
 
 export const metadata: Metadata = { title: "Band Score Center" };
 
@@ -48,6 +50,9 @@ export default async function StudentAnalyticsPage() {
     readingListeningMistakes,
     writingMistakes,
     speakingReviews,
+    typeAccuracy,
+    bandSeries,
+    partTimes,
   ] = await Promise.all([
     getResultCards(profile.id),
     getSkillPerformance(profile.id),
@@ -60,6 +65,10 @@ export default async function StudentAnalyticsPage() {
     getReadingListeningMistakes(profile.id),
     getWritingMistakes(profile.id),
     getSpeakingReviews(profile.id),
+    // Phase M - from the marks each attempt was stored with; a student sees only themselves.
+    getTypeAccuracy({ studentId: profile.id }),
+    getStudentBandSeries(profile.id),
+    getStudentPartTimes(profile.id),
   ]);
 
   const readingMistakes = readingListeningMistakes.filter((r) => r.skill === "READING");
@@ -87,6 +96,7 @@ export default async function StudentAnalyticsPage() {
       />
 
       <BandScoreCenterTabs
+        resultsContent={<StudentStatistics accuracy={typeAccuracy} series={bandSeries} partTimes={partTimes} />}
         resultCards={resultCards}
         readingMistakes={readingMistakes}
         listeningMistakes={listeningMistakes}

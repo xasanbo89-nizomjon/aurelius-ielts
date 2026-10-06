@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META, QUESTION_TYPE_ORDER } from "@/lib/exam/question-types";
 import { summarizeAttemptSlots } from "@/lib/exam/question-numbering";
 import { allowedSecondsFor, endedByTimeLimit, timeUsedSeconds } from "@/lib/exam/timing";
+import { partTimesOf } from "@/lib/exam/part-times";
 
 export type WeakArea = { type: QuestionType; label: string; correct: number; total: number; accuracy: number };
 
@@ -19,6 +20,8 @@ export type PartBreakdown = {
   subtitle: string | null;
   correct: number;
   total: number;
+  /** Phase M - whole seconds the student spent in this part, or null when this attempt has no part times (see lib/exam/part-times). */
+  seconds?: number | null;
 };
 
 /** Phase 44 — Part 3's real accuracy/time/answered/skipped block. */
@@ -67,6 +70,7 @@ export async function getResultInsights(resultId: string, studentId: string): Pr
         },
       },
       answers: { select: { questionId: true, isCorrect: true, pointsAwarded: true, response: true } },
+      partEvents: { orderBy: { enteredAt: "asc" }, select: { passageId: true, enteredAt: true } },
     },
   });
   if (!result) return null;
@@ -114,6 +118,16 @@ export async function getResultInsights(resultId: string, studentId: string): Pr
     .map(({ type, label, correct, total, accuracy }) => ({ type, label, correct, total, accuracy }))
     .slice(0, 3);
 
+  // Computed from the stored start and end (the source of truth), so attempts submitted before time used was capped read correctly too.
+  const allowedSeconds = allowedSecondsFor({ durationMinutes: result.mockTest.durationMinutes, fullMockSection: result.fullMockSectionResult?.section });
+  const timeBounds = result.completedAt ? { startedAt: result.startedAt, endedAt: result.completedAt, allowedSeconds } : null;
+  const timeUsedSeconds_ = timeBounds ? timeUsedSeconds(timeBounds) : result.durationSeconds;
+  const timeExpired = timeBounds ? endedByTimeLimit(timeBounds) : false;
+
+  // Phase M - time per part, only for an attempt that has it (never estimated).
+  const partTimes = partTimesOf(result.partEvents, { startedAt: result.startedAt, endedAt: result.completedAt, timeUsedSeconds: timeUsedSeconds_ });
+  const secondsByPassage = partTimes ? new Map(partTimes.map((time) => [time.passageId, time.seconds])) : null;
+
   const orderedPassages = result.mockTest.passages;
   const partBreakdown: PartBreakdown[] =
     orderedPassages.length > 0
@@ -121,19 +135,13 @@ export async function getResultInsights(resultId: string, studentId: string): Pr
           const entry = byPassage.get(passage.id) ?? { correct: 0, total: 0 };
           const title = passage.title?.trim() ?? "";
           const generic = title === "" || /^(passage|part|section)\s*\d*$/i.test(title);
-          return { passageId: passage.id, label: `Part ${index + 1}`, subtitle: generic ? null : title, correct: entry.correct, total: entry.total };
+          return { passageId: passage.id, label: `Part ${index + 1}`, subtitle: generic ? null : title, correct: entry.correct, total: entry.total, seconds: secondsByPassage ? (secondsByPassage.get(passage.id) ?? 0) : null };
         })
       : [];
 
   const totalQuestions = totals.total;
   const totalCorrect = totals.correct;
   const answered = totals.answered;
-
-  // Computed from the stored start and end (the source of truth), so attempts submitted before time used was capped read correctly too.
-  const allowedSeconds = allowedSecondsFor({ durationMinutes: result.mockTest.durationMinutes, fullMockSection: result.fullMockSectionResult?.section });
-  const timeBounds = result.completedAt ? { startedAt: result.startedAt, endedAt: result.completedAt, allowedSeconds } : null;
-  const timeUsedSeconds_ = timeBounds ? timeUsedSeconds(timeBounds) : result.durationSeconds;
-  const timeExpired = timeBounds ? endedByTimeLimit(timeBounds) : false;
 
   const accuracy: AccuracyStats = {
     accuracyPercent: totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : null,

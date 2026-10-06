@@ -38,6 +38,8 @@ try {
     const author = test.createdBy.user.name ?? test.createdBy.user.email;
     console.log(`${real.length === 0 ? "ok     " : "PROBLEM"} ${test.type.padEnd(9)} ${state.padEnd(9)} ${String(validation.total).padStart(2)} numbers  "${test.title.slice(0, 44)}"  (${author})`);
     for (const issue of real) console.log(`          - ${issue.message}`);
+    // Phase M - warnings never make a test a "problem" (answer evidence missing is one): they are shown as notes.
+    if (!onlyProblems) for (const issue of validation.issues.filter((i) => i.severity === "warning")) console.log(`          note: ${issue.message}`);
     if (errors.length > real.length) console.log("          (a recording whose length was never measured: `npm run audio:measure` lists those)");
   }
 

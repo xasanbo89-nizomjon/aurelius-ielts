@@ -37,7 +37,7 @@ export default async function TeacherWritingPage() {
           label="Total Submissions"
           value={String(analytics.totalSubmissions)}
           icon={FileCheck}
-          caption={analytics.totalSubmissions === 0 ? "No submissions yet" : "Across your students"}
+          caption={analytics.totalSubmissions === 0 ? "No submissions yet" : profile.isRootTeacher ? "Across all students" : "Across your students"}
         />
         <StatCard
           label="Average Class Band"

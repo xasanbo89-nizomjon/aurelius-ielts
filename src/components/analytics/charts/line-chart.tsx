@@ -15,12 +15,15 @@ export function LineChart({
   height = 220,
   yDomain,
   yFormat,
+  yTicks,
   ariaLabel,
 }: {
   series: LineChartSeries[];
   height?: number;
   yDomain?: [number, number];
   yFormat?: (value: number) => string;
+  /** Explicit tick values for the y axis (Phase M: band charts use 0, 3, 5, 7, 9); by default four even steps over the domain. */
+  yTicks?: number[];
   ariaLabel: string;
 }) {
   const width = 600;
@@ -48,7 +51,7 @@ export function LineChart({
     yMax === yMin ? paddingTop + plotHeight / 2 : paddingTop + plotHeight - ((y - yMin) / (yMax - yMin)) * plotHeight;
 
   const tickCount = 4;
-  const tickValues = Array.from({ length: tickCount + 1 }, (_, i) => yMin + ((yMax - yMin) * i) / tickCount);
+  const tickValues = yTicks ?? Array.from({ length: tickCount + 1 }, (_, i) => yMin + ((yMax - yMin) * i) / tickCount);
 
   return (
     <div className="w-full">

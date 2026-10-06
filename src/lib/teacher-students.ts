@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { getTestActor } from "@/lib/exam/test-access";
+import { getTestActor, studentScope } from "@/lib/exam/test-access";
 import { cefrLabelForBand } from "@/lib/analytics/student-insights";
 
 export const STUDENT_ROSTER_PAGE_SIZE = 10;
@@ -114,7 +114,7 @@ export type StudentOption = { id: string; name: string | null; email: string };
 export async function listStudentsForTeacher(teacherId: string): Promise<StudentOption[]> {
   const actor = await getTestActor(teacherId);
   const students = await prisma.studentProfile.findMany({
-    where: actor.isRootTeacher ? {} : { teacherId },
+    where: studentScope(actor),
     orderBy: { user: { name: "asc" } },
     select: { id: true, user: { select: { name: true, email: true } } },
   });

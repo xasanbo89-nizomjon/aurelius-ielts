@@ -26,7 +26,9 @@
     "tests:validate": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/validate-tests.mjs",
     "attempts:repair-time": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/repair-time-used.mjs",
     "attempts:finalize-expired": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/finalize-expired.mjs",
-    "audio:measure": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/measure-recordings.mjs"
+    "audio:measure": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/measure-recordings.mjs",
+    "check:results": "node --import ./scripts/register-ts.mjs scripts/check-results.mjs",
+    "check:m": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-m.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

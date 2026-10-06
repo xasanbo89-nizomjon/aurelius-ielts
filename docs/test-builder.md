@@ -117,6 +117,10 @@ read-only, exactly as in L1 (`getTestEditState`).
 - **Importer**: every spelling of a numbered gap (dotted `......`, `. . . .`, underscores, ellipsis, dashes, with or without the number, "(14)", "14.")
   becomes a `{{n}}` marker, and the validator refuses a completion whose boxes, numbers and answers disagree ("Questions 37-39: writes its blanks as
   dotted lines ..."). `npm run tests:validate` reports it for every stored test (read-only).
+- **Importer and "Choose TWO" (Phase M)**: a block whose printed instructions say "Choose TWO / THREE letters" and whose numbers make whole pairs
+  ("Questions 21 and 22") is imported as ONE question per pair - `chooseCount`, worth that many marks, the letters read from the key whichever way it prints
+  them ("21 A  22 C", "21-22 A, C", "21&22 A/C") - instead of one single-answer question per number. The review screen says so under the block's instructions; a key
+  that does not name exactly the right number of different letters is listed in the import warnings. Any other block is converted exactly as before.
 
 ## Listening recording and part times (Phase L2)
 
@@ -202,6 +206,13 @@ connections to the server (save an answer, save a highlight or note, ping study 
 took its save / hand-in functions as props. No attempt, answer, highlight, note, bookmark, submission, study activity, streak or Full Mock row is created -
 the browser run counts all of them before and after. Only the owner (or the Root Teacher) can preview a test.
 
+## Answer evidence (Phase M)
+
+A teacher can mark, for every question number, the words of the passage (Listening: the transcript) that hold the answer: **Answer evidence** on the test page
+(`/teacher/tests/<id>/evidence`). It works on any test the teacher manages - published, or already taken - because it changes no question, answer or score. The
+student's review offers "Show in passage" wherever evidence is **confirmed**. Optional "Suggest with AI" (off by default, daily limit, the teacher confirms every
+suggestion). A missing evidence is a **warning** in the validator, never an error. See `docs/results-analysis.md`.
+
 ## Not found means 404 (Phase L2)
 
 A page with a `loading.tsx` streams, so its status line is sent before the page runs and `notFound()` inside it answered 200. `src/lib/route-guard.ts` is
@@ -218,6 +229,8 @@ nothing. A new detail route with a `loading.tsx` needs a rule in that file.
 | `npm run check:builder` | no database: the editor's model (every type -> rows -> the student's numbers), the answer-key paste, the start-time rules and part switching |
 | `npm run check:choose` | no database: "Choose TWO" - numbering, 0 / 1 / 2 marks in any order, review, validator, editor round trip, key paste |
 | `npm run check:tables` | no database: tables - reading a title / note / short row, the grid's row and column operations, storage, scoring, and both exam screens drawn to HTML |
+| `npm run check:results` | no database: answer evidence, the review's per-number answers, part times and the statistics maths (a hand-calculated example) |
+| `npm run check:m` | real database, its own tagged fixtures (removed at the end): evidence end to end, the statistics through the SQL, teacher vs Root scope, part events |
 | `npm run tests:validate` | read-only: what the publish rules say about every test already in the database |
 | `npm run check:publish` | no database: the validator (39 / 41 questions, gap, missing answer, invalid True/False/Not Given, Listening without audio, a complete test passes), alternatives and the importer, reviews vs stored scores |
 | `npm run check:grading` | read-only, real data: every stored answer key still validates and scores itself, and every stored student answer re-grades to the verdict stored at hand-in |

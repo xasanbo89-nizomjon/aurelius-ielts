@@ -7,6 +7,7 @@ import { recordStudentActivity } from "@/lib/study-activity";
 import { allowedSecondsFor, timeUsedSeconds } from "@/lib/exam/timing";
 import { EXPIRY_GRACE_SECONDS, deadlineFrom, isPastDeadline, sectionAllowedSeconds } from "@/lib/exam/section-deadline";
 import { ensureRecordingLengths } from "@/lib/exam/recording-length";
+import { newRowId } from "@/lib/exam/row-ids";
 import type { SectionEndReason } from "@prisma/client";
 
 /** Types of tests the Phase 3 exam engine can actually run. */
@@ -112,7 +113,8 @@ export async function getAttemptSummary(resultId: string, studentId: string) {
           },
           questions: {
             orderBy: { orderIndex: "asc" },
-            select: { id: true, passageId: true, prompt: true, type: true, points: true, options: true, correctAnswer: true },
+            // Phase M - `evidence`: where a teacher located each answer in the text (the review shows only what was confirmed).
+            select: { id: true, passageId: true, prompt: true, type: true, points: true, options: true, correctAnswer: true, evidence: true },
           },
         },
       },
@@ -120,6 +122,9 @@ export async function getAttemptSummary(resultId: string, studentId: string) {
       // Phase 46 — the student's own real highlights from when they took the
       // exam, shown (never editable) in the read-only review passage panel.
       highlights: true,
+      // Phase M - and what they highlighted inside the questions, and the notes they kept: also shown read-only.
+      questionHighlights: true,
+      notes: true,
     },
   });
 }
@@ -159,10 +164,38 @@ export async function saveAnswer(
  * since there's nothing left to resume.
  */
 export async function updateLastSeenQuestion(resultId: string, studentId: string, questionId: string): Promise<void> {
-  await prisma.result.updateMany({
-    where: { id: resultId, studentId, completedAt: null },
-    data: { lastSeenQuestionId: questionId },
-  });
+  // ONE statement, one round trip - this event is sent in the background of a timed exam and a page's server actions run one at a time, so it must not
+  // hold up the autosave behind it. It records where the student is (as it always did) and, new in Phase M, when that is ANOTHER part than the last one
+  // recorded, when the student got there (`result_part_events`, for "time per part"). An attempt that has not moved yet also gets the row for its opening
+  // part, dated at its start - only when it has no earlier position at all, so an attempt that began before this existed never gets a made-up beginning.
+  await prisma.$executeRaw`
+    WITH target AS (
+      SELECT r."id" AS "resultId", r."startedAt", r."lastSeenQuestionId" AS "previousQuestionId", q."passageId" AS "passageId",
+             (SELECT p."id" FROM "passages" p WHERE p."mockTestId" = r."mockTestId" ORDER BY p."orderIndex", p."id" LIMIT 1) AS "firstPassageId"
+      FROM "results" r
+      JOIN "questions" q ON q."id" = ${questionId} AND q."mockTestId" = r."mockTestId"
+      WHERE r."id" = ${resultId} AND r."studentId" = ${studentId} AND r."completedAt" IS NULL
+    ),
+    moved AS (
+      UPDATE "results" SET "lastSeenQuestionId" = ${questionId}
+      WHERE "id" = ${resultId} AND "studentId" = ${studentId} AND "completedAt" IS NULL
+      RETURNING "id"
+    ),
+    latest AS (
+      SELECT "passageId" FROM "result_part_events" WHERE "resultId" = ${resultId} ORDER BY "enteredAt" DESC, "id" DESC LIMIT 1
+    ),
+    opening AS (
+      INSERT INTO "result_part_events" ("id", "resultId", "passageId", "enteredAt")
+      SELECT ${newRowId()}, t."resultId", t."firstPassageId", t."startedAt"
+      FROM target t
+      WHERE t."firstPassageId" IS NOT NULL AND t."previousQuestionId" IS NULL AND NOT EXISTS (SELECT 1 FROM "result_part_events" e WHERE e."resultId" = t."resultId")
+      RETURNING "passageId"
+    )
+    INSERT INTO "result_part_events" ("id", "resultId", "passageId", "enteredAt")
+    SELECT ${newRowId()}, t."resultId", t."passageId", now()
+    FROM target t
+    WHERE t."passageId" IS NOT NULL
+      AND t."passageId" IS DISTINCT FROM COALESCE((SELECT "passageId" FROM latest), (SELECT "passageId" FROM opening), CASE WHEN t."previousQuestionId" IS NULL THEN t."firstPassageId" END)`;
 }
 
 export async function toggleFlag(resultId: string, studentId: string, questionId: string) {
