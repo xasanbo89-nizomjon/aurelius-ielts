@@ -104,6 +104,11 @@ Phase L1 is done (`docs/test-builder.md`). Left for L2:
 - 17 old completed Results have no stored band; the pages work it out when they are shown
   (`harness/backfill-bands` was never applied).
 - An internal-titled ("_...") Full Mock is hidden from lists but can still be opened by its direct address.
+- **A not-found page answers HTTP 200.** A page that streams (it has a `loading.tsx`) has already sent its status line when
+  `notFound()` runs, so opening another teacher's test (`/teacher/tests/<their id>`) shows "Page not found" but with status 200.
+  Nothing of the test is shown (checked in Phase L1); the problem is that anything reading the status code (monitoring,
+  crawlers, status-based tests) sees "OK". Fix later: decide access before the page streams (check ownership in the layout or
+  in `generateMetadata`, or drop `loading.tsx` on the routes that can 404), then assert the 404 status in the browser checks.
 - Old attempts: `npm run attempts:repair-time` and `npm run attempts:finalize-expired` (both dry runs by default) list what Phase K
   would correct on data from before it; see `docs/server-expiry.md`.
 - The matching drag-and-drop uses click-to-place on touch screens (HTML5 drag does not work there).
