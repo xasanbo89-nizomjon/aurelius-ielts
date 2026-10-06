@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { QuestionType } from "@prisma/client";
 
+import { splitAlternatives, storedAnswer } from "@/lib/exam/answer-alternatives";
+
+// Phase L1 - an answer key that prints several accepted answers ("colour / color") keeps all of them (see answer-alternatives).
+export { splitAlternatives };
+
 /**
  * Phase 50 — the shape stored in ImportedQuestionGroup.questionsJson (the
  * fields NOT already broken out into their own columns). Mirrors the AI
@@ -122,11 +127,11 @@ export function buildQuestionPayloadsFromGroup(
   const groupSize = group.endNumber - group.startNumber + 1;
 
   if (type === "SUMMARY_COMPLETION") {
-    const correctAnswer: Record<string, string> = {};
+    const correctAnswer: Record<string, string | string[]> = {};
     const unmatchedNumbers: number[] = [];
     for (const n of rangeArray(group.startNumber, group.endNumber)) {
       const raw = answersByNumber.get(n);
-      if (raw) correctAnswer[String(n)] = resolveWordBankAnswer(raw, json.wordBank);
+      if (raw) correctAnswer[String(n)] = storedAnswer(splitAlternatives(raw).map((alternative) => resolveWordBankAnswer(alternative, json.wordBank)));
       else unmatchedNumbers.push(n);
     }
     return [
@@ -206,11 +211,11 @@ export function buildQuestionPayloadsFromGroup(
       case "SENTENCE_COMPLETION":
       case "FILL_IN_BLANK":
         options = { maxWords: json.maxWords ?? undefined, wordBank: json.wordBank.length > 0 ? json.wordBank : undefined };
-        correctAnswer = resolveWordBankAnswer(raw.split("/")[0] ?? "", json.wordBank);
+        correctAnswer = storedAnswer(splitAlternatives(raw).map((alternative) => resolveWordBankAnswer(alternative, json.wordBank)));
         break;
       case "SHORT_ANSWER":
         options = { maxWords: json.maxWords ?? undefined };
-        correctAnswer = raw.split("/")[0]?.trim() ?? "";
+        correctAnswer = storedAnswer(splitAlternatives(raw));
         break;
       default:
         options = {};

@@ -2,10 +2,14 @@ import type { MockTestCategory, PassageAttachmentType, Prisma, QuestionType, Tes
 
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
-import { summaryBlankKeys } from "@/lib/exam/question-numbering";
+import { numberQuestions, summaryBlankKeys } from "@/lib/exam/question-numbering";
+import { answerKeysOf } from "@/lib/exam/summary-blanks";
 import { scheduleRecordingMeasure } from "@/lib/exam/recording-length";
 import { deleteBucketObjects, deleteStoredFiles } from "@/lib/uploads/storage-cleanup";
 import { TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
+import { authorScope } from "@/lib/exam/test-access";
+import { PublishValidationError, validateTestForPublish } from "@/lib/exam/test-publish";
+import { assertCanUnpublish, assertTestEditable } from "@/lib/exam/test-lock";
 
 export class OwnershipError extends Error {
   constructor(message = "You don't have access to this resource.") {
@@ -15,14 +19,15 @@ export class OwnershipError extends Error {
 }
 
 async function assertOwnsTest(mockTestId: string, teacherId: string) {
-  const test = await prisma.mockTest.findFirst({ where: { id: mockTestId, createdById: teacherId } });
+  // Phase L - a Root Teacher manages every test; everybody else only their own.
+  const test = await prisma.mockTest.findFirst({ where: { id: mockTestId, ...(await authorScope(teacherId)) } });
   if (!test) throw new OwnershipError("You don't have access to this test.");
   return test;
 }
 
 async function assertOwnsPassage(passageId: string, teacherId: string) {
   const passage = await prisma.passage.findFirst({
-    where: { id: passageId, mockTest: { createdById: teacherId } },
+    where: { id: passageId, mockTest: await authorScope(teacherId) },
   });
   if (!passage) throw new OwnershipError("You don't have access to this passage.");
   return passage;
@@ -30,7 +35,7 @@ async function assertOwnsPassage(passageId: string, teacherId: string) {
 
 async function assertOwnsQuestion(questionId: string, teacherId: string) {
   const question = await prisma.question.findFirst({
-    where: { id: questionId, mockTest: { createdById: teacherId } },
+    where: { id: questionId, mockTest: await authorScope(teacherId) },
   });
   if (!question) throw new OwnershipError("You don't have access to this question.");
   return question;
@@ -38,9 +43,17 @@ async function assertOwnsQuestion(questionId: string, teacherId: string) {
 
 async function assertOwnsQuestionGroup(groupId: string, teacherId: string) {
   const group = await prisma.questionGroup.findFirst({
-    where: { id: groupId, passage: { mockTest: { createdById: teacherId } } },
+    where: { id: groupId, passage: { mockTest: await authorScope(teacherId) } },
   });
   if (!group) throw new OwnershipError("You don't have access to this question group.");
+  return group;
+}
+
+/** A group belongs to a passage of a test: it follows that test's edit rule (see test-lock). */
+async function assertGroupEditable(groupId: string, teacherId: string) {
+  const group = await assertOwnsQuestionGroup(groupId, teacherId);
+  const passage = await prisma.passage.findUnique({ where: { id: group.passageId }, select: { mockTestId: true } });
+  if (passage) await assertTestEditable(passage.mockTestId);
   return group;
 }
 
@@ -102,7 +115,10 @@ export async function updateTest(
     coverImagePath?: string | null;
   }
 ) {
-  await assertOwnsTest(testId, teacherId);
+  const existing = await assertOwnsTest(testId, teacherId);
+  // Phase L1 - title, description and cover are labels; the time limit and the category change what students sit, so they follow the edit rule.
+  const changesTheTest = (input.durationMinutes !== undefined && input.durationMinutes !== existing.durationMinutes) || (input.category !== undefined && input.category !== existing.category);
+  if (changesTheTest) await assertTestEditable(testId);
   return prisma.mockTest.update({ where: { id: testId }, data: input });
 }
 
@@ -110,10 +126,12 @@ export async function setPublished(testId: string, teacherId: string, isPublishe
   const test = await assertOwnsTest(testId, teacherId);
 
   if (isPublished) {
-    const questionCount = await prisma.question.count({ where: { mockTestId: testId } });
-    if (questionCount === 0) {
-      throw new Error("Add at least one question before publishing.");
-    }
+    // Phase L - a test goes live only when it is complete: 40 questions numbered 1-40, an answer for each, instructions, passages / recordings (see test-validation).
+    const validation = await validateTestForPublish(testId);
+    if (!validation.ok) throw new PublishValidationError(validation);
+  } else if (test.isPublished) {
+    // Phase L1 - a test students have attempted is never taken offline by unpublishing (archive it instead).
+    await assertCanUnpublish(testId);
   }
 
   return prisma.mockTest.update({
@@ -280,6 +298,7 @@ export async function addPassage(
   input: { title: string; content: string } & PassageAudioInput
 ) {
   await assertOwnsTest(testId, teacherId);
+  await assertTestEditable(testId);
 
   const maxOrder = await prisma.passage.aggregate({
     where: { mockTestId: testId },
@@ -310,6 +329,7 @@ export async function updatePassage(
   input: { title?: string; content?: string } & PassageAudioInput
 ) {
   const existing = await assertOwnsPassage(passageId, teacherId);
+  await assertTestEditable(existing.mockTestId);
   // Audio fields are only ever included by the caller when a fresh upload
   // just happened (see PassageEditorDialog) — otherwise they're omitted
   // entirely so an existing passage's audio is left untouched, not cleared.
@@ -330,6 +350,7 @@ export async function updatePassage(
 
 export async function deletePassage(passageId: string, teacherId: string) {
   const passage = await assertOwnsPassage(passageId, teacherId);
+  await assertTestEditable(passage.mockTestId);
 
   const gradedAnswerCount = await prisma.answer.count({
     where: { question: { passageId }, result: { completedAt: { not: null } } },
@@ -382,6 +403,7 @@ const NO_AUDIO = { audioPath: null, audioUrl: null, audioFileName: null, audioMi
 export async function removePassageAudio(passageId: string, teacherId: string) {
   const passage = await assertOwnsPassage(passageId, teacherId);
   if (!passage.audioPath && !passage.audioUrl) throw new Error("This section has no audio to remove.");
+  await assertTestEditable(passage.mockTestId);
   await assertAudioCanBeRemoved(passage.mockTestId);
 
   await prisma.passage.update({ where: { id: passageId }, data: NO_AUDIO });
@@ -392,6 +414,7 @@ export async function removeTestAudio(testId: string, teacherId: string) {
   await assertOwnsTest(testId, teacherId);
   const passages = await prisma.passage.findMany({ where: { mockTestId: testId, OR: [{ audioPath: { not: null } }, { audioUrl: { not: null } }] }, select: { id: true, audioPath: true, audioUrl: true } });
   if (passages.length === 0) throw new Error("This test has no audio to remove.");
+  await assertTestEditable(testId);
   await assertAudioCanBeRemoved(testId);
 
   await prisma.passage.updateMany({ where: { id: { in: passages.map((passage) => passage.id) } }, data: NO_AUDIO });
@@ -410,7 +433,8 @@ export async function addPassageAttachment(
   teacherId: string,
   input: { type: PassageAttachmentType; imagePath: string; caption?: string; mediaFileId?: string }
 ) {
-  await assertOwnsPassage(passageId, teacherId);
+  const passage = await assertOwnsPassage(passageId, teacherId);
+  await assertTestEditable(passage.mockTestId);
 
   if (input.mediaFileId) {
     const mediaFile = await prisma.mediaFile.findFirst({ where: { id: input.mediaFileId, ownerId: teacherId } });
@@ -442,9 +466,11 @@ export async function addPassageAttachment(
 
 export async function deletePassageAttachment(attachmentId: string, teacherId: string) {
   const attachment = await prisma.passageAttachment.findFirst({
-    where: { id: attachmentId, passage: { mockTest: { createdById: teacherId } } },
+    where: { id: attachmentId, passage: { mockTest: await authorScope(teacherId) } },
   });
   if (!attachment) throw new OwnershipError("You don't have access to this attachment.");
+  const owner = await prisma.passage.findUnique({ where: { id: attachment.passageId }, select: { mockTestId: true } });
+  if (owner) await assertTestEditable(owner.mockTestId);
 
   await prisma.$transaction([
     prisma.mediaUsage.deleteMany({ where: { context: "PASSAGE_ATTACHMENT", referenceId: attachmentId } }),
@@ -472,6 +498,7 @@ export type QuestionInput = {
 
 export async function addQuestion(testId: string, teacherId: string, input: QuestionInput) {
   await assertOwnsTest(testId, teacherId);
+  await assertTestEditable(testId);
   validateQuestionPayload(input.type, input.options, input.correctAnswer);
 
   const maxOrder = await prisma.question.aggregate({
@@ -500,6 +527,7 @@ export async function updateQuestion(
   input: Partial<QuestionInput>
 ) {
   const existing = await assertOwnsQuestion(questionId, teacherId);
+  await assertTestEditable(existing.mockTestId);
   const type = input.type ?? existing.type;
   const options = input.options ?? existing.options;
   const correctAnswer = input.correctAnswer ?? existing.correctAnswer;
@@ -520,7 +548,8 @@ export async function updateQuestion(
 }
 
 export async function deleteQuestion(questionId: string, teacherId: string) {
-  await assertOwnsQuestion(questionId, teacherId);
+  const question = await assertOwnsQuestion(questionId, teacherId);
+  await assertTestEditable(question.mockTestId);
 
   const gradedAnswerCount = await prisma.answer.count({
     where: { questionId, result: { completedAt: { not: null } } },
@@ -534,6 +563,7 @@ export async function deleteQuestion(questionId: string, teacherId: string) {
 
 export async function moveQuestion(questionId: string, teacherId: string, direction: "up" | "down") {
   const question = await assertOwnsQuestion(questionId, teacherId);
+  await assertTestEditable(question.mockTestId);
 
   const neighbor = await prisma.question.findFirst({
     where: {
@@ -550,6 +580,32 @@ export async function moveQuestion(questionId: string, teacherId: string, direct
   ]);
 }
 
+/**
+ * Phase L1 - the numbers of a test's question groups, DERIVED from its question rows: the same `numberQuestions` the student's screen uses puts a running
+ * number on every row, and each group takes the first and last number of its own rows (and the title "Questions 14-18"). Nobody types these any more, so
+ * they can no longer drift away from what the student sees. A group with no questions yet keeps what it has. Only rows that differ are written.
+ * Returns how many groups were changed. (Existing tests are not touched until someone edits them; the publish check reports a stale range.)
+ */
+export async function syncGroupRanges(testId: string): Promise<number> {
+  const [questions, groups] = await Promise.all([
+    prisma.question.findMany({ where: { mockTestId: testId }, orderBy: { orderIndex: "asc" }, select: { id: true, questionGroupId: true, type: true, options: true, correctAnswer: true } }),
+    prisma.questionGroup.findMany({ where: { passage: { mockTestId: testId } }, select: { id: true, title: true, startQuestion: true, endQuestion: true } }),
+  ]);
+  const numbered = numberQuestions(questions.map((q) => ({ id: q.id, groupId: q.questionGroupId, type: q.type, options: q.options, blankKeys: q.type === "SUMMARY_COMPLETION" ? answerKeysOf(q.correctAnswer) : null })));
+  let changed = 0;
+  for (const group of groups) {
+    const rows = numbered.filter((row) => row.groupId === group.id);
+    if (rows.length === 0) continue;
+    const start = rows[0].startNumber;
+    const end = rows[rows.length - 1].endNumber;
+    const title = `Questions ${start}-${end}`;
+    if (group.startQuestion === start && group.endQuestion === end && group.title === title) continue;
+    await prisma.questionGroup.update({ where: { id: group.id }, data: { startQuestion: start, endQuestion: end, title } });
+    changed++;
+  }
+  return changed;
+}
+
 // ---------------------------------------------------------------------------
 // Question groups (Phase 50.1) — teacher-side organization within a passage,
 // e.g. "Questions 1-5". Purely cosmetic: never read by grading or the
@@ -564,7 +620,8 @@ export type QuestionGroupInput = {
 };
 
 export async function addQuestionGroup(passageId: string, teacherId: string, input: QuestionGroupInput) {
-  await assertOwnsPassage(passageId, teacherId);
+  const passage = await assertOwnsPassage(passageId, teacherId);
+  await assertTestEditable(passage.mockTestId);
 
   const maxOrder = await prisma.questionGroup.aggregate({
     where: { passageId },
@@ -584,7 +641,7 @@ export async function addQuestionGroup(passageId: string, teacherId: string, inp
 }
 
 export async function updateQuestionGroup(groupId: string, teacherId: string, input: Partial<QuestionGroupInput>) {
-  await assertOwnsQuestionGroup(groupId, teacherId);
+  await assertGroupEditable(groupId, teacherId);
   return prisma.questionGroup.update({
     where: { id: groupId },
     data: {
@@ -598,12 +655,12 @@ export async function updateQuestionGroup(groupId: string, teacherId: string, in
 
 /** Deleting a group only ungroups its questions (onDelete: SetNull) — it never deletes a question or any real student Answer history attached to it. */
 export async function deleteQuestionGroup(groupId: string, teacherId: string) {
-  await assertOwnsQuestionGroup(groupId, teacherId);
+  await assertGroupEditable(groupId, teacherId);
   await prisma.questionGroup.delete({ where: { id: groupId } });
 }
 
 export async function moveQuestionGroup(groupId: string, teacherId: string, direction: "up" | "down") {
-  const group = await assertOwnsQuestionGroup(groupId, teacherId);
+  const group = await assertGroupEditable(groupId, teacherId);
 
   const neighbor = await prisma.questionGroup.findFirst({
     where: {
@@ -618,4 +675,19 @@ export async function moveQuestionGroup(groupId: string, teacherId: string, dire
     prisma.questionGroup.update({ where: { id: group.id }, data: { orderIndex: neighbor.orderIndex } }),
     prisma.questionGroup.update({ where: { id: neighbor.id }, data: { orderIndex: group.orderIndex } }),
   ]);
+
+  // Phase L1 - the student's screen follows the question ROWS, not the group's own order, so the rows of the two groups change places too (the
+  // group that moves up has all its rows put in front of the other group's rows; every other row keeps its place).
+  const passage = await prisma.passage.findUnique({ where: { id: group.passageId }, select: { mockTestId: true } });
+  if (!passage) return;
+  const rows = await prisma.question.findMany({ where: { mockTestId: passage.mockTestId }, orderBy: { orderIndex: "asc" }, select: { id: true, questionGroupId: true, orderIndex: true } });
+  const [first, second] = direction === "up" ? [group.id, neighbor.id] : [neighbor.id, group.id];
+  const firstRows = rows.filter((row) => row.questionGroupId === first);
+  const secondRows = rows.filter((row) => row.questionGroupId === second);
+  if (firstRows.length === 0 || secondRows.length === 0) return;
+  // the slots the two groups occupied, in order, are handed out again: the group that is now first (the one moved up, or the neighbour it swapped with) gets the earlier slots
+  const slots = [...firstRows, ...secondRows].map((row) => row.orderIndex).sort((a, b) => a - b);
+  const reordered = [...firstRows, ...secondRows];
+  const updates = reordered.map((row, index) => ({ id: row.id, orderIndex: slots[index] })).filter((update) => rows.find((row) => row.id === update.id)!.orderIndex !== update.orderIndex);
+  if (updates.length > 0) await prisma.$transaction(updates.map((update) => prisma.question.update({ where: { id: update.id }, data: { orderIndex: update.orderIndex } })));
 }

@@ -23,12 +23,14 @@ export function findAnswerEvidenceOffset(
   correctAnswer: unknown
 ): { start: number; end: number; text: string } | null {
   const display = formatAnswerForDisplay(type, options, correctAnswer).trim();
-  if (display.length < MIN_EVIDENCE_LENGTH) return null;
+  // Phase L1 - a typed answer may list accepted alternatives ("colour / color"): the first one that stands in the text is the evidence.
+  const candidates = Array.isArray(correctAnswer) && correctAnswer.every((a) => typeof a === "string") ? (correctAnswer as string[]).map((a) => a.trim()) : [display];
 
   const haystack = content.toLowerCase();
-  const needle = display.toLowerCase();
-  const index = haystack.indexOf(needle);
-  if (index === -1) return null;
-
-  return { start: index, end: index + display.length, text: content.slice(index, index + display.length) };
+  for (const candidate of candidates) {
+    if (candidate.length < MIN_EVIDENCE_LENGTH) continue;
+    const index = haystack.indexOf(candidate.toLowerCase());
+    if (index !== -1) return { start: index, end: index + candidate.length, text: content.slice(index, index + candidate.length) };
+  }
+  return null;
 }

@@ -5,6 +5,9 @@ import type { Prisma, PassageAttachmentType, QuestionType } from "@prisma/client
 
 import { requireTeacherProfile } from "@/lib/session";
 import * as tm from "@/lib/exam/test-management";
+import { PublishValidationError } from "@/lib/exam/test-publish";
+import { copyTest, type CopyMode } from "@/lib/exam/test-versions";
+import type { TestIssue } from "@/lib/exam/test-validation";
 import { uploadListeningAudio } from "@/lib/uploads/audio-storage";
 import { uploadContentCoverImage } from "@/lib/uploads/image-storage";
 import { friendlyErrorMessage } from "@/lib/validation-error";
@@ -75,7 +78,10 @@ export async function updateTestAction(testId: string, input: UpdateTestInput): 
   }
 }
 
-export async function setPublishedAction(testId: string, isPublished: boolean): Promise<ActionResult> {
+export type PublishActionResult = { success: true } | { success: false; error: string; issues?: TestIssue[] };
+
+/** Publishing re-validates the stored test; a test that is not ready answers with the full list of problems (each names the field to fix). */
+export async function setPublishedAction(testId: string, isPublished: boolean): Promise<PublishActionResult> {
   try {
     const { profile } = await requireTeacherProfile();
     await tm.setPublished(testId, profile.id, isPublished);
@@ -83,6 +89,7 @@ export async function setPublishedAction(testId: string, isPublished: boolean): 
     revalidatePath("/teacher/tests");
     return { success: true };
   } catch (error) {
+    if (error instanceof PublishValidationError) return { success: false, error: error.message, issues: error.issues };
     return { success: false, error: errorMessage(error, "Could not update publish status.") };
   }
 }
@@ -99,7 +106,23 @@ export async function setArchivedAction(testId: string, isArchived: boolean): Pr
   }
 }
 
-export type DeleteTestActionResult = { success: true; warning?: string } | { success: false; error: string };
+/**
+ * Phase L1 - "Create new version" / "Duplicate": a complete draft copy with new ids (see test-versions). Full Mocks, assignments and access codes keep
+ * using the test it was copied from; every attempt stays on that one.
+ */
+export async function copyTestAction(testId: string, mode: CopyMode): Promise<ActionResult & { testId?: string }> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    const copy = await copyTest(testId, profile.id, mode);
+    revalidatePath("/teacher/tests");
+    revalidatePath(`/teacher/tests/${testId}`);
+    return { success: true, testId: copy.id };
+  } catch (error) {
+    return { success: false, error: errorMessage(error, mode === "version" ? "Could not create a new version." : "Could not duplicate the test.") };
+  }
+}
+
+export type DeleteTestActionResult ={ success: true; warning?: string } | { success: false; error: string };
 
 /**
  * Phase A — deletes a test with everything attached to it (questions, answer
@@ -180,6 +203,8 @@ export async function deletePassageAction(passageId: string, testId: string): Pr
   try {
     const { profile } = await requireTeacherProfile();
     await tm.deletePassage(passageId, profile.id);
+    // Phase L1 - the group numbers follow the rows (the student's own numbering), never what was typed.
+    await tm.syncGroupRanges(testId);
     revalidatePath(`/teacher/tests/${testId}`);
     return { success: true };
   } catch (error) {
@@ -247,6 +272,8 @@ export async function addQuestionAction(
     const { profile } = await requireTeacherProfile();
     const parsedBase = questionBaseSchema.parse(base);
     await tm.addQuestion(testId, profile.id, { ...parsedBase, options, correctAnswer });
+    // Phase L1 - the group numbers follow the rows (the student's own numbering), never what was typed.
+    await tm.syncGroupRanges(testId);
     revalidatePath(`/teacher/tests/${testId}`);
     return { success: true };
   } catch (error) {
@@ -265,6 +292,8 @@ export async function updateQuestionAction(
     const { profile } = await requireTeacherProfile();
     const parsedBase = questionBaseSchema.parse(base);
     await tm.updateQuestion(questionId, profile.id, { ...parsedBase, options, correctAnswer });
+    // Phase L1 - the group numbers follow the rows (the student's own numbering), never what was typed.
+    await tm.syncGroupRanges(testId);
     revalidatePath(`/teacher/tests/${testId}`);
     return { success: true };
   } catch (error) {
@@ -276,6 +305,8 @@ export async function deleteQuestionAction(questionId: string, testId: string): 
   try {
     const { profile } = await requireTeacherProfile();
     await tm.deleteQuestion(questionId, profile.id);
+    // Phase L1 - the group numbers follow the rows (the student's own numbering), never what was typed.
+    await tm.syncGroupRanges(testId);
     revalidatePath(`/teacher/tests/${testId}`);
     return { success: true };
   } catch (error) {
@@ -291,6 +322,8 @@ export async function moveQuestionAction(
   try {
     const { profile } = await requireTeacherProfile();
     await tm.moveQuestion(questionId, profile.id, direction);
+    // Phase L1 - the group numbers follow the rows (the student's own numbering), never what was typed.
+    await tm.syncGroupRanges(testId);
     revalidatePath(`/teacher/tests/${testId}`);
     return { success: true };
   } catch (error) {
@@ -308,6 +341,8 @@ export async function addQuestionGroupAction(
     const { profile } = await requireTeacherProfile();
     const parsed = questionGroupSchema.parse(input);
     await tm.addQuestionGroup(passageId, profile.id, parsed);
+    // Phase L1 - the group numbers follow the rows (the student's own numbering), never what was typed.
+    await tm.syncGroupRanges(testId);
     revalidatePath(`/teacher/tests/${testId}`);
     return { success: true };
   } catch (error) {
@@ -324,6 +359,8 @@ export async function updateQuestionGroupAction(
     const { profile } = await requireTeacherProfile();
     const parsed = questionGroupSchema.parse(input);
     await tm.updateQuestionGroup(groupId, profile.id, parsed);
+    // Phase L1 - the group numbers follow the rows (the student's own numbering), never what was typed.
+    await tm.syncGroupRanges(testId);
     revalidatePath(`/teacher/tests/${testId}`);
     return { success: true };
   } catch (error) {
@@ -335,6 +372,8 @@ export async function deleteQuestionGroupAction(groupId: string, testId: string)
   try {
     const { profile } = await requireTeacherProfile();
     await tm.deleteQuestionGroup(groupId, profile.id);
+    // Phase L1 - the group numbers follow the rows (the student's own numbering), never what was typed.
+    await tm.syncGroupRanges(testId);
     revalidatePath(`/teacher/tests/${testId}`);
     return { success: true };
   } catch (error) {
@@ -350,6 +389,8 @@ export async function moveQuestionGroupAction(
   try {
     const { profile } = await requireTeacherProfile();
     await tm.moveQuestionGroup(groupId, profile.id, direction);
+    // Phase L1 - the group numbers follow the rows (the student's own numbering), never what was typed.
+    await tm.syncGroupRanges(testId);
     revalidatePath(`/teacher/tests/${testId}`);
     return { success: true };
   } catch (error) {

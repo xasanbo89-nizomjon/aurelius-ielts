@@ -283,7 +283,7 @@ export async function getTestHistoryForStudent(studentId: string): Promise<TestH
           questions: { orderBy: { orderIndex: "asc" }, select: { id: true, points: true, type: true, options: true, correctAnswer: true } },
         },
       },
-      answers: { select: { questionId: true, isCorrect: true, response: true } },
+      answers: { select: { questionId: true, isCorrect: true, pointsAwarded: true, response: true } },
     },
   });
 
@@ -293,7 +293,7 @@ export async function getTestHistoryForStudent(studentId: string): Promise<TestH
     const { totals } = summarizeAttemptSlots(
       result.mockTest.questions,
       new Map(result.answers.map((a) => [a.questionId, a.response])),
-      new Map(result.answers.map((a) => [a.questionId, a.isCorrect]))
+      new Map(result.answers.map((a) => [a.questionId, { isCorrect: a.isCorrect, pointsAwarded: a.pointsAwarded, points: result.mockTest.questions.find((q) => q.id === a.questionId)?.points ?? null }]))
     );
     const correctAnswers = totals.correct;
     const incorrectAnswers = totals.incorrect;
@@ -329,6 +329,8 @@ export type AttemptReviewQuestion = {
   correctAnswer: unknown;
   studentAnswer: unknown;
   result: "correct" | "incorrect" | "unanswered";
+  /** Phase L1 - the stored verdict and marks, so the teacher's review agrees with the stored score. */
+  verdict: { isCorrect: boolean | null; pointsAwarded: number | null; points: number } | null;
 };
 
 export type AttemptReviewPassage = {
@@ -392,11 +394,11 @@ export async function getAttemptReviewForTeacher(teacherId: string, resultId: st
           },
           questions: {
             orderBy: { orderIndex: "asc" },
-            select: { id: true, orderIndex: true, passageId: true, prompt: true, type: true, options: true, correctAnswer: true },
+            select: { id: true, orderIndex: true, passageId: true, prompt: true, type: true, options: true, correctAnswer: true, points: true },
           },
         },
       },
-      answers: { select: { questionId: true, response: true, isCorrect: true } },
+      answers: { select: { questionId: true, response: true, isCorrect: true, pointsAwarded: true } },
     },
   });
   if (!result) return null;
@@ -430,6 +432,7 @@ export async function getAttemptReviewForTeacher(teacherId: string, resultId: st
         correctAnswer: question.correctAnswer,
         studentAnswer: answer?.response ?? null,
         result: !answer ? "unanswered" : answer.isCorrect ? "correct" : "incorrect",
+        verdict: answer ? { isCorrect: answer.isCorrect, pointsAwarded: answer.pointsAwarded, points: question.points } : null,
       };
     }),
   };

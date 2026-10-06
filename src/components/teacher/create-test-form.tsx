@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
-export function CreateTestForm() {
+export function CreateTestForm({ defaultType = "READING" }: { defaultType?: "READING" | "LISTENING" }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
@@ -28,7 +28,7 @@ export function CreateTestForm() {
     formState: { errors },
   } = useForm<CreateTestInput>({
     resolver: zodResolver(createTestSchema),
-    defaultValues: { type: "READING", category: "GENERAL" },
+    defaultValues: { type: defaultType, category: "GENERAL" },
   });
 
   const type = watch("type");

@@ -17,6 +17,10 @@
     "check:papers": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-reading-papers.mjs",
     "check:writing": "node --import ./scripts/register-ts.mjs scripts/check-writing.mjs",
     "check:expiry": "node --import ./scripts/register-ts.mjs scripts/check-expiry.mjs",
+    "check:publish": "node --import ./scripts/register-ts.mjs scripts/check-publish.mjs",
+    "check:grading": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-grading.mjs",
+    "check:l1": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-l1.mjs",
+    "tests:validate": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/validate-tests.mjs",
     "attempts:repair-time": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/repair-time-used.mjs",
     "attempts:finalize-expired": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/finalize-expired.mjs",
     "audio:measure": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/measure-recordings.mjs"

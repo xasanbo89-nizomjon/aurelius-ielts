@@ -34,13 +34,14 @@ export default async function TeacherAttemptReviewPage({
     correctAnswer: question.correctAnswer,
     studentAnswer: question.studentAnswer,
     status: question.result === "unanswered" ? "skipped" : question.result,
+    verdict: question.verdict,
   }));
 
   // Phase A — every count is per NUMBERED question (a matching / summary row covers several), via the same helper the student's exam screen and results page use, so teacher and student always see the same "x / 40".
   const { rows, totals } = summarizeAttemptSlots(
     attempt.questions.map((question) => ({ ...question, id: question.questionId })),
     new Map(attempt.questions.map((question) => [question.questionId, question.studentAnswer ?? undefined])),
-    new Map(attempt.questions.map((question) => [question.questionId, question.result === "unanswered" ? null : question.result === "correct"]))
+    new Map(attempt.questions.map((question) => [question.questionId, question.verdict ?? (question.result === "unanswered" ? null : question.result === "correct")]))
   );
   const correctCount = totals.correct;
   const incorrectCount = totals.incorrect;

@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import type { QuestionType } from "@prisma/client";
 
 import { findAnswerEvidenceOffset } from "@/lib/exam/answer-evidence";
-import { evaluateSlots, formatNumberRange, numberQuestions, slotStatus } from "@/lib/exam/question-numbering";
+import { evaluateSlots, formatNumberRange, numberQuestions, slotStatus, type StoredVerdict } from "@/lib/exam/question-numbering";
 import { resolvePassageAudioSrc } from "@/lib/uploads/audio-constraints";
 import type { ExamAttachment } from "@/components/exam/passage-attachments";
 import { MobileSplitTabs } from "@/components/exam/mobile-split-tabs";
@@ -29,6 +29,8 @@ export type ReviewQuestionData = {
   correctAnswer: unknown;
   studentAnswer: unknown;
   status: ReviewQuestionStatus;
+  /** Phase L1 - the verdict stored when the attempt was handed in; the review goes by it, and only works the answer out from the key when there is none. */
+  verdict?: StoredVerdict | null;
 };
 
 export type ReviewPassageData = {
@@ -133,7 +135,7 @@ export function ExamReviewSplit({
     () =>
       numberQuestions(questions).map((question) => ({
         ...question,
-        slots: evaluateSlots(question, question.studentAnswer ?? undefined, question.status === "correct"),
+        slots: evaluateSlots(question, question.studentAnswer ?? undefined, question.verdict ?? (question.status === "correct")),
       })),
     [questions]
   );

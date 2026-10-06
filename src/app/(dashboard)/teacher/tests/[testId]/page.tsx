@@ -3,6 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BarChart3 } from "lucide-react";
 
+import { scopeFor } from "@/lib/exam/test-access";
+import { getTestEditState } from "@/lib/exam/test-lock";
+import { getTestVersionInfo } from "@/lib/exam/test-versions";
 import { requireTeacherProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { setTestCoverImageAction } from "@/actions/test-management.actions";
@@ -14,6 +17,8 @@ import { EditTestDetailsDialog } from "@/components/teacher/edit-test-details-di
 import { PassagesManager } from "@/components/teacher/passages-manager";
 import { QuestionsManager } from "@/components/teacher/questions-manager";
 import { ContentCoverImageUploader } from "@/components/teacher/content-cover-image-uploader";
+import { TestLockNotice } from "@/components/teacher/test-lock-notice";
+import { TestVersionsPanel } from "@/components/teacher/test-versions-panel";
 
 export const metadata: Metadata = { title: "Edit Test" };
 
@@ -26,7 +31,7 @@ export default async function TestEditorPage({
   const { profile } = await requireTeacherProfile();
 
   const test = await prisma.mockTest.findFirst({
-    where: { id: testId, createdById: profile.id },
+    where: { id: testId, ...scopeFor(profile) },
     include: {
       passages: {
         orderBy: { orderIndex: "asc" },
@@ -47,6 +52,8 @@ export default async function TestEditorPage({
   if (!test) notFound();
 
   const testType = test.type === "LISTENING" ? "LISTENING" : "READING";
+  // Phase L1 - what may still be changed (published / attempted / in a live Full Mock tests are read-only) and where this test sits among its versions.
+  const [editState, versionInfo] = await Promise.all([getTestEditState(test.id), getTestVersionInfo(test.id)]);
 
   return (
     <>
@@ -82,7 +89,12 @@ export default async function TestEditorPage({
         }
       />
 
+      <span id="test-top" />
+
       {test.description && <p className="text-muted-foreground -mt-4 text-sm">{test.description}</p>}
+
+      {!editState.editable && editState.reason && <TestLockNotice testId={test.id} reason={editState.reason} />}
+      <TestVersionsPanel info={versionInfo} />
 
       <ContentCoverImageUploader
         initialPath={test.coverImagePath}
@@ -90,6 +102,8 @@ export default async function TestEditorPage({
         alt={`${test.title} cover`}
       />
 
+      {/* A disabled fieldset disables every button and field inside it: a locked test shows its content but offers no editing (the server refuses it too). */}
+      <fieldset disabled={!editState.editable} className="m-0 min-w-0 space-y-6 border-0 p-0" data-locked={!editState.editable}>
       <PassagesManager testId={test.id} testType={testType} passages={test.passages} />
 
       <QuestionsManager
@@ -117,6 +131,7 @@ export default async function TestEditorPage({
           correctAnswer: question.correctAnswer,
         }))}
       />
+      </fieldset>
     </>
   );
 }

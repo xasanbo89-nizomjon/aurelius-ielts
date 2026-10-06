@@ -21,6 +21,13 @@ function labelFor(choices: Choice[], id: string): string {
   return choices.find((choice) => choice.id === id)?.text ?? id;
 }
 
+/** A typed answer as text: one answer as it is, several accepted alternatives joined with " / ". */
+function alternativesText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (isStringArray(value)) return value.map((v) => v.trim()).filter(Boolean).join(" / ");
+  return "";
+}
+
 const TRUE_FALSE_LABELS: Record<string, string> = { TRUE: "True", FALSE: "False", NOT_GIVEN: "Not Given" };
 
 /** Renders a question's stored `correctAnswer` or a student's `response` as readable text for review screens. */
@@ -51,14 +58,16 @@ export function formatAnswerForDisplay(type: QuestionType, options: unknown, val
 
       case "SUMMARY_COMPLETION": {
         if (!isRecord(value)) return "—";
+        // Phase L - a blank may hold a list of accepted alternatives: they are shown as "colour / color".
         const entries = Object.entries(value)
-          .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+          .map(([blank, text]): [string, string] => [blank, alternativesText(text)])
+          .filter(([, text]) => text.length > 0)
           .sort(([a], [b]) => Number(a) - Number(b));
         return entries.map(([blank, text]) => `Blank ${blank}: ${text}`).join(", ") || "—";
       }
 
       default:
-        return typeof value === "string" && value.trim() ? value : "—";
+        return alternativesText(value) || "—";
     }
   } catch {
     return "—";

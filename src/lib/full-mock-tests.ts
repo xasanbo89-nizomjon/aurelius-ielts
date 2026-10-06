@@ -1,4 +1,5 @@
 import "server-only";
+import { authorScope } from "@/lib/exam/test-access";
 import type { MockTestCategory, MockTestDifficulty, WritingTaskCategory, WritingTaskNumber } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -25,7 +26,8 @@ import {
 // ---------------------------------------------------------------------------
 
 async function assertOwnsFullMockTest(id: string, teacherId: string) {
-  const test = await prisma.fullMockTest.findFirst({ where: { id, createdById: teacherId } });
+  // Phase L1 - a Root Teacher manages every Full Mock; a teacher their own (see test-access).
+  const test = await prisma.fullMockTest.findFirst({ where: { id, ...(await authorScope(teacherId)) } });
   if (!test) throw new Error("Full mock test not found.");
   return test;
 }
@@ -266,7 +268,7 @@ export async function listPickableTestsForFullMock(
 ): Promise<PickableMockTest[]> {
   const tests = await prisma.mockTest.findMany({
     // A test that belongs to another Full Mock package isn't offered here — it can only ever be part of its own package.
-    where: { createdById: teacherId, type, isPublished: true, isArchived: false, packageFullMockTestId: null },
+    where: { ...(await authorScope(teacherId)), type, isPublished: true, isArchived: false, packageFullMockTestId: null },
     orderBy: { createdAt: "desc" },
     select: { id: true, title: true, durationMinutes: true },
   });
@@ -284,7 +286,7 @@ async function setFullMockSkillTest(
 
   if (mockTestId) {
     const test = await prisma.mockTest.findFirst({
-      where: { id: mockTestId, createdById: teacherId, type: skill, isPublished: true, isArchived: false },
+      where: { id: mockTestId, ...(await authorScope(teacherId)), type: skill, isPublished: true, isArchived: false },
     });
     if (!test) throw new Error(`That ${skill.toLowerCase()} test isn't available.`);
     if (test.packageFullMockTestId && test.packageFullMockTestId !== fullMockTestId) {
@@ -542,7 +544,7 @@ export async function unpublishFullMockTest(id: string, teacherId: string): Prom
 
 export async function getFullMockTestForEdit(id: string, teacherId: string) {
   return prisma.fullMockTest.findFirst({
-    where: { id, createdById: teacherId },
+    where: { id, ...(await authorScope(teacherId)) },
     include: {
       readingSections: {
         orderBy: { orderIndex: "asc" },
@@ -586,13 +588,14 @@ export function getFullMockCompleteness(test: FullMockTestForEdit): FullMockComp
 
 export async function listFullMockTestsForTeacher(teacherId: string) {
   const tests = await prisma.fullMockTest.findMany({
-    where: { createdById: teacherId },
+    where: await authorScope(teacherId),
     orderBy: { createdAt: "desc" },
     include: {
       readingSections: { select: { id: true } },
       listeningSections: { select: { id: true } },
       writingSections: { select: { id: true } },
       speakingSections: { select: { id: true } },
+      createdBy: { select: { user: { select: { name: true, email: true } } } },
       _count: { select: { attempts: true, packageTests: true } },
     },
   });
@@ -601,6 +604,8 @@ export async function listFullMockTestsForTeacher(teacherId: string) {
     id: test.id,
     title: test.title,
     status: test.status,
+    createdById: test.createdById,
+    authorName: test.createdBy.user.name ?? test.createdBy.user.email,
     createdAt: test.createdAt,
     attemptCount: test._count.attempts,
     packageTestCount: test._count.packageTests,

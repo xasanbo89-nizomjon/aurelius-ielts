@@ -20,9 +20,12 @@ this page is the map. When a phase ships, move it to "Done".
 
 | K | **The Full Mock sitting, server-side expiry and teacher monitoring**: Listening → Reading → Writing with a "Continue" screen between sections (the next clock starts on Continue, or by itself after a wait limit); every timed section has a deadline kept on the server and is handed in by the server when it passes - on any read and from a scheduled job; time used per section and as a sum; words typed while offline reach the teacher as "late text"; a live table of who is sitting what with "End section"; results where Writing waits for the teacher's mark |
 
+| L1 | **Teacher test builder, part 1** (see `docs/test-builder.md`): one access rule (a Root Teacher manages every test, a teacher their own); question numbers and group ranges taken from the student's own numbering; a publish check that refuses an incomplete test with a list of problems (39 or 41 questions, a gap, a missing or invalid answer, a Listening test without audio); reviews that follow the stored score; typed answers with accepted alternatives ("colour / color"); structural edits only on a draft nobody has taken; **Create new version** and **Duplicate**; one test list with filters, a Root view of every author and a Temporary-tests cleanup list; a New test wizard |
+
 ## Next
 
-- **Phase L - teacher preview**: "Preview as student" on a test (see the backlog).
+- **Phase L2 - the rest of the test builder**: a structured editor, bulk answer-key paste, Listening part start times, a PDF page as the
+  Writing Task 1 picture, and "Preview as student" (see the backlog).
 - **Phase N - practice mode**: hints and warnings that the exam screens deliberately do not have (for Writing: the
   minimum-length and word-count notices; the exam screen never blocks or warns).
 - **Listening follow-ups**: part switching with one shared recording needs a start time per part (see the backlog).

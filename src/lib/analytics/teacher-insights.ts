@@ -1,4 +1,5 @@
 import type { QuestionType, SkillType, TestType } from "@prisma/client";
+import { authorScope } from "@/lib/exam/test-access";
 
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
@@ -140,7 +141,7 @@ export async function getQuestionAnalytics(
   testId: string,
   teacherId: string
 ): Promise<QuestionAnalyticsRow[] | null> {
-  const test = await prisma.mockTest.findFirst({ where: { id: testId, createdById: teacherId }, select: { id: true } });
+  const test = await prisma.mockTest.findFirst({ where: { id: testId, ...(await authorScope(teacherId)) }, select: { id: true } });
   if (!test) return null;
 
   const questions = await prisma.question.findMany({
@@ -183,7 +184,7 @@ export type MockTestAnalytics = {
 
 export async function getMockTestAnalytics(testId: string, teacherId: string): Promise<MockTestAnalytics | null> {
   const test = await prisma.mockTest.findFirst({
-    where: { id: testId, createdById: teacherId },
+    where: { id: testId, ...(await authorScope(teacherId)) },
     select: {
       title: true,
       questions: { select: { points: true } },

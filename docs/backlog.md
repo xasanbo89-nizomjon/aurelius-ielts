@@ -2,10 +2,29 @@
 
 Planned work that is not built yet. When a phase ships, delete its section.
 
-## Phase L - teacher preview
+## Phase L2 - the rest of the test builder
 
-- **"Preview as student".** A button on a test in the teacher panel that opens the official exam screen on a
-  throwaway attempt without recording a result. It does not exist yet.
+Phase L1 is done (`docs/test-builder.md`). Left for L2:
+
+- **A structured editor.** One page per test with its parts, groups and questions, autosaving by question id (upsert; only rows the
+  teacher removes are deleted; never delete-and-recreate) and structural edits only while the test is a draft. A prepared model and
+  tests exist outside the repository; they are to be rebuilt on the L1 rules.
+- **Bulk answer-key paste.** Paste "1 B, 2 TRUE, 3 colour/color …" and fill the keys, with a preview before it is applied.
+- **Listening part start times.** Say where each part starts inside one shared recording, so the screen can follow it (see
+  "Listening follow-ups"). `passages.audioStartSeconds` already exists in the schema (nullable, unused); the validator should then
+  require a start time for every part when one recording is shared.
+- **Writing Task 1 picture from a PDF page.** Must work on Vercel serverless: pure JavaScript / WASM only (for example `pdfjs-dist`
+  with a node canvas package), no poppler or system binaries. A page picker and a size limit. The exam screen stays picture-only
+  (the page becomes a PNG when it is uploaded). `writing_tasks.bundleId`, `visualPdfPage` and `visualPdfUrl` already exist in the
+  schema (nullable, unused).
+- **One way to upload a recording.** Use the signed direct upload for every recording (large files exceed the server action body
+  limit). Keep reading the legacy `Passage.audioUrl` as a fallback; do not delete it.
+- **The Writing task bank inside the wizard.** Bring `/teacher/writing` into the New test wizard instead of building a second place
+  for Writing tasks. Until then the wizard only links to it.
+- **"Preview as student".** A button on a test in the teacher panel that opens the official exam screen on a throwaway attempt
+  without recording a result. It does not exist yet.
+- **A switch for Full Mocks.** A new version is picked into a Full Mock in that mock's editor today. A "use the newest version"
+  button on the old test's page could do it in one step.
 
 ## Listening follow-ups (after Phase I)
 
@@ -100,5 +119,9 @@ Planned work that is not built yet. When a phase ships, delete its section.
 | `npm run check:expiry` | the server clock's rules, with no database: deadlines (recording + 2 minutes, 60 minutes, untimed never expires, the 90 s grace), time used as a sum, the Writing band and the combined figure's rounding (6.25 → 6.5, 6.75 → 7.0, 6.125 → 6.0) |
 | `npm run check:papers` | published Reading papers are tidy, lettered once, have 40 questions and consistent highlights |
 | `npm run audio:measure` / `attempts:finalize-expired` / `attempts:repair-time` | Phase K data scripts: dry run by default, `-- --apply` to write (see `docs/server-expiry.md`) |
+| `npm run check:publish` | no database: the publish rules (39 / 41 questions, a gap, a missing or invalid answer, a Listening test without audio, a complete test passes), typed answers with alternatives, the importer, and reviews against stored scores |
+| `npm run check:grading` | read-only: every stored answer key still validates and scores itself, and every stored student answer re-grades to the verdict stored at hand-in |
+| `npm run check:l1` | the real database with its own tagged fixtures (removed at the end): teacher vs Root access, the validator on stored tests, the edit rule, ids kept, versions, review vs stored score |
+| `npm run tests:validate` | read-only: what the publish rules say about every test already in the database (`-- --only-problems`) |
 | `npm run check:parity` | student list, student exam, teacher list and teacher editor all count the same questions |
 | `npm run tests:temp` | lists temporary (`_...`) tests and who attempted them |

@@ -394,6 +394,10 @@ model MockTest {
   difficulty      MockTestDifficulty?
   /// Phase 47 — Skill Media Library's "Content thumbnails" for Reading/Listening tests. Null until a teacher uploads one.
   coverImagePath  String?
+  /// Phase L - set on a copy made with "Create new version": the test it replaces. SetNull so deleting the old test never touches the new one.
+  versionOfId     String?
+  versionOf       MockTest?  @relation("MockTestVersions", fields: [versionOfId], references: [id], onDelete: SetNull)
+  versions        MockTest[] @relation("MockTestVersions")
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -442,6 +446,9 @@ model Passage {
   /// Phase K - the recording's length in whole seconds, measured ON THE SERVER from the file itself (never taken from the browser).
   /// The Listening deadline of a sitting is the sum of its distinct recordings plus the 2 minutes of review time. Null = not measured yet.
   audioDurationSeconds Int?
+  /// Phase L - where this part starts inside a recording shared by every part, in seconds (Part 1 = 0 or null). Null = not set: the screen then
+  /// behaves as before (the student turns the parts themselves). Ignored when each part has its own recording.
+  audioStartSeconds Int?
   orderIndex    Int     @default(0)
 
   createdAt DateTime @default(now())
@@ -1081,6 +1088,11 @@ model WritingTask {
   dueDate           DateTime?
   /// Phase 47 — Skill Media Library's "Content thumbnails" for Writing assignments, shown in task LISTS (distinct from imageMediaFile above, which is the Task 1 question's own chart/graph content).
   coverImagePath    String?
+  /// Phase L - Task 1 and Task 2 created together in the test builder share one bundleId (a "Writing test"). Null for every task made on its own.
+  bundleId          String?
+  /// Phase L - a Task 1 visual that was uploaded as a PDF: the original file is kept here, the chosen page was turned into the PNG held in imageUrl.
+  visualPdfUrl      String?
+  visualPdfPage     Int?
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -1097,6 +1109,7 @@ model WritingTask {
   fullMockUse FullMockWritingSection?
 
   @@index([createdById, status])
+  @@index([bundleId])
   @@map("writing_tasks")
 }
 

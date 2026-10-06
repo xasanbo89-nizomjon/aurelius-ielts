@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Trophy } from "lucide-react";
 
+import { scopeFor } from "@/lib/exam/test-access";
 import { requireTeacherProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { listMockAccessCodesForFullMockTest } from "@/lib/mock-access-codes";
@@ -17,7 +18,7 @@ export default async function MockAccessCodesPage({ params }: { params: Promise<
   const { id } = await params;
   const { profile } = await requireTeacherProfile();
 
-  const test = await prisma.fullMockTest.findFirst({ where: { id, createdById: profile.id }, select: { id: true, title: true } });
+  const test = await prisma.fullMockTest.findFirst({ where: { id, ...scopeFor(profile) }, select: { id: true, title: true } });
   if (!test) notFound();
 
   const [codes, students] = await Promise.all([

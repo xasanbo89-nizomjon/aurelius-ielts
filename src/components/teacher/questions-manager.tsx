@@ -364,7 +364,7 @@ function QuestionList({
       {items.map((question) => {
         const numbering = numberById.get(question.id);
         return (
-        <Card key={question.id} className="py-3">
+        <Card key={question.id} id={`question-${question.id}`} className="scroll-mt-24 py-3">
           <CardContent className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center gap-2">

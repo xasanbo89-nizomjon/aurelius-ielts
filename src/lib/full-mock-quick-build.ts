@@ -12,6 +12,7 @@ import { parseWritingTasksFromText, type ParsedWritingTask } from "@/lib/writing
 import { confirmImport, getImportedTestForReview, validateImportedTestRows } from "@/lib/pdf-test-import";
 import * as tm from "@/lib/exam/test-management";
 import { scheduleRecordingMeasure } from "@/lib/exam/recording-length";
+import { authorScope } from "@/lib/exam/test-access";
 import { createWritingTask } from "@/lib/writing-tasks";
 import { createFullMockTest, publishFullMockTest } from "@/lib/full-mock-tests";
 import { QUICK_BUILD_LISTENING_MINUTES, QUICK_BUILD_READING_MINUTES } from "@/lib/full-mock-metadata";
@@ -45,7 +46,7 @@ export async function prepareListeningAudioUpload(teacherId: string, file: { nam
 export type UploadedListeningAudio = { url: string; fileName: string; mimeType: string; size: number };
 
 /** The audio URL must be an object this teacher just uploaded to the listening bucket — never an arbitrary URL, and never another teacher's file. */
-function assertOwnListeningAudio(teacherId: string, audio: UploadedListeningAudio) {
+export function assertOwnListeningAudio(teacherId: string, audio: UploadedListeningAudio) {
   const location = parseStoredFileLocation(audio.url);
   if (!location || location.kind !== "supabase" || location.bucket !== LISTENING_AUDIO_BUCKET || !location.path.startsWith(`${teacherId}/`)) {
     throw new Error("That audio file wasn't uploaded correctly. Please upload it again.");
@@ -61,7 +62,8 @@ function assertOwnListeningAudio(teacherId: string, audio: UploadedListeningAudi
  */
 export async function attachListeningAudio(mockTestId: string, teacherId: string, audio: UploadedListeningAudio): Promise<number> {
   assertOwnListeningAudio(teacherId, audio);
-  const test = await prisma.mockTest.findFirst({ where: { id: mockTestId, createdById: teacherId, type: "LISTENING" }, select: { id: true } });
+  // Phase L - a Root Teacher may attach a recording to any teacher's test.
+  const test = await prisma.mockTest.findFirst({ where: { id: mockTestId, ...(await authorScope(teacherId)), type: "LISTENING" }, select: { id: true } });
   if (!test) throw new Error("Listening test not found.");
 
   const updated = await prisma.passage.updateMany({

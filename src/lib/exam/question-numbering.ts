@@ -116,30 +116,64 @@ export function slotAnswered(question: Pick<NumberedQuestion<NumberableQuestion>
 
 export type SlotOutcome = { number: number; answered: boolean; correct: boolean };
 
-/** Per-number answered/correct for one row — the basis of every "x / 40" figure on the results, review and analytics screens. */
+/**
+ * What was stored when the attempt was handed in, for one question row. `isCorrect` and `pointsAwarded` are the verdict the score was built from;
+ * `points` is what the row is worth. Review screens use these FIRST so a review always agrees with the stored score, even if the answer key was edited
+ * afterwards. A plain boolean (or null) is still accepted: the old "isCorrect only" form.
+ */
+export type StoredVerdict = { isCorrect: boolean | null; pointsAwarded?: number | null; points?: number | null };
+
+const verdictOf = (stored: boolean | null | StoredVerdict | undefined): StoredVerdict | null =>
+  stored === undefined || stored === null ? null : typeof stored === "boolean" ? { isCorrect: stored } : stored;
+
+/**
+ * Per-number answered/correct for one row - the basis of every "x / 40" figure on the results, review and analytics screens.
+ *
+ * Phase L1 - the STORED verdict wins whenever there is one: a single-answer row is exactly as scored; a matching / summary row that scored fully is all
+ * correct, one that scored partially shows as many correct numbers as its stored marks say. Only an old row with no stored verdict at all is worked out from
+ * the current answer key (a fallback). So the review and the stored score cannot disagree, whatever happens to the key later.
+ */
 export function evaluateSlots(
   question: NumberedQuestion<NumberableQuestion> & { correctAnswer: unknown },
   response: unknown,
-  /** The verdict stored when the attempt was submitted. When given it wins for a fully-correct / single-answer row, so a teacher editing the key afterwards can't silently disagree with the saved score. */
-  storedCorrect?: boolean | null
+  stored?: boolean | null | StoredVerdict
 ): SlotOutcome[] {
   const answered = slotAnswered(question, response);
+  const verdict = verdictOf(stored);
 
   if (!isGroupedQuestionType(question.type)) {
-    const correct = storedCorrect != null ? storedCorrect : response !== undefined && isAnswerCorrect(question.type, question.correctAnswer, response);
+    const correct = verdict?.isCorrect != null ? verdict.isCorrect : response !== undefined && isAnswerCorrect(question.type, question.correctAnswer, response);
     return [{ number: question.startNumber, answered: answered[0], correct }];
   }
 
-  if (storedCorrect === true) {
+  if (verdict?.isCorrect === true) {
     return question.slotKeys.map((_, index) => ({ number: question.startNumber + index, answered: answered[index], correct: true }));
   }
 
-  const outcomeByKey = new Map(gradeItems(question.type, question.correctAnswer, response).map((item) => [item.key, item.correct]));
-  return question.slotKeys.map((key, index) => ({
-    number: question.startNumber + index,
-    answered: answered[index],
-    correct: key != null && outcomeByKey.get(key) === true,
-  }));
+  const items = gradeItems(question.type, question.correctAnswer, response);
+  const outcomeByKey = new Map(items.map((item) => [item.key, item.correct]));
+  const now = question.slotKeys.map((key) => key != null && outcomeByKey.get(key) === true);
+
+  // A stored partial score: believe it. The current key is used to say WHICH numbers were right only when it gives the same marks the attempt got.
+  const slots = question.slotKeys.length;
+  if (verdict?.isCorrect === false && verdict.pointsAwarded != null && verdict.points != null && verdict.points > 0 && slots > 0) {
+    const nowCorrect = now.filter(Boolean).length;
+    const nowMarks = nowCorrect === slots ? verdict.points : Math.floor((verdict.points * nowCorrect) / slots);
+    if (nowCorrect === slots || nowMarks !== verdict.pointsAwarded) {
+      const k = Math.min(slots, Math.ceil((verdict.pointsAwarded * slots) / verdict.points));
+      let given = 0;
+      return question.slotKeys.map((_, index) => {
+        const isAnswered = answered[index];
+        const correct = isAnswered && given < k;
+        if (correct) given++;
+        return { number: question.startNumber + index, answered: isAnswered, correct };
+      });
+    }
+  } else if (verdict?.isCorrect === false && verdict.pointsAwarded === 0) {
+    return question.slotKeys.map((_, index) => ({ number: question.startNumber + index, answered: answered[index], correct: false }));
+  }
+
+  return question.slotKeys.map((_, index) => ({ number: question.startNumber + index, answered: answered[index], correct: now[index] }));
 }
 
 export type AttemptNumberTotals = { total: number; answered: number; correct: number; incorrect: number; skipped: number };
@@ -155,7 +189,7 @@ export function slotStatus(slot: SlotOutcome): SlotStatus {
 export function summarizeAttemptSlots<T extends NumberableQuestion & { id: string; correctAnswer: unknown }>(
   questions: readonly T[],
   responses: ReadonlyMap<string, unknown>,
-  storedCorrect?: ReadonlyMap<string, boolean | null>
+  storedCorrect?: ReadonlyMap<string, boolean | null | StoredVerdict>
 ): { rows: (NumberedQuestion<T> & { slots: SlotOutcome[] })[]; totals: AttemptNumberTotals } {
   const rows = numberQuestions(questions).map((question) => ({
     ...question,

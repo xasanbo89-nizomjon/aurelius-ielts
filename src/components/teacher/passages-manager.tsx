@@ -95,7 +95,7 @@ export function PassagesManager({
       ) : (
         <div className="space-y-3">
           {passages.map((passage, index) => (
-            <Card key={passage.id} className="py-4">
+            <Card key={passage.id} id={`passage-${passage.id}`} className="scroll-mt-24 py-4">
               <CardContent className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-sm font-medium">

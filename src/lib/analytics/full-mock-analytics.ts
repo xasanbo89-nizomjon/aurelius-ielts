@@ -1,4 +1,5 @@
 import "server-only";
+import { authorScope } from "@/lib/exam/test-access";
 
 import { prisma } from "@/lib/prisma";
 import { bandForSection, overallBandFromSections, requiredSectionsFor } from "@/lib/full-mock-band-composition";
@@ -35,7 +36,7 @@ export type FullMockAnalytics = {
  */
 export async function getFullMockTestAnalytics(fullMockTestId: string, teacherId: string): Promise<FullMockAnalytics | null> {
   const test = await prisma.fullMockTest.findFirst({
-    where: { id: fullMockTestId, createdById: teacherId },
+    where: { id: fullMockTestId, ...(await authorScope(teacherId)) },
     select: { id: true, _count: { select: { writingSections: true, speakingSections: true } } },
   });
   if (!test) return null;
@@ -112,7 +113,7 @@ export type FullMockTeacherOverview = {
  */
 export async function getFullMockTeacherOverviewAnalytics(teacherId: string): Promise<FullMockTeacherOverview> {
   const tests = await prisma.fullMockTest.findMany({
-    where: { createdById: teacherId },
+    where: await authorScope(teacherId),
     select: {
       id: true,
       title: true,

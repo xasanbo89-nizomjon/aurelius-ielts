@@ -38,7 +38,12 @@ export const sentenceCompletionOptionsSchema = z.object({
   /// word into the blank instead of (or in addition to) typing it.
   wordBank: z.array(z.string()).optional(),
 });
-export const sentenceCompletionAnswerSchema = z.string();
+/**
+ * Phase L - a typed answer is one string or a list of accepted alternatives ("colour", "color"). Grading (textMatches) has always understood
+ * an array; the schema now lets the teacher store one.
+ */
+export const textAnswerSchema = z.union([z.string(), z.array(z.string().min(1, "An accepted answer can't be empty.")).min(1, "Add at least one accepted answer.")]);
+export const sentenceCompletionAnswerSchema = textAnswerSchema;
 
 export const summaryCompletionOptionsSchema = z.object({
   text: z.string().min(1, "Add the summary text, with numbered blanks."),
@@ -46,7 +51,7 @@ export const summaryCompletionOptionsSchema = z.object({
   wordBank: z.array(z.string()).optional(),
   maxWords: z.number().int().positive().optional(),
 });
-export const summaryCompletionAnswerSchema = z.record(z.string(), z.string());
+export const summaryCompletionAnswerSchema = z.record(z.string(), textAnswerSchema); // each blank: one answer, or a list of accepted alternatives
 
 export const fillInBlankOptionsSchema = z.object({
   maxWords: z.number().int().positive().optional(),
@@ -55,12 +60,12 @@ export const fillInBlankOptionsSchema = z.object({
   /// prompt text describes the table/diagram cell, and this is its blank.
   wordBank: z.array(z.string()).optional(),
 });
-export const fillInBlankAnswerSchema = z.string();
+export const fillInBlankAnswerSchema = textAnswerSchema;
 
 export const shortAnswerOptionsSchema = z.object({
   maxWords: z.number().int().positive().optional(),
 });
-export const shortAnswerAnswerSchema = z.string();
+export const shortAnswerAnswerSchema = textAnswerSchema;
 
 export const acceptableAnswerSchema = z.union([
   z.string(),

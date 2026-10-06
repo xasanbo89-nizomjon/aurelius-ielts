@@ -42,10 +42,12 @@ export default async function ExamResultsPage({
   const skillLabel = attempt.skill === "LISTENING" ? "Listening" : "Reading";
 
   // Phase A — counts are per NUMBERED question (a matching / summary row covers several), so a 40-question test reads "x/40" here, matching the exam screen and the teacher's import review.
+  const pointsById = new Map(attempt.mockTest.questions.map((question) => [question.id, question.points]));
   const { rows, totals } = summarizeAttemptSlots(
     attempt.mockTest.questions,
     new Map(attempt.answers.map((answer) => [answer.questionId, answer.response])),
-    new Map(attempt.answers.map((answer) => [answer.questionId, answer.isCorrect]))
+    // Phase L1 - the stored verdict (and its marks) decides what is shown as right or wrong; the key is only a fallback for old rows.
+    new Map(attempt.answers.map((answer) => [answer.questionId, { isCorrect: answer.isCorrect, pointsAwarded: answer.pointsAwarded, points: pointsById.get(answer.questionId) ?? null }]))
   );
 
   const wrongQuestions = rows

@@ -1,4 +1,5 @@
 import "server-only";
+import { authorScope } from "@/lib/exam/test-access";
 import { randomInt } from "crypto";
 
 import { prisma } from "@/lib/prisma";
@@ -46,7 +47,7 @@ async function generateUniqueMockAccessCode(): Promise<string> {
 // ---------------------------------------------------------------------------
 
 async function assertOwnsFullMockTest(fullMockTestId: string, teacherId: string) {
-  const test = await prisma.fullMockTest.findFirst({ where: { id: fullMockTestId, createdById: teacherId } });
+  const test = await prisma.fullMockTest.findFirst({ where: { id: fullMockTestId, ...(await authorScope(teacherId)) } });
   if (!test) throw new OwnershipError("You don't have access to this full mock test.");
   return test;
 }
@@ -132,7 +133,7 @@ export async function createBulkMockAccessCodes(
 
 /** Phase A — change how many students may use an existing code. Can't go below the number who already have (that would orphan real attempts), and an assigned code stays single-student. */
 export async function updateMockAccessCodeMaxRedemptions(accessCodeId: string, teacherId: string, maxRedemptions: number | null): Promise<void> {
-  const row = await prisma.mockAccessCode.findFirst({ where: { id: accessCodeId, createdById: teacherId } });
+  const row = await prisma.mockAccessCode.findFirst({ where: { id: accessCodeId, ...(await authorScope(teacherId)) } });
   if (!row) throw new Error("Access code not found.");
   const next = resolveMaxRedemptions(maxRedemptions, row.assignedStudentId);
   if (next !== null && next < row.redemptionCount) {
@@ -148,18 +149,18 @@ export async function updateMockAccessCodeMaxRedemptions(accessCodeId: string, t
 // ---------------------------------------------------------------------------
 
 export async function setMockAccessCodeActive(accessCodeId: string, teacherId: string, isActive: boolean): Promise<void> {
-  const result = await prisma.mockAccessCode.updateMany({ where: { id: accessCodeId, createdById: teacherId }, data: { isActive } });
+  const result = await prisma.mockAccessCode.updateMany({ where: { id: accessCodeId, ...(await authorScope(teacherId)) }, data: { isActive } });
   if (result.count === 0) throw new Error("Access code not found.");
 }
 
 export async function updateMockAccessCodeExpiry(accessCodeId: string, teacherId: string, expiresAt: Date | null): Promise<void> {
-  const result = await prisma.mockAccessCode.updateMany({ where: { id: accessCodeId, createdById: teacherId }, data: { expiresAt } });
+  const result = await prisma.mockAccessCode.updateMany({ where: { id: accessCodeId, ...(await authorScope(teacherId)) }, data: { expiresAt } });
   if (result.count === 0) throw new Error("Access code not found.");
 }
 
 /** Blocked once a code has been redeemed — deleting it would destroy the trail linking a real attempt back to how it started. Deactivate it instead. */
 export async function deleteMockAccessCode(accessCodeId: string, teacherId: string): Promise<void> {
-  const code = await prisma.mockAccessCode.findFirst({ where: { id: accessCodeId, createdById: teacherId } });
+  const code = await prisma.mockAccessCode.findFirst({ where: { id: accessCodeId, ...(await authorScope(teacherId)) } });
   if (!code) throw new Error("Access code not found.");
   if (code.redeemedByStudentId || code.redemptionCount > 0) {
     throw new Error("This code has already been used and can't be deleted — deactivate it instead.");

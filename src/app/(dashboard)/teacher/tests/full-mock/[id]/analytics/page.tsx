@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, KeyRound } from "lucide-react";
 
+import { scopeFor } from "@/lib/exam/test-access";
 import { requireTeacherProfile } from "@/lib/session";
 import { getFullMockTestAnalytics } from "@/lib/analytics/full-mock-analytics";
 import { prisma } from "@/lib/prisma";
@@ -21,7 +22,7 @@ export default async function FullMockAnalyticsPage({
   const { profile } = await requireTeacherProfile();
 
   const [test, analytics] = await Promise.all([
-    prisma.fullMockTest.findFirst({ where: { id, createdById: profile.id }, select: { title: true } }),
+    prisma.fullMockTest.findFirst({ where: { id, ...scopeFor(profile) }, select: { title: true } }),
     getFullMockTestAnalytics(id, profile.id),
   ]);
   if (!test || !analytics) notFound();

@@ -51,14 +51,17 @@ export default async function ExamReviewPage({
       correctAnswer: question.correctAnswer,
       studentAnswer: answer?.response ?? null,
       status: !answer ? "skipped" : answer.isCorrect ? "correct" : "incorrect",
+      // Phase L1 - what the attempt was scored with, so the review always agrees with the stored score.
+      verdict: answer ? { isCorrect: answer.isCorrect, pointsAwarded: answer.pointsAwarded, points: question.points } : null,
     };
   });
 
   // Phase A — counted per NUMBERED question (a matching / summary row covers several), same as the exam screen and the results page.
+  const pointsById = new Map(attempt.mockTest.questions.map((question) => [question.id, question.points]));
   const { totals } = summarizeAttemptSlots(
     attempt.mockTest.questions,
     new Map(attempt.answers.map((answer) => [answer.questionId, answer.response])),
-    new Map(attempt.answers.map((answer) => [answer.questionId, answer.isCorrect]))
+    new Map(attempt.answers.map((answer) => [answer.questionId, { isCorrect: answer.isCorrect, pointsAwarded: answer.pointsAwarded, points: pointsById.get(answer.questionId) ?? null }]))
   );
   const correctCount = totals.correct;
   const incorrectCount = totals.incorrect;

@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { Loader2, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
-import { deleteTestAction, setArchivedAction, setPublishedAction } from "@/actions/test-management.actions";
+import { copyTestAction, deleteTestAction, setArchivedAction, setPublishedAction, type PublishActionResult } from "@/actions/test-management.actions";
+import type { TestIssue } from "@/lib/exam/test-validation";
+import { PublishIssuesDialog } from "@/components/teacher/publish-issues-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -51,6 +53,7 @@ export function TestRowActions({
   const [pending, startTransition] = useTransition();
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [understandsAttemptsGoToo, setUnderstandsAttemptsGoToo] = useState(false);
+  const [issues, setIssues] = useState<TestIssue[] | null>(null);
   const blockedByFullMock = usedInFullMocks.length > 0 || Boolean(ownerMockTitle);
 
   function run(action: () => Promise<ActionResult>, onSuccess?: () => void) {
@@ -63,6 +66,31 @@ export function TestRowActions({
       if (result.warning) toast.warning(result.warning);
       if (onSuccess) onSuccess();
       else router.refresh();
+    });
+  }
+
+  /** Publishing answers with the list of problems when the test is not ready: shown with a link to each one. */
+  function publish(next: boolean) {
+    startTransition(async () => {
+      const result: PublishActionResult = await setPublishedAction(testId, next);
+      if (result.success) {
+        router.refresh();
+        return;
+      }
+      if (result.issues && result.issues.length > 0) setIssues(result.issues);
+      else toast.error(result.error);
+    });
+  }
+
+  function copy(mode: "version" | "duplicate") {
+    startTransition(async () => {
+      const result = await copyTestAction(testId, mode);
+      if (!result.success || !result.testId) {
+        toast.error(result.success ? "Something went wrong." : result.error);
+        return;
+      }
+      toast.success(mode === "version" ? "New version created as a draft. The Full Mocks and assignments that use this test still use it." : "Copy created as a draft.");
+      router.push(`/teacher/tests/${result.testId}`);
     });
   }
 
@@ -88,10 +116,16 @@ export function TestRowActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {!isArchived && (
-            <DropdownMenuItem onSelect={() => run(() => setPublishedAction(testId, !isPublished))}>
+            <DropdownMenuItem
+              disabled={isPublished && attemptCount > 0}
+              title={isPublished && attemptCount > 0 ? "Students have taken this test - archive it to retire it, or create a new version." : undefined}
+              onSelect={() => publish(!isPublished)}
+            >
               {isPublished ? "Unpublish" : "Publish"}
             </DropdownMenuItem>
           )}
+          <DropdownMenuItem onSelect={() => copy("version")}>Create new version</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => copy("duplicate")}>Duplicate</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => run(() => setArchivedAction(testId, !isArchived))}>
             {isArchived ? "Unarchive" : "Archive"}
           </DropdownMenuItem>
@@ -107,6 +141,8 @@ export function TestRowActions({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <PublishIssuesDialog testId={testId} issues={issues ?? []} open={issues !== null} onOpenChange={(open) => !open && setIssues(null)} />
 
       <Dialog
         open={confirmDeleteOpen}

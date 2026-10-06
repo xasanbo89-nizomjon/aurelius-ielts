@@ -510,6 +510,8 @@ export async function confirmImport(
     }
   }
 
+  // Phase L1 - the group ranges are derived from the rows (the same numbering the student sees), once, at the end.
+  await tm.syncGroupRanges(mockTest.id);
   await prisma.importedTest.update({ where: { id: row.id }, data: { status: "IMPORTED", resultMockTestId: mockTest.id } });
 
   return { mockTestId: mockTest.id, warnings };

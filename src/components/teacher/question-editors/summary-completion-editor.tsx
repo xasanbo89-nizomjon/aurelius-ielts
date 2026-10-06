@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { z } from "zod";
 
+import { answerToText, textToAnswer } from "@/lib/exam/answer-alternatives";
 import type { summaryCompletionOptionsSchema } from "@/lib/exam/question-types";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,7 @@ export function SummaryCompletionEditor({
   options,
   correctAnswer,
   onChange,
-}: QuestionEditorProps<Options, Record<string, string>>) {
+}: QuestionEditorProps<Options, Record<string, string | string[]>>) {
   const blankNumbers = useMemo(() => extractBlankNumbers(options.text), [options.text]);
 
   function updateText(text: string) {
@@ -33,7 +34,7 @@ export function SummaryCompletionEditor({
   }
 
   function updateBlankAnswer(number: string, value: string) {
-    onChange(options, { ...correctAnswer, [number]: value });
+    onChange(options, { ...correctAnswer, [number]: textToAnswer(value) });
   }
 
   function updateWordBank(raw: string) {
@@ -71,7 +72,7 @@ export function SummaryCompletionEditor({
                 </Label>
                 <Input
                   id={`blank-${number}`}
-                  value={correctAnswer[number] ?? ""}
+                  value={answerToText(correctAnswer[number])}
                   onChange={(event) => updateBlankAnswer(number, event.target.value)}
                 />
               </div>

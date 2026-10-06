@@ -63,19 +63,20 @@ export async function getResultInsights(resultId: string, studentId: string): Pr
         select: {
           durationMinutes: true,
           passages: { orderBy: { orderIndex: "asc" }, select: { id: true, title: true, orderIndex: true } },
-          questions: { orderBy: { orderIndex: "asc" }, select: { id: true, type: true, passageId: true, options: true, correctAnswer: true } },
+          questions: { orderBy: { orderIndex: "asc" }, select: { id: true, type: true, passageId: true, options: true, correctAnswer: true, points: true } },
         },
       },
-      answers: { select: { questionId: true, isCorrect: true, response: true } },
+      answers: { select: { questionId: true, isCorrect: true, pointsAwarded: true, response: true } },
     },
   });
   if (!result) return null;
 
   // Phase A — every figure below counts NUMBERED questions (a matching / summary row covers several), so "x / 40" here matches what the student saw while taking the test and what the teacher's import review showed.
+  const pointsById = new Map(result.mockTest.questions.map((q) => [q.id, q.points]));
   const { rows, totals } = summarizeAttemptSlots(
     result.mockTest.questions,
     new Map(result.answers.map((a) => [a.questionId, a.response])),
-    new Map(result.answers.map((a) => [a.questionId, a.isCorrect]))
+    new Map(result.answers.map((a) => [a.questionId, { isCorrect: a.isCorrect, pointsAwarded: a.pointsAwarded, points: pointsById.get(a.questionId) ?? null }]))
   );
 
   const byType = new Map<QuestionType, { correct: number; total: number }>();
