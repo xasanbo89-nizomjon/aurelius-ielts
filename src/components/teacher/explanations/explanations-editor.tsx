@@ -218,23 +218,28 @@ export function ExplanationsEditor({ data, ai: initialAi, usage }: { data: Expla
             <Switch checked={ai.enabled} onCheckedChange={toggleAi} disabled={pending} aria-label="Generate explanations with AI" data-testid="ex-ai-switch" />
             <span>
               <span className="font-medium">Generate with AI</span>
-              <span className="text-muted-foreground block text-xs">{ai.enabled ? `${ai.usedToday} of ${ai.dailyLimit} used today · every text is a draft until you approve it` : "Off - you write the explanations by hand"}</span>
+              <span className="text-muted-foreground block text-xs">{ai.enabled ? `${ai.usedToday} of ${ai.dailyLimit} used today · every text is a draft until you approve it` : "Off - switch it on to use \"Generate explanations for all questions\" (or write them by hand)"}</span>
             </span>
           </label>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {ai.enabled && (
-            <>
-              <Button type="button" size="sm" variant="outline" disabled={pending || bulk?.running === true || remaining === 0} onClick={() => void generateAll()} data-testid="ex-generate-all">
-                {bulk?.running ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} Generate explanations for all questions
-              </Button>
-              {bulk?.running && (
-                <Button type="button" size="sm" variant="ghost" onClick={() => (stopBulk.current = true)} data-testid="ex-generate-stop">
-                  Stop
-                </Button>
-              )}
-            </>
+          {/* always shown, so a teacher can find it: it only works once "Generate with AI" is switched on */}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!ai.enabled || pending || bulk?.running === true || remaining === 0}
+            title={ai.enabled ? undefined : "Switch on \"Generate with AI\" first"}
+            onClick={() => void generateAll()}
+            data-testid="ex-generate-all"
+          >
+            {bulk?.running ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} Generate explanations for all questions
+          </Button>
+          {bulk?.running && (
+            <Button type="button" size="sm" variant="ghost" onClick={() => (stopBulk.current = true)} data-testid="ex-generate-stop">
+              Stop
+            </Button>
           )}
           <Button type="button" size="sm" disabled={counts.draft === 0 || pending || busy !== null || bulk?.running === true} onClick={approveAll} data-testid="ex-approve-all">
             {busy === "approve-all" ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Approve all{counts.draft > 0 ? ` (${counts.draft})` : ""}

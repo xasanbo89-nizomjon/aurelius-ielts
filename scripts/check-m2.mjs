@@ -12,7 +12,10 @@
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { PrismaClient } from "@prisma/client";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
+import { NO_ANSWER, OfficialBlank } from "@/components/exam/official/official-answer-controls";
 import { buildReviewRows, numberMatchesStatus, reviewTotals, trueFalseLabel } from "@/lib/exam/official-review";
 import { chooseSetSlotLines } from "@/lib/exam/slot-answers";
 import { numberQuestions } from "@/lib/exam/question-numbering";
@@ -153,6 +156,26 @@ await check("review model: totals, filters and the Choose TWO lines are consiste
   const set = rows[7];
   assert.equal(set.chooseSet, true);
   assert.deepEqual(set.numbers.map((n) => [n.number, n.outcome, n.student, n.correct]), [[11, "correct", "A. Option A", "A. Option A"], [12, "wrong", "B. Option B", "D. Option D"]]);
+});
+
+await check("review model: the right answer is shown exactly as stored - the letter case is never changed", () => {
+  const fills = (correctAnswer, studentAnswer) => buildReviewRows([q("f", "FILL_IN_BLANK", { correctAnswer, studentAnswer, verdict: { isCorrect: false, pointsAwarded: 0, points: 1 } })]).flatMap((row) => row.numbers)[0];
+  assert.equal(fills("raindrops", "x").correct, "raindrops", "stored lower case stays lower case");
+  assert.equal(fills("Raindrops", "x").correct, "Raindrops", "stored capital stays a capital");
+  assert.equal(fills(["raindrops", "Rain drops"], "x").correct, "raindrops / Rain drops", "each alternative as stored");
+  assert.equal(fills("raindrops", "RAINdrops").student, "RAINdrops", "what the student typed is shown as typed");
+  const summary = buildReviewRows([q("s", "SUMMARY_COMPLETION", { options: { text: "A {{1}} and a {{2}}.", blankCount: 2 }, correctAnswer: { 1: "sub-arctic", 2: "Frogs" }, studentAnswer: {}, verdict: null })]).flatMap((row) => row.numbers);
+  assert.deepEqual(summary.map((n) => n.correct), ["sub-arctic", "Frogs"]);
+});
+
+await check("review: an empty answer box says \"No answer\" (never its question number); in the exam it still shows the number", () => {
+  const placeholderOf = (props) => /placeholder="([^"]*)"/.exec(renderToStaticMarkup(createElement(OfficialBlank, { id: "b1", value: "", onValueChange: () => undefined, number: 3, label: "Question 3", ...props })))?.[1] ?? null;
+  assert.equal(NO_ANSWER, "No answer");
+  assert.equal(placeholderOf({}), "3", "the exam: an empty box shows its question number");
+  assert.equal(placeholderOf({ readOnly: true }), "No answer", "a review: the same empty box says No answer");
+  assert.equal(placeholderOf({ readOnly: true, value: "   " }), "No answer", "only spaces is no answer");
+  assert.equal(placeholderOf({ readOnly: true, value: "raindrops" }), null, "an answered box shows the answer and no placeholder");
+  assert.equal(placeholderOf({ value: "raindrops" }), "3", "the exam keeps its number placeholder even when typed in (hidden by the browser)");
 });
 
 await check("explanation text: cleaned, limited, and a question's key is stable", () => {

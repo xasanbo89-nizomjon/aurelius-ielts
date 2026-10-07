@@ -239,26 +239,33 @@ export function EvidenceEditor({ data, ai: initialAi }: { data: EvidenceEditorDa
           <Switch checked={ai.enabled} onCheckedChange={toggleAi} disabled={pending} aria-label="Suggest evidence with AI" data-testid="ev-ai-switch" />
           <span>
             <span className="font-medium">Suggest with AI</span>
-            <span className="text-muted-foreground block text-xs">{ai.enabled ? `${ai.usedToday} of ${ai.dailyLimit} used today · you confirm every suggestion` : "Off - you set the evidence by hand"}</span>
+            <span className="text-muted-foreground block text-xs">{ai.enabled ? `${ai.usedToday} of ${ai.dailyLimit} used today · you confirm every suggestion` : "Off - switch it on to use \"Suggest evidence for all questions\" (or set the evidence by hand)"}</span>
           </span>
         </label>
-        {ai.enabled && (
-          <div className="flex w-full flex-wrap items-center gap-3" data-testid="ev-bulk">
-            <Button type="button" size="sm" variant="outline" disabled={pending || bulk?.running === true || ai.usedToday >= ai.dailyLimit} onClick={() => void suggestAll()} data-testid="ev-suggest-all">
-              {bulk?.running ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} Suggest evidence for all questions
+        {/* always shown, so a teacher can find it: it only works once "Suggest with AI" is switched on */}
+        <div className="flex w-full flex-wrap items-center gap-3" data-testid="ev-bulk">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!ai.enabled || pending || bulk?.running === true || ai.usedToday >= ai.dailyLimit}
+            title={ai.enabled ? undefined : "Switch on \"Suggest with AI\" first"}
+            onClick={() => void suggestAll()}
+            data-testid="ev-suggest-all"
+          >
+            {bulk?.running ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} Suggest evidence for all questions
+          </Button>
+          {bulk?.running && (
+            <Button type="button" size="sm" variant="ghost" onClick={() => (stopBulk.current = true)} data-testid="ev-suggest-stop">
+              Stop
             </Button>
-            {bulk?.running && (
-              <Button type="button" size="sm" variant="ghost" onClick={() => (stopBulk.current = true)} data-testid="ev-suggest-stop">
-                Stop
-              </Button>
-            )}
-            {bulk && (
-              <span className="text-muted-foreground text-xs" role="status" data-testid="ev-bulk-status">
-                {bulk.running ? `Asking the AI... ${bulk.done} of ${bulk.total}` : `Done: ${bulk.saved} suggested, ${bulk.notFound} not found in the text${bulk.stopped ? ` - ${bulk.stopped}` : ""}`}
-              </span>
-            )}
-          </div>
-        )}
+          )}
+          {bulk && (
+            <span className="text-muted-foreground text-xs" role="status" data-testid="ev-bulk-status">
+              {bulk.running ? `Asking the AI... ${bulk.done} of ${bulk.total}` : `Done: ${bulk.saved} suggested, ${bulk.notFound} not found in the text${bulk.stopped ? ` - ${bulk.stopped}` : ""}`}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ---- Phase M2: the suggestions to review ---- */}

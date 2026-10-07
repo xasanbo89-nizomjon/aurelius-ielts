@@ -5,10 +5,13 @@ import { useState, type ClipboardEvent, type MouseEvent, type ReactNode } from "
 import { cn } from "@/lib/utils";
 import { tidyPaste } from "@/components/exam/answer-input";
 
+/** What an empty box says in a review: its question number there would read like the student's own answer. */
+export const NO_ANSWER = "No answer";
+
 /**
  * The typed-answer box of the official screen: a flat box that sits INSIDE the sentence, shows its
  * question number while empty (the number goes away as soon as something is typed — it is the
- * placeholder), and holds roughly 17 characters.
+ * placeholder), and holds roughly 17 characters. In a review (read-only) an empty box says "No answer".
  *
  * Behaves exactly like the legacy `AnswerInput`: pasting only tidies stray whitespace out of text
  * copied from the passage (`tidyPaste`), no autofill / autocorrect / spellcheck, and
@@ -69,7 +72,7 @@ export function OfficialBlank({
       onPaste={handlePaste}
       readOnly={readOnly || undefined}
       data-outcome={outcome}
-      placeholder={number != null ? String(number) : undefined}
+      placeholder={readOnly ? (value.trim().length === 0 ? NO_ANSWER : undefined) : number != null ? String(number) : undefined}
       autoComplete="off"
       autoCorrect="off"
       autoCapitalize="none"

@@ -15,7 +15,7 @@ import { formatNumberRange, type NumberedQuestion } from "@/lib/exam/question-nu
 import { chooseCountOf } from "@/lib/exam/choose-many";
 import type { ExamQuestion } from "@/components/exam/exam-runner";
 import { OfficialQuestionText } from "@/components/exam/official/official-text";
-import { OfficialBlank, OfficialDrop, OfficialWordBank, ignoreClickThatEndsASelection } from "@/components/exam/official/official-answer-controls";
+import { NO_ANSWER, OfficialBlank, OfficialDrop, OfficialWordBank, ignoreClickThatEndsASelection } from "@/components/exam/official/official-answer-controls";
 import { NumberBox, RowExplainBar, RowNumberMark, useReviewRow } from "@/components/exam/official/official-review-context";
 
 export type OfficialRow = NumberedQuestion<ExamQuestion>;
@@ -310,7 +310,7 @@ const MatchingRow = memo(function MatchingRow({ row, value, onAnswer, prompts, o
               data-question-number={number}
             >
               <option value="" hidden>
-                {number}
+                {review ? NO_ANSWER : number}
               </option>
               {options.map((option, optionIndex) => (
                 <option key={option.id} value={option.id}>

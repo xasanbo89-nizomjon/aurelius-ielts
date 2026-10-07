@@ -55,6 +55,9 @@ redirect in `submitAttemptAction`). Nothing here changes how a test is sat, time
 5. **Explain more / What's the trap?** Next to the answer of every question that has an approved explanation (once, under the row, for a question that covers several
    numbers). A popover with the note "Auto-generated explanation — may not be fully accurate."; "The trap" and "The fix" in the second. A question with none (not written,
    a draft, or outdated) shows no buttons. **No student ever triggers an AI call**: the review makes no request that writes anything.
+   **What an empty box shows:** an answer box (or a matching drop-down) the student left empty says **"No answer"** - never its question number, which would read like
+   something they typed. **The right answer is shown exactly as stored** ("raindrops" stays "raindrops", "Raindrops" stays "Raindrops"): nothing in the review changes
+   letter case. Scoring ignores case, so a key typed with or without a capital marks the same.
 6. **Filters** (in the part bar, as before): All / Wrong / Unanswered counted in question numbers, and a question-type list. Rows that do not match are hidden, their
    numbers are dimmed in the footer, and the screen moves to a part that has something to show.
 
@@ -84,6 +87,18 @@ already taken - because it changes no question, answer or score.
   `OPENAI_MODEL` is used (default gpt-4o-mini).
 - **Retired:** the per-student "Explain More" button (which asked the AI on every click, at the student's cost to the platform) is no longer on the student's screens: the
   review has the stored popovers instead, and a wrong answer on the older results page links to the review. The server functions behind it are still in the code.
+
+## Where the teacher finds the bulk buttons (Phase M2)
+
+Open the test: **Teacher > Tests > the test**. Two buttons in its header open the pages: **Answer evidence (confirmed/all)** and **Explanations (approved/all)**.
+
+| Page | Switch to turn on first (per teacher, off by default) | Button | Then |
+| --- | --- | --- | --- |
+| Answer evidence | **Suggest with AI** (top card) | **Suggest evidence for all questions** (next to the switch; visible but greyed out while the switch is off) | the card **AI suggestions to review (N)** appears: **Confirm** / **Edit** / **Reject** per number, or **Confirm all** in its header |
+| Explanations | **Generate with AI** (top card) | **Generate explanations for all questions** (next to the switch; greyed out while it is off) | every result is a draft: **Edit** / **Regenerate** / **Approve** per question, or **Approve all (N)** in the top card |
+
+Students see nothing from either page until evidence is confirmed / an explanation is approved. Both switches only enable the teacher's own use of the AI; the daily limits and
+the server's `OPENAI_API_KEY` apply as for every AI feature.
 
 ## Answer evidence in bulk (Phase M2)
 

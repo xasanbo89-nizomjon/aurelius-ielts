@@ -1660,6 +1660,13 @@
   cursor: default;
 }
 
+/* an empty box says "No answer" - a hint, not something the student wrote */
+.ex-reviewing .ex-blank[readonly]::placeholder,
+.ex-reviewing .ex-select[data-empty="true"] {
+  font-style: italic;
+  font-weight: 400;
+}
+
 .ex-reviewing .ex-blank[data-outcome="correct"],
 .ex-reviewing .ex-select[data-outcome="correct"] {
   border: 2px solid var(--ex-good-text);
