@@ -367,6 +367,8 @@ model TeacherProfile {
   mockAccessCodes         MockAccessCode[]
   /// Phase M - the "Suggest with AI" requests of the evidence editor (what its daily limit counts).
   evidenceSuggestionLogs  EvidenceSuggestionLog[]
+  /// Phase M2 - the AI explanation requests of the explanations editor (what its daily limit counts, and its token usage).
+  explanationLogs        ExplanationGenerationLog[]
 
   @@map("teacher_profiles")
 }
@@ -569,6 +571,8 @@ model Question {
   aiExplanationRequests AiExplanationRequest[]
   bookmarks             QuestionBookmark[]
   highlights            QuestionHighlight[]
+  /// Phase M2 - the stored "Explain more" / "What's the trap?" text of this question (one row, written once for everybody - see QuestionExplanation).
+  explanation           QuestionExplanation?
 
   @@index([mockTestId])
   @@map("questions")
@@ -2227,6 +2231,10 @@ model AiSettings {
   evidenceSuggestionsEnabled   Boolean?
   /// Phase M - AI evidence suggestions this teacher may ask for per day. Null = the default (see src/lib/ai/evidence-suggestions.ts).
   dailyEvidenceSuggestionLimit Int?
+  /// Phase M2 - the teacher has switched on "Generate explanations with AI" in the explanations editor. Null = off.
+  explanationsEnabled          Boolean?
+  /// Phase M2 - AI explanations this teacher may generate per day. Null = the default (see src/lib/ai/explanation-generation.ts).
+  dailyExplanationAiLimit      Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2247,6 +2255,59 @@ model EvidenceSuggestionLog {
 
   @@index([teacherId, createdAt])
   @@map("evidence_suggestion_logs")
+}
+
+enum ExplanationStatus {
+  /// Written (by the AI or a teacher) but not approved: no student sees it.
+  DRAFT
+  /// A teacher approved it: students see it in their review (while it still matches the question - see sourceHash).
+  APPROVED
+}
+
+/// Phase M2 - the "Explain more" and "What's the trap?" text of ONE question, written once for every student (a student never triggers an AI call). Students
+/// see it only when `status` is APPROVED and `sourceHash` still equals the hash of the question as it is now (its type, wording, options and right answer),
+/// so an edited answer key never shows an old explanation; a new version of a test copies the row, and it stays valid only while nothing it was written for changed.
+model QuestionExplanation {
+  id           String            @id @default(cuid())
+  questionId   String            @unique
+  question     Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  /// Why the right answer is right, pointing at the evidence (a short quote); for True / False / Not Given also why the other options are wrong.
+  explainText  String?           @db.Text
+  /// The typical mistake on this question ("The trap") and how to avoid it ("The fix").
+  trapText     String?           @db.Text
+  fixText      String?           @db.Text
+  status       ExplanationStatus @default(DRAFT)
+  /// Hash of what the text was written for (see src/lib/exam/question-explanations.ts).
+  sourceHash   String
+  /// "AI" as generated; "TEACHER" once a teacher has edited or written it.
+  source       String            @default("AI")
+  /// The model that wrote it (from OPENAI_EXPLANATION_MODEL / OPENAI_MODEL); null for text a teacher wrote.
+  model        String?
+  generatedAt  DateTime?
+  approvedAt   DateTime?
+  /// The teacher who approved it (a plain id: the text outlives the teacher's profile).
+  approvedById String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@map("question_explanations")
+}
+
+/// Phase M2 - one row per AI explanation request that reached the model: the teacher's daily limit counts them, and the Root Teacher reads the token usage here.
+/// `mockTestId` / `questionId` are plain ids, not foreign keys: the log outlives a deleted test.
+model ExplanationGenerationLog {
+  id               String         @id @default(cuid())
+  teacherId        String
+  teacher          TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  mockTestId       String?
+  questionId       String?
+  model            String?
+  promptTokens     Int?
+  completionTokens Int?
+  createdAt        DateTime       @default(now())
+
+  @@index([teacherId, createdAt])
+  @@map("explanation_generation_logs")
 }
 
 // ---------------------------------------------------------------------------

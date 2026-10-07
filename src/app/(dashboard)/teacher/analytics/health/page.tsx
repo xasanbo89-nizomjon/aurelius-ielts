@@ -4,6 +4,7 @@ import { Activity, AlertTriangle, Database, Gauge, Sparkles } from "lucide-react
 
 import { requireTeacherProfile } from "@/lib/session";
 import { getPlatformHealthSnapshot } from "@/lib/analytics/platform-health";
+import { getExplanationUsage } from "@/lib/ai/explanation-generation";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,6 +18,8 @@ export default async function PlatformHealthPage() {
   if (!profile.isRootTeacher) redirect("/teacher/dashboard");
 
   const health = await getPlatformHealthSnapshot();
+  // Phase M2 - the stored-explanation writer keeps its own DURABLE log (every request that reached the model, with its tokens): unlike the table above it survives a restart.
+  const explanationUsage = await getExplanationUsage();
 
   return (
     <>
@@ -103,6 +106,38 @@ export default async function PlatformHealthPage() {
             </TableBody>
           </Table>
         )}
+
+        <div className="space-y-2" data-testid="explanation-usage">
+          <h3 className="text-sm font-medium">Stored explanations - every request to the model (a durable log: a restart does not reset it)</h3>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Period</TableHead>
+                <TableHead>Requests</TableHead>
+                <TableHead>Prompt tokens</TableHead>
+                <TableHead>Completion tokens</TableHead>
+                <TableHead>Total tokens</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(
+                [
+                  ["Today", explanationUsage.today],
+                  ["Last 30 days", explanationUsage.last30Days],
+                  ["All time", explanationUsage.allTime],
+                ] as const
+              ).map(([label, row]) => (
+                <TableRow key={label} data-testid={`explanation-usage-${label.toLowerCase().replace(/ /g, "-")}`}>
+                  <TableCell>{label}</TableCell>
+                  <TableCell>{row.requests.toLocaleString()}</TableCell>
+                  <TableCell>{row.promptTokens.toLocaleString()}</TableCell>
+                  <TableCell>{row.completionTokens.toLocaleString()}</TableCell>
+                  <TableCell>{(row.promptTokens + row.completionTokens).toLocaleString()}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </section>
 
       <section className="space-y-4">

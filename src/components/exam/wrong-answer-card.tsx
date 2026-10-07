@@ -1,17 +1,15 @@
-"use client";
+import Link from "next/link";
+import { XCircle } from "lucide-react";
 
-import { useState } from "react";
-import { Loader2, Sparkles, XCircle } from "lucide-react";
-
-import { explainWrongAnswerAction } from "@/actions/exam.actions";
-import type { ExplainWrongAnswerResponse } from "@/lib/ai/prompts/explain-wrong-answer";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
+/**
+ * A wrong answer on the results page. Phase M2 - the answer, the evidence and the explanation a teacher approved are in the review (written once for every
+ * student); this card no longer asks the AI anything, so a student's click can never cost an AI call.
+ */
 export function WrongAnswerCard({
   resultId,
-  questionId,
   label,
   detail,
   prompt,
@@ -26,22 +24,6 @@ export function WrongAnswerCard({
   prompt: string;
   answered: boolean;
 }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [explanation, setExplanation] = useState<ExplainWrongAnswerResponse | null>(null);
-
-  async function handleExplain() {
-    setLoading(true);
-    setError(null);
-    const result = await explainWrongAnswerAction(resultId, questionId);
-    if (result.success) {
-      setExplanation(result.explanation);
-    } else {
-      setError(result.error);
-    }
-    setLoading(false);
-  }
-
   return (
     <Card className="py-4">
       <CardContent className="space-y-3">
@@ -56,46 +38,9 @@ export function WrongAnswerCard({
             <p className="text-sm">{prompt}</p>
           </div>
         </div>
-
-        {!explanation && (
-          <Button variant="outline" size="sm" onClick={handleExplain} disabled={loading}>
-            {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-            Explain More
-          </Button>
-        )}
-
-        {error && <p className="text-destructive text-xs">{error}</p>}
-
-        {explanation && (
-          <div className="border-border/70 space-y-2.5 border-t pt-3 text-sm">
-            <div>
-              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Why it&apos;s wrong</p>
-              <p>{explanation.whyWrong}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Why the correct answer is right</p>
-              <p>{explanation.whyCorrect}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Key keywords</p>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {explanation.keyKeywords.map((keyword) => (
-                  <Badge key={keyword} variant="secondary">
-                    {keyword}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">IELTS strategy</p>
-              <p>{explanation.ieltsStrategy}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Improve next time</p>
-              <p>{explanation.improvementAdvice}</p>
-            </div>
-          </div>
-        )}
+        <Link href={`/student/exam/attempt/${resultId}/review`} className="text-accent text-xs font-medium underline underline-offset-2">
+          See the answer and the explanation in the review
+        </Link>
       </CardContent>
     </Card>
   );

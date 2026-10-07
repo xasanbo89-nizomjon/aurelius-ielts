@@ -21,6 +21,8 @@ export function OfficialBlank({
   number,
   label,
   ownLine = false,
+  readOnly = false,
+  outcome,
 }: {
   id: string;
   value: string;
@@ -29,6 +31,10 @@ export function OfficialBlank({
   number: number | null;
   label: string;
   ownLine?: boolean;
+  /** Phase M2 - the review shows what the student wrote and cannot change it. */
+  readOnly?: boolean;
+  /** Phase M2 - in a review: the stored verdict of this number (colours the box). */
+  outcome?: string;
 }) {
   function handlePaste(event: ClipboardEvent<HTMLInputElement>) {
     const raw = event.clipboardData.getData("text/plain");
@@ -61,6 +67,8 @@ export function OfficialBlank({
       value={value}
       onChange={(event) => onValueChange(event.target.value)}
       onPaste={handlePaste}
+      readOnly={readOnly || undefined}
+      data-outcome={outcome}
       placeholder={number != null ? String(number) : undefined}
       autoComplete="off"
       autoCorrect="off"
@@ -111,7 +119,7 @@ export function OfficialDrop({ onPlace, armedWord, children }: { onPlace: (word:
 }
 
 /** The box of words a completion task lets you choose from — drag a word onto a gap, or click it and then click the gap. */
-export function OfficialWordBank({ words, armedWord, onArm, label = "Word bank" }: { words: readonly string[]; armedWord: string | null; onArm: (word: string | null) => void; label?: string }) {
+export function OfficialWordBank({ words, armedWord, onArm, label = "Word bank", readOnly = false }: { words: readonly string[]; armedWord: string | null; onArm: (word: string | null) => void; label?: string; /** Phase M2 - in a review the words are only shown. */ readOnly?: boolean }) {
   return (
     <div className="ex-bank">
       <p className="ex-list-title">{label}</p>
@@ -120,10 +128,11 @@ export function OfficialWordBank({ words, armedWord, onArm, label = "Word bank" 
           <button
             key={word}
             type="button"
-            draggable
+            draggable={!readOnly}
+            disabled={readOnly}
             className="ex-bank-word"
             aria-pressed={armedWord === word}
-            title="Drag onto a gap, or click it and then click the gap"
+            title={readOnly ? undefined : "Drag onto a gap, or click it and then click the gap"}
             onDragStart={(event) => {
               event.dataTransfer.setData("text/plain", word);
               event.dataTransfer.effectAllowed = "copy";

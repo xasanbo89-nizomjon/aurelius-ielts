@@ -227,7 +227,8 @@ export async function submitAttemptAction(resultId: string) {
   // Inside a Full Mock the sitting carries straight on: the next screen is the "ready" screen for the next section (Listening finished → Start Reading; Reading completed → Start Writing), not this section's marks.
   const fullMockAttemptId = await findInProgressFullMockLinkForResult(resultId);
   if (fullMockAttemptId) redirect(`/student/full-mock/attempt/${fullMockAttemptId}/transition`);
-  redirect(`/student/exam/attempt/${resultId}/results`);
+  // Phase M2 - straight to the review, which opens with the results dialog (band, raw score, every answer); the older results page stays reachable from the history.
+  redirect(`/student/exam/attempt/${resultId}/review?results=1`);
 }
 
 /**

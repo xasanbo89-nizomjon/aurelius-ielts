@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { ErrorState } from "@/components/dashboard/error-state";
+import { isChunkLoadError, reloadOnceForChunkError } from "@/lib/chunk-reload";
 
 export default function TeacherError({
   error,
@@ -12,6 +13,7 @@ export default function TeacherError({
   reset: () => void;
 }) {
   useEffect(() => {
+    if (isChunkLoadError(error) && reloadOnceForChunkError()) return;
     console.error(error);
   }, [error]);
 

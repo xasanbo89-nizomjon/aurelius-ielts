@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { reportClientErrorAction } from "@/actions/error-report.actions";
+import { isChunkLoadError, reloadOnceForChunkError } from "@/lib/chunk-reload";
 
 /**
  * Phase 31 — Part 5. The root-level error boundary — catches a failure in
@@ -14,6 +15,7 @@ import { reportClientErrorAction } from "@/actions/error-report.actions";
  */
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
+    if (isChunkLoadError(error) && reloadOnceForChunkError()) return;
     console.error(error);
     void reportClientErrorAction(error.message, error.digest);
   }, [error]);

@@ -9,6 +9,14 @@ import { questionRegion, type HighlightRange, type TextRange } from "@/lib/exam/
 export type DrawnHighlight = HighlightRange & { note?: string | null };
 
 /**
+ * Phase M2 - in a review the stretch of a passage a teacher confirmed as the evidence of question N is drawn like a highlight whose id is `ev:N`: green
+ * instead of yellow (a student's own highlight keeps its yellow, and where the two overlap both show), with a small number badge at its start. A stored
+ * highlight never has such an id, and an exam never passes one, so nothing changes outside a review.
+ */
+export const EVIDENCE_ID_PREFIX = "ev:";
+export const evidenceId = (number: number) => `${EVIDENCE_ID_PREFIX}${number}`;
+
+/**
  * One highlightable string of the official exam screen — a passage, a question's wording, an
  * answer option. Same contract as `HighlightableText` (the legacy screen): the element's text IS
  * the stored string and highlights are <mark> wrappers, which is what lets a selection become
@@ -33,6 +41,7 @@ export const OfficialText = memo(function OfficialText({
   hidden,
   heading = null,
   inserts,
+  activeEvidence = null,
   as: Tag = "span",
   className,
 }: {
@@ -44,6 +53,8 @@ export const OfficialText = memo(function OfficialText({
   heading?: TextRange | null;
   /** offset → node placed in front of the text that starts there (an offset equal to the text length places it after the last character). */
   inserts?: ReadonlyMap<number, ReactNode>;
+  /** Phase M2 - the question number whose evidence is in focus (drawn stronger). */
+  activeEvidence?: number | null;
   as?: ElementType;
   className?: string;
 }) {
@@ -68,13 +79,17 @@ export const OfficialText = memo(function OfficialText({
     const slice = text.slice(piece.start, piece.end);
     let node: ReactNode = slice;
     if (piece.highlightIds.length > 0) {
-      const ids = piece.highlightIds.join(" ");
+      const evidence = piece.highlightIds.filter((id) => id.startsWith(EVIDENCE_ID_PREFIX)).map((id) => id.slice(EVIDENCE_ID_PREFIX.length));
+      const own = piece.highlightIds.filter((id) => !id.startsWith(EVIDENCE_ID_PREFIX));
+      const ids = own.join(" ");
+      const active = activeEvidence != null && evidence.includes(String(activeEvidence));
+      const className = [own.length > 0 ? "exam-highlight" : "", evidence.length > 0 ? "ex-evidence" : ""].filter(Boolean).join(" ");
       node = splitAtLineBreaks(slice).map((run, index) => {
         const part = slice.slice(run.start, run.end);
         return run.lineBreak ? (
           part
         ) : (
-          <mark key={index} data-hl-ids={ids} className="exam-highlight">
+          <mark key={index} data-hl-ids={ids || undefined} data-ev-ids={evidence.length > 0 ? evidence.join(" ") : undefined} data-ev-active={active ? "true" : undefined} className={className}>
             {part}
           </mark>
         );
@@ -82,16 +97,19 @@ export const OfficialText = memo(function OfficialText({
     }
     if (piece.hidden) node = <span className="ex-hidden">{node}</span>;
     if (piece.heading) node = <span className="ex-passage-heading">{node}</span>;
+    // A node placed in front of the first character of a lettered paragraph (a review's evidence badge) goes after the letter, not before it.
+    const leading = inserts?.get(piece.start);
     if (piece.label) {
       node = (
         <span data-para-label={piece.label} className="ex-para">
+          {leading}
           {node}
         </span>
       );
     }
     return (
       <Fragment key={piece.start}>
-        {inserts?.get(piece.start)}
+        {piece.label ? null : leading}
         {node}
         {noteMarkers.get(piece.end)?.map((h) => <NoteMarker key={h.id} region={region} id={h.id} />)}
       </Fragment>

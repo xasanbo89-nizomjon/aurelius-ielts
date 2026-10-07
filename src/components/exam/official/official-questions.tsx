@@ -16,6 +16,7 @@ import { chooseCountOf } from "@/lib/exam/choose-many";
 import type { ExamQuestion } from "@/components/exam/exam-runner";
 import { OfficialQuestionText } from "@/components/exam/official/official-text";
 import { OfficialBlank, OfficialDrop, OfficialWordBank, ignoreClickThatEndsASelection } from "@/components/exam/official/official-answer-controls";
+import { NumberBox, RowExplainBar, RowNumberMark, useReviewRow } from "@/components/exam/official/official-review-context";
 
 export type OfficialRow = NumberedQuestion<ExamQuestion>;
 type OnAnswer = (questionId: string, value: unknown) => void;
@@ -37,6 +38,8 @@ function RowShell({ row, children }: { row: OfficialRow; children: ReactNode }) 
   return (
     <div id={`question-${row.id}`} className="ex-item" data-question-row="" data-question-id={row.id} data-start-number={row.startNumber} data-end-number={row.endNumber}>
       {children}
+      {/* Phase M2 - in a review only: the explanation buttons of a row that covers several numbers (nothing outside a review). */}
+      <RowExplainBar rowId={row.id} />
     </div>
   );
 }
@@ -58,8 +61,12 @@ function Unavailable({ row }: { row: OfficialRow }) {
 /** Gap fill / sentence completion: the answer box sits where the sentence has its blank ("…respond to 1 ......."), else at the end of the sentence. */
 const GapRow = memo(function GapRow({ row, value, onAnswer, bank }: RowProps & { bank: BankControls | null }) {
   const blank = useMemo(() => findPromptBlank(row.prompt, row.startNumber), [row.prompt, row.startNumber]);
+  const review = useReviewRow(row.id);
   const input = (
-    <OfficialBlank id={row.id} value={asText(value)} onValueChange={(next) => onAnswer(row.id, next)} number={row.startNumber} label={`Answer for question ${row.startNumber}`} />
+    <>
+      {review && <NumberBox rowId={row.id} number={row.startNumber} />}
+      <OfficialBlank id={row.id} value={asText(value)} onValueChange={(next) => onAnswer(row.id, next)} number={row.startNumber} label={`Answer for question ${row.startNumber}`} readOnly={!!review} outcome={review?.numbers[0]?.outcome} />
+    </>
   );
   const box = bank ? (
     <OfficialDrop armedWord={bank.armed} onPlace={(word) => bank.place(row, word)}>
@@ -69,30 +76,38 @@ const GapRow = memo(function GapRow({ row, value, onAnswer, bank }: RowProps & {
     input
   );
 
+  const boxAt = blank ? blank.start : row.prompt.length;
+  const inserts = new Map<number, ReactNode>([[boxAt, box]]);
+  if (review) {
+    const mark = <RowNumberMark key="mark" rowId={row.id} number={row.startNumber} />;
+    inserts.set(row.prompt.length, boxAt === row.prompt.length ? (
+      <>
+        {box}
+        {mark}
+      </>
+    ) : (
+      mark
+    ));
+  }
+
   return (
     <RowShell row={row}>
-      <OfficialQuestionText
-        as="p"
-        className="ex-item-text"
-        questionId={row.id}
-        part="prompt"
-        text={row.prompt}
-        hidden={blank ? [blank] : undefined}
-        inserts={new Map<number, ReactNode>([[blank ? blank.start : row.prompt.length, box]])}
-      />
+      <OfficialQuestionText as="p" className="ex-item-text" questionId={row.id} part="prompt" text={row.prompt} hidden={blank ? [blank] : undefined} inserts={inserts} />
     </RowShell>
   );
 });
 
 /** Short answer: the question, then the box underneath. */
 const ShortAnswerRow = memo(function ShortAnswerRow({ row, value, onAnswer }: RowProps) {
+  const review = useReviewRow(row.id);
   return (
     <RowShell row={row}>
       <p className="ex-item-text">
-        <span className="ex-number">{row.startNumber}</span>
+        <NumberBox rowId={row.id} number={row.startNumber} />
         <OfficialQuestionText questionId={row.id} part="prompt" text={row.prompt} />
       </p>
-      <OfficialBlank id={row.id} value={asText(value)} onValueChange={(next) => onAnswer(row.id, next)} number={row.startNumber} label={`Answer for question ${row.startNumber}`} ownLine />
+      <OfficialBlank id={row.id} value={asText(value)} onValueChange={(next) => onAnswer(row.id, next)} number={row.startNumber} label={`Answer for question ${row.startNumber}`} ownLine readOnly={!!review} outcome={review?.numbers[0]?.outcome} />
+      {review && <RowNumberMark rowId={row.id} number={row.startNumber} />}
     </RowShell>
   );
 });
@@ -115,25 +130,31 @@ const YES_NO = [
 /** True / False / Not Given — or Yes / No / Not Given when the task says so. The stored answer is TRUE / FALSE / NOT_GIVEN either way. */
 const TrueFalseRow = memo(function TrueFalseRow({ row, value, onAnswer, yesNo }: RowProps & { yesNo: boolean }) {
   const choices = yesNo ? YES_NO : TRUE_FALSE;
+  const review = useReviewRow(row.id);
+  const rightValue = typeof review?.correctRaw === "string" ? review.correctRaw.trim().toUpperCase() : null;
   return (
     <RowShell row={row}>
       <p className="ex-item-text">
-        <span className="ex-number">{row.startNumber}</span>
+        <NumberBox rowId={row.id} number={row.startNumber} />
         <OfficialQuestionText questionId={row.id} part="prompt" text={row.prompt} />
       </p>
       <ul className="ex-options" role="radiogroup" aria-label={`Answer for question ${row.startNumber}`}>
         {choices.map((choice, index) => {
           const id = `${row.id}-${choice.value}`;
+          const picked = value === choice.value;
+          // In a review: the one the student picked (right or wrong) and, if they missed it, the one that was right.
+          const state = !review ? undefined : picked ? (rightValue === choice.value ? "picked-right" : "picked-wrong") : rightValue === choice.value ? "right" : undefined;
           return (
             <li key={choice.value}>
-              <label htmlFor={id} className="ex-option">
-                <input id={id} type="radio" name={row.id} value={choice.value} checked={value === choice.value} onChange={() => onAnswer(row.id, choice.value)} data-question-number={index === 0 ? row.startNumber : undefined} />
+              <label htmlFor={id} className="ex-option" data-choice-state={state}>
+                <input id={id} type="radio" name={row.id} value={choice.value} checked={picked} disabled={!!review} onChange={() => onAnswer(row.id, choice.value)} data-question-number={index === 0 ? row.startNumber : undefined} />
                 <span className="ex-option-caps">{choice.label}</span>
               </label>
             </li>
           );
         })}
       </ul>
+      {review && <RowNumberMark rowId={row.id} number={row.startNumber} />}
     </RowShell>
   );
 });
@@ -143,25 +164,33 @@ const ChoiceRow = memo(function ChoiceRow({ row, value, onAnswer, choices, allow
   const selected = Array.isArray(value) ? (value as string[]) : [];
   // "Choose TWO" covers two numbers (21-22): both are shown, and no more letters than that can be picked (a further box stays off until one is unticked).
   const limit = allowMultiple && chooseCount > 1 ? chooseCount : null;
+  const review = useReviewRow(row.id);
+  const rightIds = Array.isArray(review?.correctRaw) ? (review.correctRaw as unknown[]).filter((v): v is string => typeof v === "string") : [];
   return (
     <RowShell row={row}>
       <p className="ex-item-text">
-        <span className="ex-number">{formatNumberRange(row.startNumber, row.endNumber)}</span>
+        {review ? (
+          row.slotKeys.map((_, index) => <NumberBox key={index} rowId={row.id} number={row.startNumber + index} />)
+        ) : (
+          <span className="ex-number">{formatNumberRange(row.startNumber, row.endNumber)}</span>
+        )}
         <OfficialQuestionText questionId={row.id} part="prompt" text={row.prompt} />
       </p>
       <ul className="ex-options" role={allowMultiple ? "group" : "radiogroup"} aria-label={limit ? `Answer for questions ${row.startNumber} to ${row.endNumber}` : `Answer for question ${row.startNumber}`} data-choose-count={limit ?? undefined}>
         {choices.map((choice, index) => {
           const id = `${row.id}-${choice.id}`;
           const checked = selected.includes(choice.id);
+          const isRight = rightIds.includes(choice.id);
+          const state = !review ? undefined : checked ? (isRight ? "picked-right" : "picked-wrong") : isRight ? "right" : undefined;
           return (
             <li key={choice.id}>
-              <label htmlFor={id} className="ex-option" onClickCapture={ignoreClickThatEndsASelection}>
+              <label htmlFor={id} className="ex-option" onClickCapture={ignoreClickThatEndsASelection} data-choice-state={state}>
                 <input
                   id={id}
                   type={allowMultiple ? "checkbox" : "radio"}
                   name={row.id}
                   checked={checked}
-                  disabled={limit !== null && !checked && selected.length >= limit}
+                  disabled={!!review || (limit !== null && !checked && selected.length >= limit)}
                   onChange={() => onAnswer(row.id, allowMultiple ? (checked ? selected.filter((c) => c !== choice.id) : [...selected, choice.id]) : [choice.id])}
                   data-question-number={index === 0 ? row.startNumber : undefined}
                 />
@@ -172,6 +201,16 @@ const ChoiceRow = memo(function ChoiceRow({ row, value, onAnswer, choices, allow
           );
         })}
       </ul>
+      {review && (
+        <div className="ex-rv-list">
+          {row.slotKeys.map((_, index) => (
+            <p key={index} className="ex-rv-line">
+              {row.slotKeys.length > 1 && <NumberBox rowId={row.id} number={row.startNumber + index} />}
+              <RowNumberMark rowId={row.id} number={row.startNumber + index} />
+            </p>
+          ))}
+        </div>
+      )}
     </RowShell>
   );
 });
@@ -184,6 +223,7 @@ const ChoiceRow = memo(function ChoiceRow({ row, value, onAnswer, choices, allow
  */
 const MatchingRow = memo(function MatchingRow({ row, value, onAnswer, prompts, options, listLabel, showPrompt }: RowProps & { prompts: { id: string; text: string }[]; options: { id: string; text: string }[]; listLabel: string; showPrompt: boolean }) {
   const answers = asRecord(value);
+  const review = useReviewRow(row.id);
   const [armed, setArmed] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const labelOf = (id: string) => optionLabel(id, Math.max(0, options.findIndex((option) => option.id === id)));
@@ -207,10 +247,11 @@ const MatchingRow = memo(function MatchingRow({ row, value, onAnswer, prompts, o
           <button
             key={option.id}
             type="button"
-            draggable
+            draggable={!review}
+            disabled={!!review}
             className="ex-list-item"
             aria-pressed={armed === option.id}
-            title="Drag onto a question, or click it and then click the question"
+            title={review ? undefined : "Drag onto a question, or click it and then click the question"}
             onDragStart={(event) => {
               event.dataTransfer.setData("text/plain", option.id);
               event.dataTransfer.effectAllowed = "copy";
@@ -248,12 +289,14 @@ const MatchingRow = memo(function MatchingRow({ row, value, onAnswer, prompts, o
               if (armed && !(event.target as HTMLElement).closest("button, select")) place(prompt.id, armed);
             }}
           >
-            <span className="ex-number">{number}</span>
+            <NumberBox rowId={row.id} number={number} />
             <OfficialQuestionText questionId={row.id} part={`item:${prompt.id}`} text={prompt.text} />
             <select
               id={`${row.id}-${prompt.id}`}
               className="ex-select"
               data-empty={chosen ? undefined : "true"}
+              data-outcome={review?.numbers[index]?.outcome}
+              disabled={!!review}
               value={chosen}
               onChange={(event) => place(prompt.id, event.target.value)}
               // While an option is picked up, clicking the box puts it there instead of opening the list.
@@ -278,11 +321,14 @@ const MatchingRow = memo(function MatchingRow({ row, value, onAnswer, prompts, o
             {chosenOption && (
               <>
                 <span className="ex-chosen">{chosenOption.text}</span>
-                <button type="button" className="ex-clear" onClick={() => clear(prompt.id)} aria-label={`Clear the answer to question ${number} (${labelOf(chosenOption.id)})`}>
-                  ×
-                </button>
+                {!review && (
+                  <button type="button" className="ex-clear" onClick={() => clear(prompt.id)} aria-label={`Clear the answer to question ${number} (${labelOf(chosenOption.id)})`}>
+                    ×
+                  </button>
+                )}
               </>
             )}
+            {review && <RowNumberMark rowId={row.id} number={number} />}
           </div>
         );
       })}
@@ -308,6 +354,7 @@ const SummaryRow = memo(function SummaryRow({
   showPrompt,
 }: RowProps & { options: { text: string; blankCount: number; wordBank?: string[]; layout?: "table" }; showPrompt: boolean }) {
   const answers = asRecord(value);
+  const review = useReviewRow(row.id);
   const [armed, setArmed] = useState<string | null>(null);
 
   const parsed = useMemo(() => parseSummaryText(options.text), [options.text]);
@@ -319,15 +366,21 @@ const SummaryRow = memo(function SummaryRow({
   }, [row.slotKeys, row.startNumber, parsed.blankIds, options.blankCount]);
 
   const inText = new Set(parsed.blankIds);
+  /** The blanks listed under "Answers for the remaining questions" already have their number box in front of them. */
+  const unplacedIds = new Set(blankIds.filter((id) => !inText.has(id)));
   const numberOf = (blankId: string): number => row.startNumber + Math.max(0, blankIds.indexOf(blankId));
   const setAnswer = (blankId: string, word: string) => onAnswer(row.id, { ...answers, [blankId]: word });
 
   function renderBlank(blankId: string, key: string) {
     const number = numberOf(blankId);
     const input = (
-      <OfficialBlank id={`${row.id}-blank-${blankId}`} value={answers[blankId] ?? ""} onValueChange={(next) => setAnswer(blankId, next)} number={number} label={`Question ${number}`} />
+      <>
+        {review && !unplacedIds.has(blankId) && <NumberBox rowId={row.id} number={number} />}
+        <OfficialBlank id={`${row.id}-blank-${blankId}`} value={answers[blankId] ?? ""} onValueChange={(next) => setAnswer(blankId, next)} number={number} label={`Question ${number}`} readOnly={!!review} outcome={review?.numbers.find((item) => item.number === number)?.outcome} />
+        {review && <RowNumberMark rowId={row.id} number={number} />}
+      </>
     );
-    return options.wordBank?.length ? (
+    return options.wordBank?.length && !review ? (
       <OfficialDrop
         key={key}
         armedWord={armed}
@@ -414,14 +467,14 @@ const SummaryRow = memo(function SummaryRow({
   return (
     <RowShell row={row}>
       {showPrompt && <OfficialQuestionText as="p" className="ex-item-text" questionId={row.id} part="prompt" text={row.prompt} />}
-      {options.wordBank && options.wordBank.length > 0 && <OfficialWordBank words={options.wordBank} armedWord={armed} onArm={setArmed} />}
+      {options.wordBank && options.wordBank.length > 0 && <OfficialWordBank words={options.wordBank} armedWord={armed} onArm={setArmed} readOnly={!!review} />}
       {body}
       {unplaced.length > 0 && (
         <div className="ex-remaining" data-testid="summary-remaining-answers">
           <p>{inText.size === 0 ? "Write your answers here" : "Answers for the remaining questions"}</p>
           {unplaced.map((blankId) => (
             <div key={blankId} className="ex-remaining-row">
-              <span className="ex-number">{numberOf(blankId)}</span>
+              <NumberBox rowId={row.id} number={numberOf(blankId)} />
               {renderBlank(blankId, `extra-${blankId}`)}
             </div>
           ))}
@@ -519,9 +572,10 @@ function OfficialGroup({ view, answers, onAnswer }: { view: GroupView<OfficialRo
     return words;
   }, [view.rows]);
   const hasBank = gapBank.length > 0;
+  const inReview = useReviewRow(view.rows[0].id) !== null;
   const bank = useMemo<BankControls | null>(
     () =>
-      hasBank
+      hasBank && !inReview
         ? {
             armed,
             place: (row, word) => {
@@ -530,14 +584,14 @@ function OfficialGroup({ view, answers, onAnswer }: { view: GroupView<OfficialRo
             },
           }
         : null,
-    [hasBank, armed, onAnswer]
+    [hasBank, inReview, armed, onAnswer]
   );
 
   return (
     <section className="ex-group" aria-label={view.label}>
       <h2 className="ex-group-title">{view.label}</h2>
       {view.instructions && <OfficialQuestionText as="p" className="ex-instructions" questionId={view.rows[0].id} part="instructions" text={view.instructions} />}
-      {hasBank && <OfficialWordBank words={gapBank} armedWord={armed} onArm={setArmed} />}
+      {hasBank && <OfficialWordBank words={gapBank} armedWord={armed} onArm={setArmed} readOnly={inReview} />}
       {view.rows.map((row) => (
         <RowView key={row.id} row={row} value={answers[row.id]} onAnswer={onAnswer} instructions={view.instructions} yesNo={yesNo} bank={bank} />
       ))}

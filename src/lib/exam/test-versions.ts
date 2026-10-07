@@ -38,7 +38,8 @@ export async function copyTest(testId: string, teacherId: string, mode: CopyMode
     where: { id: testId },
     include: {
       passages: { orderBy: { orderIndex: "asc" }, include: { attachments: { orderBy: { orderIndex: "asc" } }, questionGroups: { orderBy: { orderIndex: "asc" } } } },
-      questions: { orderBy: { orderIndex: "asc" } },
+      // Phase M2 - the stored explanations travel with the questions they were written for.
+      questions: { orderBy: { orderIndex: "asc" }, include: { explanation: true } },
     },
   });
   if (!source || !canManageTest(actor, source)) throw new OwnershipError("You don't have access to this test.");
@@ -80,8 +81,9 @@ export async function copyTest(testId: string, teacherId: string, mode: CopyMode
     };
   });
 
+  const questionIds = new Map(source.questions.map((question) => [question.id, newId()]));
   const questionRows: Prisma.QuestionCreateManyInput[] = source.questions.map((question) => ({
-    id: newId(),
+    id: questionIds.get(question.id) as string,
     mockTestId: newTestId,
     passageId: question.passageId ? (passageIds.get(question.passageId) ?? null) : null,
     questionGroupId: question.questionGroupId ? (groupIds.get(question.questionGroupId) ?? null) : null,
@@ -94,6 +96,28 @@ export async function copyTest(testId: string, teacherId: string, mode: CopyMode
     // Phase M - the copy has the same passage text, so where the answers are carries over (the passages have new ids).
     evidence: json(remapEvidencePassages(question.evidence, passageIds)),
   }));
+
+  // Phase M2 - an explanation is copied as it is (status and the hash of what it was written for included): the copy starts out identical, so it is shown for
+  // exactly as long as the question and its answer stay the same - edit either in the new version and the old explanation is hidden until it is written again.
+  const explanationRows: Prisma.QuestionExplanationCreateManyInput[] = source.questions.flatMap((question) =>
+    question.explanation
+      ? [
+          {
+            questionId: questionIds.get(question.id) as string,
+            explainText: question.explanation.explainText,
+            trapText: question.explanation.trapText,
+            fixText: question.explanation.fixText,
+            status: question.explanation.status,
+            sourceHash: question.explanation.sourceHash,
+            source: question.explanation.source,
+            model: question.explanation.model,
+            generatedAt: question.explanation.generatedAt,
+            approvedAt: question.explanation.approvedAt,
+            approvedById: question.explanation.approvedById,
+          },
+        ]
+      : []
+  );
 
   const title = `${source.title}${TITLE_SUFFIX[mode]}`;
   await prisma.$transaction([
@@ -120,6 +144,7 @@ export async function copyTest(testId: string, teacherId: string, mode: CopyMode
     prisma.passageAttachment.createMany({ data: attachmentRows }),
     prisma.mediaUsage.createMany({ data: mediaUsageRows }),
     prisma.question.createMany({ data: questionRows }),
+    prisma.questionExplanation.createMany({ data: explanationRows }),
   ]);
 
   return { id: newTestId, title };

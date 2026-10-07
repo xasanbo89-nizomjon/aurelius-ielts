@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, Eraser, Highlighter, Loader2, Sparkles, Target, XCircle } from "lucide-react";
+import { CheckCircle2, Eraser, Highlighter, Loader2, Pencil, Sparkles, Target, XCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { buildPieces, paragraphLabelMap, passageRegion, type HighlightRange } from "@/lib/exam/text-highlight";
@@ -32,6 +32,9 @@ export function EvidenceEditor({ data, ai: initialAi }: { data: EvidenceEditorDa
   const [ai, setAi] = useState(initialAi);
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  /** Phase M2 - "Suggest evidence for all questions": one request per question number, one after the other, with a progress line and a Stop button. */
+  const [bulk, setBulk] = useState<{ total: number; done: number; saved: number; notFound: number; running: boolean; stopped: string | null } | null>(null);
+  const stopBulk = useRef(false);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
 
   const part = data.parts.find((candidate) => candidate.id === partId) ?? null;
@@ -49,6 +52,12 @@ export function EvidenceEditor({ data, ai: initialAi }: { data: EvidenceEditorDa
       missing: numbers.filter((entry) => !entry.item && !entry.needsNoEvidence).length,
     };
   }, [rows]);
+
+  /** Every AI suggestion still waiting for a teacher, in question order (Phase M2: the list to review). */
+  const waiting = useMemo(
+    () => rows.flatMap((row) => row.numbers.filter((entry) => entry.item?.state === "SUGGESTED").map((entry) => ({ row, entry }))),
+    [rows]
+  );
 
   // ---- the passage, with every item of this part marked ---------------------------------------------------------------------------------------------
   const marks = useMemo(() => {
@@ -148,6 +157,68 @@ export function EvidenceEditor({ data, ai: initialAi }: { data: EvidenceEditorDa
     });
   }
 
+  /** Phase M2 - asks the AI for every question number that has no evidence and no suggestion yet. Stops at the daily limit; nothing is shown to students. */
+  async function suggestAll() {
+    const withText = new Set(data.parts.filter((candidate) => candidate.content.trim()).map((candidate) => candidate.id));
+    const queue = rows.flatMap((row) => row.numbers.filter((entry) => !entry.item && !entry.needsNoEvidence && row.partId && withText.has(row.partId)).map((entry) => ({ questionId: row.questionId, slot: entry.slot })));
+    if (queue.length === 0) {
+      toast.info("Every question number already has evidence or a suggestion.");
+      return;
+    }
+    stopBulk.current = false;
+    let done = 0;
+    let saved = 0;
+    let notFound = 0;
+    let stopped: string | null = null;
+    setBulk({ total: queue.length, done, saved, notFound, running: true, stopped });
+    for (const item of queue) {
+      if (stopBulk.current) {
+        stopped = "Stopped.";
+        break;
+      }
+      const result = await suggestEvidenceAction(data.testId, item);
+      done++;
+      if (result.usedToday != null) setAi((current) => ({ ...current, usedToday: result.usedToday ?? current.usedToday }));
+      if (result.success) {
+        saved++;
+        applyItems(item.questionId, result.items);
+      } else if (result.code === "LIMIT_REACHED" || result.code === "NOT_ENABLED") {
+        stopped = result.error;
+        break;
+      } else {
+        notFound++;
+      }
+      setBulk({ total: queue.length, done, saved, notFound, running: true, stopped: null });
+    }
+    setBulk({ total: queue.length, done, saved, notFound, running: false, stopped });
+    toast[saved > 0 ? "success" : "info"](`${saved} suggestion${saved === 1 ? "" : "s"} saved - they stay hidden from students until you confirm them.`);
+  }
+
+  /** "Confirm all": every waiting suggestion becomes evidence (students see it from now on). */
+  async function confirmAll() {
+    setBusy("confirm-all");
+    let confirmed = 0;
+    for (const { row, entry } of waiting) {
+      const result = await confirmEvidenceAction(data.testId, { questionId: row.questionId, slot: entry.slot });
+      if (!result.success) {
+        toast.error(result.error);
+        break;
+      }
+      applyItems(row.questionId, result.items);
+      confirmed++;
+    }
+    setBusy(null);
+    if (confirmed > 0) toast.success(`${confirmed} suggestion${confirmed === 1 ? "" : "s"} confirmed - students will see them.`);
+  }
+
+  /** "Edit": take the suggestion's question number to its passage, so the right words can be selected and set (which replaces the suggestion). */
+  function editSuggestion(row: EvidenceEditorRow, key: Key) {
+    if (row.partId) setPartId(row.partId);
+    setActive(key);
+    setTimeout(() => showInPassage(key), 60);
+    toast.info("Select the words that hold the answer in the passage, then press Set as evidence.");
+  }
+
   const target = active ? partRows.flatMap((row) => row.numbers.map((entry) => ({ row, entry }))).find(({ row, entry }) => keyOf({ questionId: row.questionId, slot: entry.slot }) === activeKey) : null;
 
   return (
@@ -160,7 +231,7 @@ export function EvidenceEditor({ data, ai: initialAi }: { data: EvidenceEditorDa
             {coverage.suggested > 0 && <span className="text-amber-600 dark:text-amber-400"> · {coverage.suggested} AI suggestion{coverage.suggested === 1 ? "" : "s"} waiting for you</span>}
           </p>
           <p className="text-muted-foreground text-xs">
-            Students see &quot;Show in passage&quot; in their review only where evidence is set. A True / False / Not Given question whose answer is Not Given needs none.
+            In their review students see the evidence as light-green words with a [number] badge, and pressing the question scrolls the passage to it, only where evidence is set. A True / False / Not Given question whose answer is Not Given needs none.
             {data.isPublished && " This test is published: evidence can still be set - it changes no question, answer or score."}
           </p>
         </div>
@@ -171,7 +242,61 @@ export function EvidenceEditor({ data, ai: initialAi }: { data: EvidenceEditorDa
             <span className="text-muted-foreground block text-xs">{ai.enabled ? `${ai.usedToday} of ${ai.dailyLimit} used today · you confirm every suggestion` : "Off - you set the evidence by hand"}</span>
           </span>
         </label>
+        {ai.enabled && (
+          <div className="flex w-full flex-wrap items-center gap-3" data-testid="ev-bulk">
+            <Button type="button" size="sm" variant="outline" disabled={pending || bulk?.running === true || ai.usedToday >= ai.dailyLimit} onClick={() => void suggestAll()} data-testid="ev-suggest-all">
+              {bulk?.running ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} Suggest evidence for all questions
+            </Button>
+            {bulk?.running && (
+              <Button type="button" size="sm" variant="ghost" onClick={() => (stopBulk.current = true)} data-testid="ev-suggest-stop">
+                Stop
+              </Button>
+            )}
+            {bulk && (
+              <span className="text-muted-foreground text-xs" role="status" data-testid="ev-bulk-status">
+                {bulk.running ? `Asking the AI... ${bulk.done} of ${bulk.total}` : `Done: ${bulk.saved} suggested, ${bulk.notFound} not found in the text${bulk.stopped ? ` - ${bulk.stopped}` : ""}`}
+              </span>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* ---- Phase M2: the suggestions to review ---- */}
+      {waiting.length > 0 && (
+        <section className="border-border/70 bg-card rounded-2xl border" aria-label="AI suggestions to review" data-testid="ev-review-list">
+          <div className="border-border/70 flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3">
+            <h2 className="text-sm font-medium">AI suggestions to review ({waiting.length})</h2>
+            <Button type="button" size="sm" disabled={busy !== null || pending || bulk?.running === true} onClick={() => void confirmAll()} data-testid="ev-confirm-all">
+              {busy === "confirm-all" ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />} Confirm all
+            </Button>
+          </div>
+          <ul className="divide-border/70 divide-y">
+            {waiting.map(({ row, entry }) => {
+              const key = { questionId: row.questionId, slot: entry.slot };
+              const working = busy === keyOf(key);
+              const partIndex = data.parts.findIndex((candidate) => candidate.id === row.partId);
+              return (
+                <li key={keyOf(key)} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-2.5" data-testid={`ev-waiting-${entry.number}`}>
+                  <span className="bg-secondary inline-flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold">{entry.number}</span>
+                  <span className="text-muted-foreground w-24 shrink-0 text-xs">{partIndex >= 0 ? partName(partIndex) : ""}</span>
+                  <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs italic">“{entry.item?.quote}”</span>
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <Button type="button" size="sm" variant="ghost" onClick={() => editSuggestion(row, key)} data-testid={`ev-list-edit-${entry.number}`}>
+                      <Pencil className="size-3.5" /> Edit
+                    </Button>
+                    <Button type="button" size="sm" disabled={working || pending || busy !== null} onClick={() => run(key, () => confirmEvidenceAction(data.testId, key), "Confirmed - students will see it.")} data-testid={`ev-list-confirm-${entry.number}`}>
+                      <CheckCircle2 className="size-3.5" /> Confirm
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={working || pending || busy !== null} onClick={() => run(key, () => clearEvidenceAction(data.testId, key), "Suggestion rejected.")} data-testid={`ev-list-reject-${entry.number}`}>
+                      <XCircle className="size-3.5" /> Reject
+                    </Button>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* ---- parts ---- */}
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Parts of the test">

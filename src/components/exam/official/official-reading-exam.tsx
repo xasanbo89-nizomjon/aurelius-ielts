@@ -20,6 +20,7 @@ import { OfficialQuestionGroups, type OfficialRow } from "@/components/exam/offi
 import { OfficialRangesContext, type DrawnHighlight } from "@/components/exam/official/official-text";
 import { OfficialSplit } from "@/components/exam/official/official-split";
 import { OfficialSubmitDialog } from "@/components/exam/official/official-submit-dialog";
+import { OfficialChecking } from "@/components/exam/official/official-checking";
 
 type HighlightStore = ReturnType<typeof useExamHighlights>;
 
@@ -65,6 +66,8 @@ export type OfficialExamSession = {
   onMobileTabChange: (tab: "left" | "right") => void;
 
   submitting: boolean;
+  /** Phase M2 - the test is being handed in and its answers marked: show "Checking your answers..." (not inside a Full Mock, which marks nothing between papers, and not in a preview). */
+  checking?: boolean;
   onSubmit: () => void;
   answeredCount: number;
   flaggedCount: number;
@@ -209,6 +212,8 @@ export function OfficialReadingExam({ session }: { session: OfficialExamSession 
         onRemoveWhere={highlights.removeWhere}
         inCurrentPart={inCurrentPart}
       />
+
+      {session.checking && <OfficialChecking />}
     </div>
   );
 }

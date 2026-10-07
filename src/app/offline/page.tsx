@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 export const metadata: Metadata = { title: "You're offline" };
 
 /**
- * Phase 28 — the real offline fallback: public/sw.js serves this exact page
- * (precached at install time) whenever a navigation request fails with no
- * network. Deliberately static — no server data, no auth check, nothing
+ * Phase 28 — the real offline fallback: the service worker (src/app/sw.js/route.ts)
+ * serves this exact page (precached at install time, by every new build) whenever a
+ * navigation request fails with no network. Deliberately static — no server data, no auth check, nothing
  * that could itself fail offline. Links out to the student's own
  * Offline Articles and Downloads, which read from IndexedDB and keep
  * working with zero network.

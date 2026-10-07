@@ -23,6 +23,8 @@ export async function createStructuredCompletion<T>({
   responseSchema,
   temperature = 0.3,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  model,
+  onUsage,
 }: {
   system: string;
   user: string;
@@ -31,15 +33,20 @@ export async function createStructuredCompletion<T>({
   responseSchema: z.ZodType<T>;
   temperature?: number;
   timeoutMs?: number;
+  /** Phase M2 - a model other than the app's default (OPENAI_MODEL) for this one feature; unset = the default, as every other caller. */
+  model?: string;
+  /** Phase M2 - told how many tokens the call used (and with which model), for a feature that keeps its own usage log. */
+  onUsage?: (usage: { model: string; promptTokens: number; completionTokens: number }) => void;
 }): Promise<T> {
   const client = getOpenAIClient();
+  const modelName = model?.trim() || getOpenAIModel();
   const start = performance.now();
 
   let completion;
   try {
     completion = await client.chat.completions.create(
       {
-        model: getOpenAIModel(),
+        model: modelName,
         temperature,
         messages: [
           { role: "system", content: system },
@@ -64,6 +71,7 @@ export async function createStructuredCompletion<T>({
   recordMetric(`ai:${schemaName}`, performance.now() - start, true);
   if (completion.usage) {
     recordAiTokenUsage(schemaName, completion.usage.prompt_tokens, completion.usage.completion_tokens);
+    onUsage?.({ model: modelName, promptTokens: completion.usage.prompt_tokens, completionTokens: completion.usage.completion_tokens });
   }
 
   const raw = completion.choices[0]?.message?.content;

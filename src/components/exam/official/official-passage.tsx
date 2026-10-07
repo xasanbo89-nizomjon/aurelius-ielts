@@ -1,12 +1,15 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 
 import { analyzePassage } from "@/lib/exam/passage-layout";
 import { passageRegion } from "@/lib/exam/text-highlight";
 import { FallbackImage } from "@/components/ui/fallback-image";
 import type { ExamAttachment } from "@/components/exam/passage-attachments";
-import { OfficialText, type DrawnHighlight } from "@/components/exam/official/official-text";
+import { OfficialText, evidenceId, type DrawnHighlight } from "@/components/exam/official/official-text";
+
+/** Phase M2 - the words a teacher confirmed as the evidence of question `number` (offsets into this passage's text). */
+export type PassageEvidence = { number: number; start: number; end: number };
 
 /**
  * The passage of the official exam screen: its heading, then the paragraphs with their letters —
@@ -22,14 +25,49 @@ export const OfficialPassage = memo(function OfficialPassage({
   content,
   attachments,
   highlights,
+  evidence,
+  activeEvidence = null,
+  onEvidenceBadge,
+  plain = false,
+  after,
 }: {
   passageId: string;
   title: string;
   content: string;
   attachments: ExamAttachment[];
   highlights: readonly DrawnHighlight[];
+  /** Phase M2 (review only): the evidence to draw in green, each with a small question-number badge at its start. */
+  evidence?: readonly PassageEvidence[];
+  activeEvidence?: number | null;
+  /** The badge was pressed: go to that question. */
+  onEvidenceBadge?: (number: number) => void;
+  /** Phase M2: a Listening transcript is plain text - no paragraph letters, no heading detection. */
+  plain?: boolean;
+  /** Phase M2: something drawn under the text (the student's own notes, in a review). */
+  after?: ReactNode;
 }) {
-  const layout = useMemo(() => analyzePassage(content, title), [content, title]);
+  const layout = useMemo(() => (plain ? { heading: null, labels: new Map<number, string>(), hidden: [], title: title.trim() || null } : analyzePassage(content, title)), [content, title, plain]);
+
+  const drawn = useMemo<readonly DrawnHighlight[]>(
+    () => (evidence && evidence.length > 0 ? [...highlights, ...evidence.map((item) => ({ id: evidenceId(item.number), start: item.start, end: item.end }))] : highlights),
+    [highlights, evidence]
+  );
+  /** One badge per stretch, in front of its first word; two numbers that start in the same place share the spot. */
+  const badges = useMemo<ReadonlyMap<number, ReactNode> | undefined>(() => {
+    if (!evidence || evidence.length === 0) return undefined;
+    const byStart = new Map<number, number[]>();
+    for (const item of evidence) byStart.set(item.start, [...(byStart.get(item.start) ?? []), item.number].sort((a, b) => a - b));
+    return new Map(
+      [...byStart.entries()].map(([start, numbers]) => [
+        start,
+        <span key={start} className="ex-ev-badges">
+          {numbers.map((number) => (
+            <button key={number} type="button" className="ex-ev-badge" data-n={number} data-ev-badge={number} data-testid={`ev-badge-${number}`} aria-label={`Evidence for question ${number}. Go to the question.`} onClick={() => onEvidenceBadge?.(number)} />
+          ))}
+        </span>,
+      ])
+    );
+  }, [evidence, onEvidenceBadge]);
 
   return (
     <div className="ex-pane">
@@ -44,12 +82,15 @@ export const OfficialPassage = memo(function OfficialPassage({
         as="div"
         region={passageRegion(passageId)}
         text={content}
-        highlights={highlights}
+        highlights={drawn}
+        inserts={badges}
+        activeEvidence={activeEvidence}
         labels={layout.labels}
         hidden={layout.hidden}
         heading={layout.heading}
         className="ex-passage-text"
       />
+      {after}
     </div>
   );
 });

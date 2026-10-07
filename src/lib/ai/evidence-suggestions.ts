@@ -46,7 +46,8 @@ export type SuggestEvidenceResult =
   | { success: true; items: EvidenceItem[]; usedToday: number }
   | { success: false; code: "NOT_ENABLED" | "LIMIT_REACHED" | "NO_TEXT" | "NOT_GIVEN" | "NOT_FOUND" | "UNAVAILABLE" | "INVALID"; error: string; usedToday?: number };
 
-function optionLinesOf(type: string, options: unknown): string[] {
+/** The choices / options / word list of a question as readable lines (shared with the explanation writer). */
+export function optionLinesOf(type: string, options: unknown): string[] {
   const record = typeof options === "object" && options !== null && !Array.isArray(options) ? (options as Record<string, unknown>) : {};
   const choices = (value: unknown): { id: string; text: string }[] => (Array.isArray(value) ? value.filter((v): v is { id: string; text: string } => typeof v === "object" && v !== null && typeof (v as { id?: unknown }).id === "string") : []);
   if (type === "MULTIPLE_CHOICE") return choices(record.choices).map((choice) => choiceText([choice], choice.id));

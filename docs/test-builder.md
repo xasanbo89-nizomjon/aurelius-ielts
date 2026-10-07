@@ -213,6 +213,10 @@ A teacher can mark, for every question number, the words of the passage (Listeni
 student's review offers "Show in passage" wherever evidence is **confirmed**. Optional "Suggest with AI" (off by default, daily limit, the teacher confirms every
 suggestion). A missing evidence is a **warning** in the validator, never an error. See `docs/results-analysis.md`.
 
+Phase M2 adds **Suggest evidence for all questions** with a list to review (Confirm / Edit / Reject / Confirm all), and **Explanations** on the test page
+(`/teacher/tests/<id>/explanations`): the stored "Explain more" and "What's the trap?" texts, written by hand or generated once with AI as drafts, then approved. A new
+version carries them; an edited question's old explanation is hidden (`docs/results-analysis.md`, "Explanations").
+
 ## Not found means 404 (Phase L2)
 
 A page with a `loading.tsx` streams, so its status line is sent before the page runs and `notFound()` inside it answered 200. `src/lib/route-guard.ts` is
@@ -230,6 +234,8 @@ nothing. A new detail route with a `loading.tsx` needs a rule in that file.
 | `npm run check:choose` | no database: "Choose TWO" - numbering, 0 / 1 / 2 marks in any order, review, validator, editor round trip, key paste |
 | `npm run check:tables` | no database: tables - reading a title / note / short row, the grid's row and column operations, storage, scoring, and both exam screens drawn to HTML |
 | `npm run check:results` | no database: answer evidence, the review's per-number answers, part times and the statistics maths (a hand-calculated example) |
+| `npm run check:m2` | the review model (stored verdicts, Yes / No wording, "Choose TWO" number by number, filters) offline; then the real database with its own fixtures: the explanation lifecycle (draft / approved / outdated), who may write them, what a student gets, copy with a version, the AI rules **without calling the model**, token usage, and that no stored score moved |
+| `npm run check:sw` | no browser, no database: the service worker (`src/app/sw.js/route.ts`) in a sandbox - build-named cache, old caches deleted on activate, network first, nothing cached from a failed answer, never an uncaught rejection - and the page's ChunkLoadError detection (see `docs/service-worker.md`) |
 | `npm run check:m` | real database, its own tagged fixtures (removed at the end): evidence end to end, the statistics through the SQL, teacher vs Root scope, part events |
 | `npm run tests:validate` | read-only: what the publish rules say about every test already in the database |
 | `npm run check:publish` | no database: the validator (39 / 41 questions, gap, missing answer, invalid True/False/Not Given, Listening without audio, a complete test passes), alternatives and the importer, reviews vs stored scores |

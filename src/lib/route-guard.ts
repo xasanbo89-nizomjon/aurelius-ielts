@@ -37,8 +37,8 @@ type Rule<Who> = {
 const has = (row: unknown) => row !== null && row !== undefined;
 
 const TEACHER_RULES: Rule<TeacherWho>[] = [
-  // tests/[testId], /analytics and /evidence - where: { id, ...scopeFor(profile) } (a teacher's own tests; a Root Teacher's every test)
-  { pattern: /^\/teacher\/tests\/(?!new$|import$|full-mock$)([^/]+)(?:\/(?:analytics|evidence))?$/, exists: async ([id], who) => has(await prisma.mockTest.findFirst({ where: { id, ...scopeFor(who) }, select: { id: true } })) },
+  // tests/[testId], /analytics, /evidence and /explanations - where: { id, ...scopeFor(profile) } (a teacher's own tests; a Root Teacher's every test)
+  { pattern: /^\/teacher\/tests\/(?!new$|import$|full-mock$)([^/]+)(?:\/(?:analytics|evidence|explanations))?$/, exists: async ([id], who) => has(await prisma.mockTest.findFirst({ where: { id, ...scopeFor(who) }, select: { id: true } })) },
   // tests/full-mock/[id], /analytics, /access-codes - where: { id, ...scopeFor(profile) }
   { pattern: /^\/teacher\/tests\/full-mock\/(?!new$|quick$)([^/]+)(?:\/(?:analytics|access-codes))?$/, exists: async ([id], who) => has(await prisma.fullMockTest.findFirst({ where: { id, ...scopeFor(who) }, select: { id: true } })) },
   // tests/import/[importedTestId] - getImportedTestForReview: { id, teacherId }

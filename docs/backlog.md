@@ -79,6 +79,21 @@ Phase L1 and L2 are done (`docs/test-builder.md`). Known limits and what could c
 - **A teacher who is not the student's teacher** but made the mock sees that student's sitting in the Live Monitor (the same rule the
   Mock Results page has always had).
 
+## Phase M2 follow-ups (the review in the exam layout)
+
+- **Phase O (results hidden from the student).** The post-submit redirect (`submitAttemptAction`), the old-address redirect of a finished attempt, and the review page all
+  assume the student may see their results (Phase M2 says so in one place each). The hidden case needs one switch there.
+- **The teacher's read-only attempt review is still the Phase M split page** (`/teacher/band-conversation/<student>/attempts/<attempt>`); it could draw the same official
+  layout with a teacher's header. The older review components in `src/components/exam/review/` exist only for it.
+- **The review no longer has the "Performance analytics" panel** (accuracy by part and by question type, time per part); it is on the results page ("Full results page" in
+  the dialog) and, across attempts, on the student's Results analysis tab.
+- **Old per-student AI explanations are retired from the student screens**, not deleted: `explainMoreAction`, `explainWrongAnswerAction`, the `AiExplanation*` tables and
+  `dailyExplanationLimit` (a per-student limit) are unused by the UI now. Remove them in a later clean-up once nobody needs the history.
+- **An explanation is written for the question's wording and right answer, not for the passage.** If a teacher edits the passage text of a draft test, an approved explanation
+  stays valid (and may quote words that moved). Evidence is re-anchored by its quote; an explanation is not.
+- **The explanation writer sees one passage** (at most 16,000 characters). A Listening part without a transcript cannot be explained ("This part has no transcript").
+- **Bulk generation runs from the teacher's browser**, one request after another (about 3-6 seconds each); closing the page stops it - what was written is kept as drafts.
+
 ## Phase M follow-ups (results analysis)
 
 - **Evidence is set by hand (or confirmed from an AI suggestion).** No test has any yet: the review's "Show in passage" appears number by number as teachers set it

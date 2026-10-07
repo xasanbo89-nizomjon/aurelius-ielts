@@ -108,13 +108,16 @@ export async function getAttemptSummary(resultId: string, studentId: string) {
               audioPath: true,
               audioUrl: true,
               orderIndex: true,
+              audioStartSeconds: true,
               attachments: { orderBy: { orderIndex: "asc" } },
+              // Phase M2 - the review is drawn in the official exam layout, which heads each group of questions with its instructions.
+              questionGroups: { orderBy: [{ orderIndex: "asc" }, { startQuestion: "asc" }] },
             },
           },
           questions: {
             orderBy: { orderIndex: "asc" },
             // Phase M - `evidence`: where a teacher located each answer in the text (the review shows only what was confirmed).
-            select: { id: true, passageId: true, prompt: true, type: true, points: true, options: true, correctAnswer: true, evidence: true },
+            select: { id: true, passageId: true, questionGroupId: true, orderIndex: true, prompt: true, type: true, points: true, options: true, correctAnswer: true, evidence: true },
           },
         },
       },

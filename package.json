@@ -28,7 +28,9 @@
     "attempts:finalize-expired": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/finalize-expired.mjs",
     "audio:measure": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/measure-recordings.mjs",
     "check:results": "node --import ./scripts/register-ts.mjs scripts/check-results.mjs",
-    "check:m": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-m.mjs"
+    "check:m": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-m.mjs",
+    "check:m2": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-m2.mjs",
+    "check:sw": "node --import ./scripts/register-ts.mjs scripts/check-sw.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

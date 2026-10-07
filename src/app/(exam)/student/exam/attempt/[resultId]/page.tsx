@@ -43,7 +43,8 @@ export default async function ExamAttemptPage({
     attempt = await getAttemptDetail(resultId, profile.id);
     if (!attempt) notFound();
   }
-  if (attempt.completedAt) redirect(`/student/exam/attempt/${resultId}/results`);
+  // Phase M2 - a finished attempt opens its review (with the results dialog), not the older results page.
+  if (attempt.completedAt) redirect(`/student/exam/attempt/${resultId}/review?results=1`);
 
   const initialAnswers: Record<string, unknown> = {};
   for (const answer of attempt.answers) {

@@ -59,6 +59,37 @@ export function chooseSetView(question: AnswerRowSource, response: unknown): { s
 }
 
 /**
+ * Phase M2 - a "Choose TWO" row as one line per NUMBER (21 and 22), for the results table and the footer colours. The letters are a SET, so which letter
+ * "belongs" to which number is arbitrary: the numbers the attempt was stored as right (`slots`, first the right ones) show the right letters the student
+ * picked - the same letter in both columns - and the remaining numbers show a letter the student picked wrongly (or nothing) against a right letter they
+ * missed. So a green line never shows two different letters, and a red line never shows a letter the student got right.
+ */
+export function chooseSetSlotLines(question: NumberedQuestion<AnswerRowSource>, response: unknown, slots: readonly SlotOutcome[]): SlotAnswerRow[] {
+  const choices = choicesOf(asRecord(question.options)?.choices);
+  const letters = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && v.length > 0) : []);
+  const keyLetters = letters(question.correctAnswer);
+  const given = [...new Set(letters(response))];
+  const rightGiven = keyLetters.filter((letter) => given.includes(letter));
+  const wrongGiven = given.filter((letter) => !keyLetters.includes(letter));
+  const missed = keyLetters.filter((letter) => !given.includes(letter));
+  let right = 0;
+  let wrong = 0;
+  return question.slotKeys.map((_, index) => {
+    const slot = slots[index];
+    const outcome = { answered: slot?.answered ?? false, isCorrect: slot?.correct ?? false };
+    if (outcome.isCorrect) {
+      const letter = rightGiven[right++] ?? given[index] ?? keyLetters[index] ?? "";
+      const text = letter ? choiceText(choices, letter) : "—";
+      return { number: question.startNumber + index, slot: index, label: null, student: text, correct: text, ...outcome };
+    }
+    const mine = wrongGiven[wrong] ?? null;
+    const theirs = missed[wrong] ?? keyLetters[index] ?? null;
+    wrong++;
+    return { number: question.startNumber + index, slot: index, label: null, student: mine ? choiceText(choices, mine) : null, correct: theirs ? choiceText(choices, theirs) : "—", ...outcome };
+  });
+}
+
+/**
  * One entry per question number of the row (see numberQuestions for the numbering), with the outcome the attempt was stored with (`slots`, from
  * evaluateSlots). `response` is what was saved for the row, `undefined` / null when the student left it.
  */

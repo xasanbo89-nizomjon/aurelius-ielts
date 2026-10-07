@@ -1490,3 +1490,661 @@
 .ex-busy p {
   margin: 0;
 }
+
+/* ================================================================ Phase M2 - the review (read-only, after the test) ================================================================
+ * The review draws the same screen as the test, with the same three contrast settings. Nothing here applies to an exam: every rule needs one of the review's own
+ * attributes (data-outcome, data-result, data-choice-state, .ex-evidence, .ex-rv ...) or the .ex-reviewing root class.
+ * Right = green, wrong or left empty = red. Colour is never the only sign: right/wrong also carry a tick or cross, evidence is underlined and numbered. */
+
+.official-exam {
+  --ex-good: #17692f; /* fills (white writing on it) */
+  --ex-good-ink: #ffffff;
+  --ex-good-text: #17692f; /* writing / lines on the page background */
+  --ex-good-soft: #e5f5e9;
+  --ex-bad: #b3261e;
+  --ex-bad-ink: #ffffff;
+  --ex-bad-text: #b3261e;
+  --ex-bad-soft: #fcebe9;
+  --ex-evidence: #bfeacb; /* the evidence's light green, with black writing */
+  --ex-evidence-ink: #000000;
+  --ex-evidence-edge: #17692f;
+  --ex-evidence-active: #8fdca5;
+}
+
+.official-exam[data-contrast="white-on-black"] {
+  --ex-good: #4fcf72;
+  --ex-good-ink: #000000;
+  --ex-good-text: #6fe08c;
+  --ex-good-soft: #0d2a16;
+  --ex-bad: #ff7b72;
+  --ex-bad-ink: #000000;
+  --ex-bad-text: #ff9a92;
+  --ex-bad-soft: #3a1311;
+  --ex-evidence: #9be8b0;
+  --ex-evidence-edge: #4fcf72;
+  --ex-evidence-active: #6fe08c;
+}
+
+.official-exam[data-contrast="yellow-on-black"] {
+  --ex-good: #5fd07a;
+  --ex-good-ink: #000000;
+  --ex-good-text: #7ae08f;
+  --ex-good-soft: #0c2a15;
+  --ex-bad: #ff8a65;
+  --ex-bad-ink: #000000;
+  --ex-bad-text: #ffa183;
+  --ex-bad-soft: #3a1a10;
+  --ex-evidence: #9be8b0;
+  --ex-evidence-edge: #5fd07a;
+  --ex-evidence-active: #6fe08c;
+}
+
+/* ---- the header: "Band score: 6.5" where the clock was, and two small text buttons */
+.ex-band {
+  display: inline-block;
+  padding: 0.25em 0.9em;
+  border: 2px solid var(--ex-fg);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ex-text-button {
+  display: inline-flex;
+  align-items: center;
+  height: 2.4em;
+  margin-right: 0.5em;
+  padding: 0 0.8em;
+  border: 1px solid var(--ex-control);
+  background: var(--ex-bg);
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ex-text-button:hover {
+  background: var(--ex-bar);
+}
+
+/* ---- the bar under the header: the part, and the filters */
+.ex-partbar.ex-review-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4em 1em;
+}
+
+.ex-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.ex-chip {
+  padding: 0.15em 0.7em;
+  border: 1px solid var(--ex-control);
+  background: var(--ex-bg);
+  cursor: pointer;
+}
+
+.ex-chip[aria-pressed="true"] {
+  border-color: var(--ex-fg);
+  background: var(--ex-fg);
+  color: var(--ex-bg);
+  font-weight: 700;
+}
+
+.ex-chip-select {
+  max-width: 14em;
+  padding: 0.15em 0.4em;
+  border: 1px solid var(--ex-control);
+  background: var(--ex-bg);
+  color: inherit;
+}
+
+.ex-audio-bar {
+  flex: none;
+  padding: 0.4em 1em;
+  border-bottom: 1px solid var(--ex-border);
+  background: var(--ex-bg);
+}
+
+/* ---- question number boxes */
+.ex-reviewing .ex-number {
+  display: inline-block;
+  min-width: 1.9em;
+  margin-right: 0.45em;
+  padding: 0 0.35em;
+  border: 2px solid var(--ex-control);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.ex-reviewing .ex-number[data-outcome="correct"] {
+  border-color: var(--ex-good);
+  background: var(--ex-good);
+  color: var(--ex-good-ink);
+}
+
+.ex-reviewing .ex-number[data-outcome="wrong"],
+.ex-reviewing .ex-number[data-outcome="skipped"] {
+  border-color: var(--ex-bad);
+  background: var(--ex-bad);
+  color: var(--ex-bad-ink);
+}
+
+/* the question the student is looking at */
+.ex-reviewing .ex-item[data-active="true"] {
+  margin-left: -0.6em;
+  padding-left: 0.45em;
+  border-left: 0.15em solid var(--ex-fg);
+}
+
+.ex-reviewing .ex-item[data-flash="true"] {
+  animation: ex-flash 1.4s ease-out;
+}
+
+@keyframes ex-flash {
+  from {
+    background: var(--ex-evidence);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+/* ---- answer boxes, drop-downs and options, read-only */
+.ex-reviewing .ex-blank[readonly] {
+  cursor: default;
+}
+
+.ex-reviewing .ex-blank[data-outcome="correct"],
+.ex-reviewing .ex-select[data-outcome="correct"] {
+  border: 2px solid var(--ex-good-text);
+  background: var(--ex-good-soft);
+}
+
+.ex-reviewing .ex-blank[data-outcome="wrong"],
+.ex-reviewing .ex-blank[data-outcome="skipped"],
+.ex-reviewing .ex-select[data-outcome="wrong"],
+.ex-reviewing .ex-select[data-outcome="skipped"] {
+  border: 2px solid var(--ex-bad-text);
+  background: var(--ex-bad-soft);
+}
+
+.ex-reviewing .ex-select:disabled,
+.ex-reviewing .ex-option input:disabled {
+  opacity: 1;
+  color: inherit;
+}
+
+.ex-reviewing .ex-option {
+  cursor: default;
+}
+
+.ex-reviewing .ex-option[data-choice-state] {
+  padding: 0.2em 0.5em;
+}
+
+.ex-reviewing .ex-option[data-choice-state="picked-right"] {
+  outline: 2px solid var(--ex-good-text);
+  background: var(--ex-good-soft);
+}
+
+.ex-reviewing .ex-option[data-choice-state="picked-wrong"] {
+  outline: 2px solid var(--ex-bad-text);
+  background: var(--ex-bad-soft);
+}
+
+.ex-reviewing .ex-option[data-choice-state="right"] {
+  outline: 2px dashed var(--ex-good-text);
+}
+
+.ex-reviewing .ex-option[data-choice-state="picked-right"]::after,
+.ex-reviewing .ex-option[data-choice-state="right"]::after {
+  content: "\2713";
+  margin-left: auto;
+  padding-left: 0.6em;
+  color: var(--ex-good-text);
+  font-weight: 700;
+}
+
+.ex-reviewing .ex-option[data-choice-state="picked-wrong"]::after {
+  content: "\2717";
+  margin-left: auto;
+  padding-left: 0.6em;
+  color: var(--ex-bad-text);
+  font-weight: 700;
+}
+
+.ex-reviewing .ex-list-item:disabled,
+.ex-reviewing .ex-bank-word:disabled {
+  cursor: default;
+  opacity: 1;
+  color: inherit;
+}
+
+/* ---- "tick Answer: ..." after a number */
+.ex-rv {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2em 0.5em;
+  margin: 0 0 0 0.5em;
+  font-size: 0.95em;
+}
+
+.ex-rv-icon {
+  font-weight: 700;
+}
+
+.ex-rv[data-outcome="correct"] .ex-rv-icon,
+.ex-rv[data-outcome="correct"] .ex-rv-answer {
+  color: var(--ex-good-text);
+}
+
+.ex-rv[data-outcome="wrong"] .ex-rv-icon,
+.ex-rv[data-outcome="wrong"] .ex-rv-answer,
+.ex-rv[data-outcome="skipped"] .ex-rv-icon,
+.ex-rv[data-outcome="skipped"] .ex-rv-answer {
+  color: var(--ex-bad-text);
+}
+
+.ex-rv-list {
+  margin: 0.4em 0 0;
+}
+
+.ex-rv-line {
+  margin: 0.2em 0;
+}
+
+.ex-rv-line .ex-rv {
+  margin-left: 0;
+}
+
+.ex-rv-buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+}
+
+.ex-rv-button {
+  padding: 0.05em 0.6em;
+  border: 1px solid var(--ex-control);
+  background: var(--ex-bg);
+  color: var(--ex-fg);
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.ex-rv-button:hover,
+.ex-rv-button[aria-expanded="true"] {
+  background: var(--ex-bar);
+  border-color: var(--ex-fg);
+}
+
+.ex-rv-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em 0.7em;
+  margin: 0.5em 0 0;
+  padding-top: 0.4em;
+  border-top: 1px solid var(--ex-border);
+}
+
+.ex-rv-bar-label {
+  font-weight: 700;
+}
+
+/* ---- the explanation popover */
+.ex-pop {
+  position: fixed;
+  z-index: 70;
+  width: min(30em, calc(100vw - 16px));
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 0.8em 1em;
+  border: 2px solid var(--ex-fg);
+  background: var(--ex-bg);
+  color: var(--ex-fg);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.ex-pop-note {
+  margin: 0 1.6em 0.5em 0;
+  color: var(--ex-muted);
+  font-size: 0.8em;
+  font-style: italic;
+}
+
+.ex-pop-title {
+  margin: 0 0 0.35em;
+  font-size: 1.05em;
+}
+
+.ex-pop h4 {
+  margin: 0.7em 0 0.15em;
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ex-pop-text {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.ex-pop-close {
+  position: absolute;
+  top: 0.15em;
+  right: 0.45em;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.4em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ---- the evidence in the passage: light green + a thick underline + a number badge. A student's own yellow highlight keeps its colour; where both are on the same words you see both. */
+.ex-evidence {
+  background: var(--ex-evidence);
+  color: var(--ex-evidence-ink);
+  box-shadow: inset 0 -0.18em 0 var(--ex-evidence-edge);
+}
+
+.ex-evidence[data-ev-active="true"] {
+  background: var(--ex-evidence-active);
+  outline: 2px solid var(--ex-evidence-edge);
+  outline-offset: 0;
+}
+
+.ex-evidence.exam-highlight,
+.ex-evidence.exam-highlight[data-ev-active="true"] {
+  background: var(--exam-highlight);
+  color: var(--exam-highlight-ink);
+}
+
+.ex-ev-badges {
+  display: inline-flex;
+  gap: 0.15em;
+  margin-right: 0.15em;
+  vertical-align: 0.15em;
+}
+
+.ex-ev-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5em;
+  height: 1.35em;
+  padding: 0 0.3em;
+  border: 1px solid var(--ex-evidence-edge);
+  background: var(--ex-evidence-edge);
+  color: var(--ex-good-ink);
+  font-size: 0.78em;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ex-ev-badge::before {
+  content: "[" attr(data-n) "]";
+}
+
+.ex-ev-badge:hover {
+  outline: 2px solid var(--ex-fg);
+  outline-offset: 1px;
+}
+
+/* ---- the footer: right = green, wrong or empty = red, each with a tick or a cross in the corner */
+.ex-qbtn[data-result="correct"] {
+  background: var(--ex-good);
+  color: var(--ex-good-ink);
+}
+
+.ex-qbtn[data-result="wrong"],
+.ex-qbtn[data-result="skipped"] {
+  background: var(--ex-bad);
+  color: var(--ex-bad-ink);
+}
+
+.ex-qbtn[data-result]::after {
+  position: absolute;
+  top: -0.25em;
+  right: -0.15em;
+  font-size: 0.7em;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ex-fg);
+}
+
+.ex-qbtn[data-result="correct"]::after {
+  content: "\2713";
+}
+
+.ex-qbtn[data-result="wrong"]::after,
+.ex-qbtn[data-result="skipped"]::after {
+  content: "\2717";
+}
+
+.ex-qbtn[data-dim="true"] {
+  opacity: 0.3;
+}
+
+.ex-part-count[data-review="true"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the "Checking your answers..." state after Submit */
+.ex-checking {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1em;
+  background: var(--ex-bg);
+  color: var(--ex-fg);
+}
+
+.ex-checking-spinner {
+  width: 2.2em;
+  height: 2.2em;
+  border: 3px solid var(--ex-border);
+  border-top-color: var(--ex-fg);
+  border-radius: 50%;
+  animation: ex-spin 0.9s linear infinite;
+}
+
+@keyframes ex-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ex-checking-spinner {
+    animation-duration: 3s;
+  }
+  .ex-reviewing .ex-item[data-flash="true"] {
+    animation: none;
+  }
+}
+
+/* ---- the results dialog */
+.ex-results {
+  width: min(40em, calc(100% - 2em));
+  max-height: calc(100% - 2em);
+  display: flex;
+  flex-direction: column;
+}
+
+.ex-results-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em 2.5em;
+  margin: 0 0 0.9em;
+}
+
+.ex-results-scores div {
+  display: flex;
+  flex-direction: column;
+}
+
+.ex-results-scores dt {
+  color: var(--ex-muted);
+  font-size: 0.85em;
+}
+
+.ex-results-scores dd {
+  margin: 0;
+  font-size: 1.6em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ex-results-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--ex-border);
+}
+
+.ex-results-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ex-results-table th {
+  position: sticky;
+  top: 0;
+  padding: 0.35em 0.7em;
+  border-bottom: 2px solid var(--ex-fg);
+  background: var(--ex-bar);
+  text-align: left;
+}
+
+.ex-results-table td {
+  padding: 0.3em 0.7em;
+  border-bottom: 1px solid var(--ex-border);
+  overflow-wrap: anywhere;
+}
+
+.ex-results-table td:first-child {
+  width: 3.2em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.ex-results-table tr[data-outcome="correct"] td {
+  background: var(--ex-good-soft);
+  color: var(--ex-fg);
+}
+
+.ex-results-table tr[data-outcome="wrong"] td,
+.ex-results-table tr[data-outcome="skipped"] td {
+  background: var(--ex-bad-soft);
+  color: var(--ex-fg);
+}
+
+.ex-results-table tr[data-outcome="correct"] td:first-child {
+  box-shadow: inset 0.3em 0 0 var(--ex-good);
+}
+
+.ex-results-table tr[data-outcome="wrong"] td:first-child,
+.ex-results-table tr[data-outcome="skipped"] td:first-child {
+  box-shadow: inset 0.3em 0 0 var(--ex-bad);
+}
+
+/* the read-only note box of the review */
+.ex-note-view {
+  position: fixed;
+  z-index: 65;
+  max-width: min(22em, calc(100vw - 16px));
+  padding: 0.6em 0.8em;
+  border: 2px solid var(--ex-fg);
+  background: var(--ex-bg);
+  color: var(--ex-fg);
+  white-space: pre-wrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.ex-note-view small {
+  display: block;
+  margin-bottom: 0.2em;
+  color: var(--ex-muted);
+}
+
+/* Phase M2 - the student's own notes under the passage (read-only) */
+.ex-notes {
+  margin: 1.5em 0 0;
+  padding: 0.7em 1em;
+  border: 1px solid var(--ex-border);
+  background: var(--ex-bar);
+}
+
+.ex-notes h3 {
+  margin: 0 0 0.3em;
+  font-size: 1em;
+}
+
+.ex-notes ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.ex-notes li {
+  white-space: pre-wrap;
+}
+
+/* Phase M2 - a tick and "Answer: ..." inside running text (a summary, a table cell, a flow chart, the end of a gap sentence) is a small chip, so it is never read as part of the sentence */
+.ex-reviewing .ex-item-text .ex-rv,
+.ex-reviewing .ex-summary .ex-rv,
+.ex-reviewing .ex-flow-step .ex-rv,
+.ex-reviewing .ex-table .ex-rv {
+  margin: 0 0.35em;
+  padding: 0 0.45em;
+  border: 1px solid var(--ex-border);
+  background: var(--ex-bg);
+}
+
+/* Phase M2 - the review's header on a phone: the band score and the two buttons, short words, no brand text */
+.ex-rv-short {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .ex-reviewing .ex-header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .ex-reviewing .ex-brand {
+    display: none;
+  }
+
+  .ex-reviewing .ex-rv-long {
+    display: none;
+  }
+
+  .ex-reviewing .ex-rv-short {
+    display: inline;
+  }
+
+  .ex-reviewing .ex-band {
+    padding: 0.15em 0.6em;
+    font-size: 0.95em;
+  }
+
+  .ex-reviewing .ex-text-button {
+    height: 2.2em;
+    margin-right: 0.3em;
+    padding: 0 0.6em;
+  }
+}

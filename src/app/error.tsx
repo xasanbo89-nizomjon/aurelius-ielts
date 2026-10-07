@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
 import { reportClientErrorAction } from "@/actions/error-report.actions";
+import { isChunkLoadError, reloadOnceForChunkError } from "@/lib/chunk-reload";
 import { Button } from "@/components/ui/button";
 
 export default function GlobalPageError({
@@ -15,6 +16,8 @@ export default function GlobalPageError({
   reset: () => void;
 }) {
   useEffect(() => {
+    // A page opened before a deployment asking for files that are gone: a fresh page is the cure (once; see src/lib/chunk-reload.ts).
+    if (isChunkLoadError(error) && reloadOnceForChunkError()) return;
     console.error(error);
     // Fire-and-forget — a failed error report should never itself surface an error.
     void reportClientErrorAction(error.message, error.digest);

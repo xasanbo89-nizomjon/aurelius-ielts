@@ -17,6 +17,7 @@ import type { OfficialExamSession } from "@/components/exam/official/official-re
 import { OfficialQuestionGroups } from "@/components/exam/official/official-questions";
 import { OfficialRangesContext } from "@/components/exam/official/official-text";
 import { OfficialSubmitDialog } from "@/components/exam/official/official-submit-dialog";
+import { OfficialChecking } from "@/components/exam/official/official-checking";
 import { useListeningAudio, type ListeningAudioStatus } from "@/components/exam/official/use-listening-audio";
 
 /**
@@ -266,6 +267,8 @@ export function OfficialListeningExam({ session }: { session: OfficialListeningS
         onRemoveWhere={highlights.removeWhere}
         inCurrentPart={inCurrentPart}
       />
+
+      {session.checking && <OfficialChecking />}
 
       {/* No controls, no download, no address on the screen: the page plays the recording and nobody else can touch it. */}
       <audio ref={audioRef} data-testid="exam-audio" hidden preload="auto" controlsList="nodownload noplaybackrate noremoteplayback" onContextMenu={(event) => event.preventDefault()} />
