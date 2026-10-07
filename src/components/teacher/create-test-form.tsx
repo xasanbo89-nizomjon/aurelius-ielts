@@ -28,16 +28,25 @@ export function CreateTestForm({ defaultType = "READING" }: { defaultType?: "REA
     formState: { errors },
   } = useForm<CreateTestInput>({
     resolver: zodResolver(createTestSchema),
-    defaultValues: { type: defaultType, category: "GENERAL" },
+    defaultValues: { type: defaultType, category: "GENERAL", format: "FULL_IELTS" },
   });
 
   const type = watch("type");
   const category = watch("category");
+  const format = watch("format") ?? "FULL_IELTS";
 
   async function onSubmit(values: CreateTestInput) {
     setSubmitting(true);
     // Phase L2 - the test is created with its parts (3 passages / 4 parts) already in place and opens in the structured editor.
-    const result = await createBuilderTestAction({ type: values.type, title: values.title, description: values.description, durationMinutes: values.durationMinutes ?? null, category: values.category });
+    const result = await createBuilderTestAction({
+      type: values.type,
+      title: values.title,
+      description: values.description,
+      durationMinutes: values.durationMinutes ?? null,
+      category: values.category,
+      format: values.format ?? "FULL_IELTS",
+      partCount: values.format === "CUSTOM" ? (values.partCount ?? (values.type === "LISTENING" ? 4 : 3)) : undefined,
+    });
     setSubmitting(false);
 
     if (!result.success) {
@@ -86,6 +95,39 @@ export function CreateTestForm({ defaultType = "READING" }: { defaultType?: "REA
           />
         </div>
       </div>
+
+      <fieldset className="border-border/70 space-y-3 rounded-xl border px-4 py-3.5" data-testid="format-choice">
+        <legend className="px-1 text-sm font-medium">Test format</legend>
+        <label className="flex cursor-pointer items-start gap-3 text-sm">
+          <input type="radio" name="format" value="FULL_IELTS" checked={format === "FULL_IELTS"} onChange={() => setValue("format", "FULL_IELTS")} className="mt-1" data-testid="format-full" />
+          <span>
+            <span className="font-medium">Full IELTS test (40 questions)</span>
+            <span className="text-muted-foreground block text-xs">The official layout: {type === "LISTENING" ? "4 parts" : "3 passages"}, exactly 40 questions, an IELTS band for every result. Only this kind can be used in a Full Mock.</span>
+          </span>
+        </label>
+        <label className="flex cursor-pointer items-start gap-3 text-sm">
+          <input type="radio" name="format" value="CUSTOM" checked={format === "CUSTOM"} onChange={() => setValue("format", "CUSTOM")} className="mt-1" data-testid="format-custom" />
+          <span>
+            <span className="font-medium">Custom test (any number of questions)</span>
+            <span className="text-muted-foreground block text-xs">Any number of questions and parts, numbered 1 to the last. Students get their score and percentage (for example 18/24, 75%) - no IELTS band - and it cannot be used in a Full Mock.</span>
+          </span>
+        </label>
+        {format === "CUSTOM" && (
+          <div className="space-y-1.5 pl-7">
+            <Label htmlFor="partCount">Number of {type === "LISTENING" ? "parts" : "passages"} to start with</Label>
+            <Input
+              id="partCount"
+              type="number"
+              min={1}
+              max={12}
+              className="w-28"
+              placeholder={type === "LISTENING" ? "4" : "3"}
+              {...register("partCount", { setValueAs: (v) => (v === "" || v == null ? undefined : Number(v)) })}
+            />
+            <p className="text-muted-foreground text-xs">You can add and remove {type === "LISTENING" ? "parts" : "passages"} later in the editor.</p>
+          </div>
+        )}
+      </fieldset>
 
       <div className="border-border/70 flex items-center justify-between rounded-xl border px-4 py-3.5">
         <div className="space-y-0.5">

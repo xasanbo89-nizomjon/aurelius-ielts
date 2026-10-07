@@ -2,6 +2,19 @@
 
 Planned work that is not built yet. When a phase ships, delete its section.
 
+## Phase Q-A follow-ups (exam fixes, upload, Custom tests)
+
+- **Custom tests have no band anywhere.** The student's history and the teacher's tables show "-" in the band column for a Custom attempt and the marks / percentage next to it;
+  a "Custom" label next to the dash would read better. Band charts and band averages skip them on purpose.
+- **A PDF import is untimed** (no duration is read from a PDF), Full IELTS or Custom alike: a Listening test then has no review countdown and is never handed in by the
+  clock. The teacher sets the minutes in the editor. A default (30 / 60) could be offered at import.
+- **The Custom PDF import was run on one real paper** (a Listening PDF of 24 questions in four sections, 6 each); a Custom paper with five or more "Part" headings is read
+  by the same segmentation as a four-part one and has not been tried. The Listening text segmentation (`pdf-text-extraction.ts`) still looks for exactly four parts when it
+  splits a plain-text PDF itself.
+- **The upload limit is 50 MB** (a 30-minute MP3 is about 30 MB); a larger file is refused with the reason. A resumable upload (TUS) would lift it; nothing needs it yet.
+- **The legacy exam screens** (`?ui=legacy`) keep their own matching drop-downs and their own clock (which already showed `m:ss`): the used-once rule is on the official screens only.
+- **Older browser scripts of Phase G** assert the old clock wording ("59 minutes left"); the official screens now read "59:32 left".
+
 ## Phase L2 follow-ups (what the test builder still lacks)
 
 Phase L1 and L2 are done (`docs/test-builder.md`). Known limits and what could come next:

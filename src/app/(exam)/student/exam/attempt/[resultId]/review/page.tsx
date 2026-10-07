@@ -6,6 +6,7 @@ import { requireStudentProfile } from "@/lib/session";
 import { getAttemptSummary } from "@/lib/exam/attempts";
 import { findInProgressFullMockLinkForResult } from "@/lib/full-mock-attempts";
 import { officialBandForScore } from "@/lib/analytics/band-conversion";
+import { isCustomFormat } from "@/lib/exam/test-format";
 import { reanchorHighlight } from "@/lib/exam/text-highlight";
 import { confirmedEvidenceRanges } from "@/lib/exam/review-model";
 import { getApprovedExplanations } from "@/lib/exam/question-explanations-server";
@@ -42,7 +43,9 @@ export default async function ExamReviewPage({
   const [cookieStore, explanations] = await Promise.all([cookies(), getApprovedExplanations(attempt.mockTest.questions)]);
 
   const totalPoints = attempt.mockTest.questions.reduce((sum, question) => sum + question.points, 0);
-  const band = attempt.bandScore ?? officialBandForScore(attempt.skill, attempt.rawScore ?? 0, totalPoints);
+  // Phase Q - a Custom test has no band: the review shows its score and percentage instead.
+  const custom = isCustomFormat(attempt.mockTest.testFormat);
+  const band = custom ? null : (attempt.bandScore ?? officialBandForScore(attempt.skill, attempt.rawScore ?? 0, totalPoints));
 
   const answerByQuestion = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
   const passageContent = new Map(attempt.mockTest.passages.map((passage) => [passage.id, passage.content]));
@@ -85,6 +88,7 @@ export default async function ExamReviewPage({
       preferencesCookieName={examPreferencesCookieName(profile.id)}
       initialPreferences={parseExamPreferences(cookieStore.get(examPreferencesCookieName(profile.id))?.value)}
       band={band}
+      custom={custom}
       rawScore={attempt.rawScore ?? 0}
       totalPoints={totalPoints}
       passages={attempt.mockTest.passages.map((passage) => ({

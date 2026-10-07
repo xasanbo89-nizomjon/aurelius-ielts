@@ -61,6 +61,8 @@ export function describeAnalysisFailure(error: unknown): string {
 /** The one place a stored import's rows are turned into a validation — used by the review page (to show it) and confirmImport (to enforce it), so what the teacher sees is exactly what is checked. */
 export function validateImportedTestRows(importedTest: {
   type: TestType;
+  /** Phase Q - chosen in the import review: CUSTOM = any number of questions and parts (null / FULL_IELTS = the strict 40-question shape). */
+  testFormat?: string | null;
   passages: { id: string; title: string; questionGroups: { id: string; startNumber: number; endNumber: number; questionType: QuestionType; questionsJson: unknown; instructions?: string | null }[] }[];
   answers: { questionNumber: number; answerText?: string | null }[];
 }): ImportValidation {
@@ -79,7 +81,11 @@ export function validateImportedTestRows(importedTest: {
     })),
     // A staged answer with no text (the answer key was unreadable at that number — common in scanned PDFs) is an answer that is MISSING: a question with an empty key can never be marked correct, so it must block the import instead of counting as "40 answers".
     importedTest.answers.filter((answer) => answer.answerText == null || answer.answerText.trim().length > 0).map((answer) => answer.questionNumber),
-    { sectionLabel: importedTest.type === "LISTENING" ? "Section" : "Passage", listeningStructure: importedTest.type === "LISTENING" }
+    {
+      sectionLabel: importedTest.type === "LISTENING" ? "Section" : "Passage",
+      listeningStructure: importedTest.type === "LISTENING" && importedTest.testFormat !== "CUSTOM",
+      custom: importedTest.testFormat === "CUSTOM",
+    }
   );
 }
 
@@ -253,7 +259,7 @@ export type ImportedTestForReview = Awaited<ReturnType<typeof getImportedTestFor
 // Edit (review screen)
 // ---------------------------------------------------------------------------
 
-export async function updateImportedTestMeta(importedTestId: string, teacherId: string, input: { title?: string }) {
+export async function updateImportedTestMeta(importedTestId: string, teacherId: string, input: { title?: string; testFormat?: "FULL_IELTS" | "CUSTOM" }) {
   await assertOwnsImportedTest(importedTestId, teacherId);
   return prisma.importedTest.update({ where: { id: importedTestId }, data: input });
 }
@@ -411,6 +417,8 @@ export async function confirmImport(
     type: row.type,
     category: input.category,
     durationMinutes: input.durationMinutes,
+    // Phase Q - the kind of paper chosen in the review is the kind of test that is made.
+    format: row.testFormat === "CUSTOM" ? "CUSTOM" : "FULL_IELTS",
   });
 
   const answersByNumber = new Map(row.answers.map((a) => [a.questionNumber, a.answerText]));

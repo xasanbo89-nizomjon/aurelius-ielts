@@ -7,6 +7,7 @@ import { numberQuestions } from "@/lib/exam/question-numbering";
 import { answerKeysOf } from "@/lib/exam/summary-blanks";
 import { resolvePassageAudioSrc } from "@/lib/uploads/audio-constraints";
 import { validateTestStructure, type TestIssue, type TestValidation, type ValidateTestInput } from "@/lib/exam/test-validation";
+import { expectedQuestionCount, formatOf } from "@/lib/exam/test-format";
 
 /** Thrown when a test is not ready to go live; carries every problem so the editor can list them with links to the fields. */
 export class PublishValidationError extends Error {
@@ -26,6 +27,7 @@ export async function loadValidatorInput(testId: string): Promise<(ValidateTestI
     select: {
       title: true,
       type: true,
+      testFormat: true,
       passages: {
         orderBy: { orderIndex: "asc" },
         select: {
@@ -46,6 +48,7 @@ export async function loadValidatorInput(testId: string): Promise<(ValidateTestI
   return {
     testType: test.type,
     type: test.type,
+    format: formatOf(test.testFormat),
     title: test.title,
     parts: test.passages.map((passage) => ({
       id: passage.id,
@@ -92,7 +95,10 @@ export async function validateTestForPublish(testId: string): Promise<TestValida
   );
   const studentTotal = studentRows.length > 0 ? studentRows[studentRows.length - 1].endNumber : 0;
   const teacherTotal = (await getQuestionNumberCounts([testId])).get(testId) ?? 0;
-  if (studentTotal !== teacherTotal || studentTotal !== validation.total) {
+  // Phase Q - the student's count, the teacher's count and the editor's count must all be the test's EXPECTED count: 40 for a Full IELTS test (a test that is not 40 is
+  // reported above as TOTAL), the number of questions the paper really holds for a Custom test (so there the three must simply agree with each other).
+  const expected = expectedQuestionCount(input.format, validation.total);
+  if (studentTotal !== teacherTotal || studentTotal !== validation.total || (formatOf(input.format) === "CUSTOM" && studentTotal !== expected)) {
     validation.issues.push({
       code: "PARITY",
       severity: "error",

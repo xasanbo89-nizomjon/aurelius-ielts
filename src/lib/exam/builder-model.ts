@@ -5,6 +5,7 @@ import { MAX_CHOOSE, MIN_CHOOSE, chooseCountOf } from "@/lib/exam/choose-many";
 import { answerKeysOf } from "@/lib/exam/summary-blanks";
 import { insertSummaryBlankMarkers } from "@/lib/exam/pdf-import-conversion";
 import type { ValidateTestInput, ValidatorPart } from "@/lib/exam/test-validation";
+import type { TestFormatValue } from "@/lib/exam/test-format";
 
 /**
  * Phase L2 - the model the structured test editor works on, and its two-way conversion to the stored rows (Passage / QuestionGroup / Question).
@@ -207,6 +208,8 @@ export type BuilderModel = {
   description: string;
   durationMinutes: number | null;
   category: "GENERAL" | "CAMBRIDGE";
+  /** Phase Q - FULL_IELTS (absent = the same: every older test) or CUSTOM (any number of questions and parts). */
+  format?: TestFormatValue;
   parts: BuilderPart[];
 };
 
@@ -519,6 +522,7 @@ export function fromRows(args: {
   description: string | null;
   durationMinutes: number | null;
   category: "GENERAL" | "CAMBRIDGE";
+  format?: TestFormatValue;
   passages: StoredPassage[];
   groups: StoredGroup[];
   questions: StoredQuestion[];
@@ -587,7 +591,7 @@ export function fromRows(args: {
     return { key: newKey("p"), passageId: passage.id, title: passage.title, content: passage.content, startSeconds: passageIndex === 0 ? null : passage.audioStartSeconds, groups: built };
   });
 
-  return { title: args.title, description: args.description ?? "", durationMinutes: args.durationMinutes, category: args.category, parts };
+  return { title: args.title, description: args.description ?? "", durationMinutes: args.durationMinutes, category: args.category, format: args.format ?? "FULL_IELTS", parts };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -641,6 +645,7 @@ export function toValidatorInput(model: BuilderModel, skill: Skill, audio: Map<s
   });
   return {
     type: skill,
+    format: model.format ?? "FULL_IELTS",
     title: model.title,
     parts,
     groups: rows.groups.map((group) => ({ id: group.id, partId: group.passageId, instructions: group.instructions, startQuestion: group.startQuestion, endQuestion: group.endQuestion })),

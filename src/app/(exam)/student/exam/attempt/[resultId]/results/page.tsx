@@ -10,6 +10,7 @@ import { formatNumberRange, summarizeAttemptSlots } from "@/lib/exam/question-nu
 import { getResultInsights } from "@/lib/exam/result-insights";
 import { findInProgressFullMockLinkForResult } from "@/lib/full-mock-attempts";
 import { isScaledToTable, officialBandForScore } from "@/lib/analytics/band-conversion";
+import { isCustomFormat } from "@/lib/exam/test-format";
 import { formatDuration, formatTimeUsed } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -71,8 +72,10 @@ export default async function ExamResultsPage({
   // Raw score = marks earned. The band is the one stored at submission; a paper finished before bands were always produced is converted now with the same official table, so "Not available yet" can no longer appear.
   const totalPoints = attempt.mockTest.questions.reduce((sum, question) => sum + question.points, 0);
   const rawScore = attempt.rawScore ?? correctCount;
-  const bandScore = attempt.bandScore ?? officialBandForScore(attempt.skill, rawScore, totalPoints);
-  const bandIsScaled = isScaledToTable(totalPoints);
+  // Phase Q - a Custom test is not turned into a band (the table is valid for 40 questions only): it shows the percentage and the marks.
+  const custom = isCustomFormat(attempt.mockTest.testFormat);
+  const bandScore = custom ? null : (attempt.bandScore ?? officialBandForScore(attempt.skill, rawScore, totalPoints));
+  const bandIsScaled = !custom && isScaledToTable(totalPoints);
 
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-12 sm:py-16">
@@ -84,10 +87,10 @@ export default async function ExamResultsPage({
               {skillLabel} Module
             </Badge>
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase">
-              <Gauge className="size-3.5" aria-hidden="true" /> IELTS Band
+              <Gauge className="size-3.5" aria-hidden="true" /> {custom ? "Score" : "IELTS Band"}
             </span>
-            <p data-testid="ielts-band" className="font-display text-7xl font-medium">
-              {bandScore != null ? bandScore.toFixed(1) : "—"}
+            <p data-testid={custom ? "custom-score" : "ielts-band"} className="font-display text-7xl font-medium">
+              {custom ? (percent != null ? `${percent}%` : "—") : bandScore != null ? bandScore.toFixed(1) : "—"}
             </p>
             <dl className="mt-3 grid w-full max-w-md grid-cols-2 gap-3">
               <div className="bg-background/70 rounded-xl px-4 py-3">

@@ -12,7 +12,9 @@
 //   teacher editor — what the question editor numbers (QuestionsManager → numberQuestions over the teacher's rows)
 // Database ROWS are never compared: a matching or summary row covers several numbered questions, which is exactly how 40 became 26.
 //
-// Exit code 1 if any path disagrees. "Not 40" is reported separately: a short practice test is not a parity bug, so it only fails with --strict.
+// Exit code 1 if any path disagrees. Each test has an EXPECTED count (Phase Q): 40 for a Full IELTS test (every test with no stored format), and for a Custom test
+// whatever its paper really holds - so the rule is "student == teacher == the test's expected count", and a Custom test of 24 questions is simply a test whose four
+// paths agree on 24. "Not the expected count" is reported separately: a Full IELTS test that is not 40 questions is not a parity bug, so it only fails with --strict.
 import { PrismaClient } from "@prisma/client";
 
 import { getAttemptDetail } from "@/lib/exam/attempts";
@@ -21,11 +23,11 @@ import { getQuestionNumberCounts } from "@/lib/exam/question-counts";
 import { numberQuestions } from "@/lib/exam/question-numbering";
 import { answerKeysOf } from "@/lib/exam/summary-blanks";
 import { isInternalTestTitle } from "@/lib/test-visibility";
+import { expectedQuestionCount, isCustomFormat } from "@/lib/exam/test-format";
 
 const args = process.argv.slice(2);
 const strict = args.includes("--strict");
 const includeInternal = args.includes("--include-internal");
-const EXPECTED = 40;
 const db = new PrismaClient();
 
 /** The exam screen's own grouping: every numbered row lands in exactly one section (a row with no passage goes to the last one). */
@@ -42,7 +44,7 @@ try {
   const tests = await db.mockTest.findMany({
     where: { type: { in: ["READING", "LISTENING"] }, isPublished: true, isArchived: false },
     orderBy: [{ type: "asc" }, { createdAt: "asc" }],
-    select: { id: true, title: true, type: true, createdById: true, packageFullMockTestId: true },
+    select: { id: true, title: true, type: true, testFormat: true, createdById: true, packageFullMockTestId: true },
   });
   const shown = tests.filter((t) => includeInternal || !isInternalTestTitle(t.title));
   const hiddenCount = tests.length - shown.length;
@@ -81,11 +83,14 @@ try {
     const teacherListCount = teacherLists.get(test.id) ?? 0;
     const counts = [listCount, examCount, teacherListCount, editorCount].filter((c) => c != null);
     const agree = integrity && counts.every((c) => c === counts[0]);
-    const isExpected = counts[0] === EXPECTED;
+    // 40 for a Full IELTS test; for a Custom test the count the four paths agree on (a Custom test only fails when the paths disagree).
+    const expected = expectedQuestionCount(test.testFormat, counts[0] ?? 0);
+    const isExpected = counts[0] === expected;
     if (!agree) mismatches++;
     if (!isExpected) notExpected++;
 
-    const verdict = !agree ? "MISMATCH" : isExpected ? "ok" : `agree, but ${counts[0]} ≠ ${EXPECTED}`;
+    const kind = isCustomFormat(test.testFormat) ? "custom" : "full";
+    const verdict = !agree ? "MISMATCH" : isExpected ? `ok (${kind}, expects ${expected})` : `agree, but ${counts[0]} ≠ ${expected} (${kind})`;
     console.log(
       test.title.slice(0, 33).padEnd(34),
       test.type.padEnd(9),
@@ -98,15 +103,19 @@ try {
     );
   }
 
-  console.log(`\n${shown.length - mismatches}/${shown.length} test(s) agree on every path; ${notExpected} test(s) do not have exactly ${EXPECTED} questions.`);
+  console.log(`\n${shown.length - mismatches}/${shown.length} test(s) agree on every path; ${notExpected} test(s) do not have their expected number of questions (40 for a Full IELTS test).`);
   if (mismatches > 0) {
     console.log("FAIL: student and teacher disagree on a test (see MISMATCH above).");
     process.exitCode = 1;
   } else if (strict && notExpected > 0) {
-    console.log(`FAIL (--strict): ${notExpected} test(s) are not ${EXPECTED} questions.`);
+    console.log(`FAIL (--strict): ${notExpected} test(s) do not have their expected number of questions.`);
     process.exitCode = 1;
   } else {
-    console.log(notExpected > 0 ? `PASS: no student/teacher disagreement. ${notExpected} short practice test(s) are not ${EXPECTED} questions (run with --strict to fail on those).` : `PASS: every test has ${EXPECTED} questions on every path.`);
+    console.log(
+      notExpected > 0
+        ? `PASS: no student/teacher disagreement. ${notExpected} Full IELTS test(s) do not have 40 questions (run with --strict to fail on those).`
+        : "PASS: every test has its expected number of questions (40 for a Full IELTS test, its own count for a Custom test) on every path."
+    );
   }
 } finally {
   await db.$disconnect();

@@ -30,6 +30,7 @@
     "check:results": "node --import ./scripts/register-ts.mjs scripts/check-results.mjs",
     "check:m": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-m.mjs",
     "check:m2": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/check-m2.mjs",
+    "check:q": "node --import ./scripts/register-ts.mjs scripts/check-q.mjs",
     "check:sw": "node --import ./scripts/register-ts.mjs scripts/check-sw.mjs"
   },
   "dependencies": {

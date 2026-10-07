@@ -104,11 +104,12 @@ export function resolveAudioStartOffset(args: { elapsedAtLoad: number; remembere
   return args.elapsedAtLoad <= FRESH_START_GRACE_SECONDS ? Math.max(0, args.elapsedAtLoad) : 0;
 }
 
-/** "2 minutes left to check your answers" while there is time to spare; seconds in the last minute (`warning`). */
+/** "1:59 left to check your answers": minutes and seconds like every other clock of the exam; the last minute is drawn in the warning style (`warning`). */
 export function reviewCountdownText(remainingSeconds: number): { text: string; warning: boolean } {
   const remaining = Math.max(0, Math.ceil(remainingSeconds));
-  if (remaining > 60) return { text: `${Math.ceil(remaining / 60)} minutes left to check your answers`, warning: false };
-  return { text: `${remaining} ${remaining === 1 ? "second" : "seconds"} left to check your answers`, warning: true };
+  const minutes = Math.floor(remaining / 60);
+  const seconds = remaining % 60;
+  return { text: `${minutes}:${String(seconds).padStart(2, "0")} left to check your answers`, warning: remaining <= 60 };
 }
 
 /** The volume a student last chose, kept between the sound check and the test (0..1). */

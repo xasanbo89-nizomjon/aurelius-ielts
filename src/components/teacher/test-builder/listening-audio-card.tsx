@@ -1,23 +1,37 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileAudio, Loader2, Trash2, Upload } from "lucide-react";
+import { AlertCircle, FileAudio, Loader2, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { attachBuilderAudioAction, prepareBuilderAudioUploadAction, removeBuilderAudioAction } from "@/actions/test-builder.actions";
 import type { BuilderPartInfo } from "@/lib/exam/test-builder";
 import { AUDIO_INPUT_ACCEPT, MAX_AUDIO_FILE_SIZE_LABEL, validateAudioFile } from "@/lib/uploads/audio-constraints";
 import { LISTENING_AUDIO_BUCKET } from "@/lib/uploads/bucket-names";
-import { uploadToSignedUrl } from "@/lib/uploads/supabase-browser";
+import { UploadError, uploadToSignedUrl, type UploadProgress } from "@/lib/uploads/supabase-browser";
+import { formatBytes, formatSpeed } from "@/lib/uploads/upload-policy";
 import { formatTimeInput, parseTimeInput } from "@/lib/exam/test-validation";
 import { Button } from "@/components/ui/button";
 import { FIELD } from "@/components/teacher/test-builder/controls";
+
+/** The line above the progress bar: what is happening now, in words. */
+function progressText(progress: UploadProgress | null, fallback: string): string {
+  if (!progress) return fallback;
+  if (progress.state === "waiting-to-retry") return `${progress.lastError ?? "The upload was interrupted."} Trying again (attempt ${progress.attempt} of ${progress.attempts})…`;
+  if (progress.state === "finishing") return "Saving the recording…";
+  const speed = formatSpeed(progress.speedBytesPerSecond);
+  const attempt = progress.attempt > 1 ? `Attempt ${progress.attempt} of ${progress.attempts} · ` : "";
+  return `${attempt}Uploading the recording… ${progress.percent}% (${formatBytes(progress.loaded)} of ${formatBytes(progress.total)}${speed ? ` · ${speed}` : ""})`;
+}
 
 /**
  * The recording of a Listening test and where each part starts in it. One recording for the whole test is the normal case: the teacher uploads it once
  * (straight from the browser to storage, so a big file never goes through a server action), the server measures its length, and the start of Parts 2-4
  * is entered as mm:ss - with a small player to find the spot ("Set to current position"). When every part has its own recording the start times do not
  * apply, and the student's screen already follows the recordings from part to part by itself.
+ *
+ * Phase Q: the upload shows a real progress bar (percent, megabytes, speed), can be cancelled, is tried again by itself when the connection drops or stalls,
+ * and when it finally fails says why in one sentence and offers "Try again" with the same file.
  */
 export function ListeningAudioCard({
   testId,
@@ -36,7 +50,11 @@ export function ListeningAudioCard({
   onAudioChanged: (parts: BuilderPartInfo[]) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
-  const [progress, setProgress] = useState<number | null>(null);
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
+  const [failure, setFailure] = useState<{ message: string; file: File } | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  /** Which upload is the current one: a cancelled upload that is still winding down must not touch the screen of the next. */
+  const runRef = useRef(0);
   const playerRef = useRef<HTMLAudioElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [timeText, setTimeText] = useState<Record<number, string>>({});
@@ -49,16 +67,27 @@ export function ListeningAudioCard({
   async function upload(file: File) {
     const validation = validateAudioFile(file);
     if (!validation.valid) {
+      setFailure({ message: validation.error, file });
       toast.error(validation.error);
       return;
     }
+    setFailure(null);
     setBusy("Uploading the recording…");
-    setProgress(0);
+    setProgress(null);
+    const run = ++runRef.current;
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const contentType = file.type || validation.contentType;
       const prepared = await prepareBuilderAudioUploadAction({ fileName: file.name, fileSize: file.size, contentType });
+      if (controller.signal.aborted) return; // cancelled while the link was being prepared
       if (!prepared.success) throw new Error(prepared.error);
-      await uploadToSignedUrl(LISTENING_AUDIO_BUCKET, prepared.path, prepared.token, file, contentType);
+      await uploadToSignedUrl(LISTENING_AUDIO_BUCKET, prepared.path, prepared.token, file, contentType, {
+        onProgress: (next) => {
+          if (runRef.current === run) setProgress(next);
+        },
+        signal: controller.signal,
+      });
       setProgress(null);
       setBusy("Measuring its length…");
       const result = await attachBuilderAudioAction(testId, { url: prepared.publicUrl, fileName: file.name, mimeType: contentType, size: file.size });
@@ -67,12 +96,31 @@ export function ListeningAudioCard({
       const measured = result.parts[0]?.audioDurationSeconds;
       toast.success(measured ? `Recording attached (${formatTimeInput(measured)} long).` : "Recording attached, but its length could not be read - upload an MP3, WAV or M4A file.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not upload the recording.");
+      if (runRef.current !== run) return; // cancelled: the screen was already reset by cancel()
+      const message = error instanceof Error ? error.message : "Could not upload the recording.";
+      if (error instanceof UploadError && error.kind === "cancelled") toast.message(message);
+      else {
+        setFailure({ message, file });
+        toast.error(message);
+      }
     } finally {
-      setBusy(null);
-      setProgress(null);
+      if (runRef.current === run) {
+        abortRef.current = null;
+        setBusy(null);
+        setProgress(null);
+      }
       if (fileRef.current) fileRef.current.value = "";
     }
+  }
+
+  /** Cancel is felt at once: the bar goes, the buttons are free again; what is still winding down in the background is ignored. */
+  function cancel() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    runRef.current++;
+    setBusy(null);
+    setProgress(null);
+    toast.message("The upload was cancelled.");
   }
 
   async function remove() {
@@ -93,6 +141,8 @@ export function ListeningAudioCard({
     setTimeText((prev) => ({ ...prev, [index]: seconds === null ? "" : formatTimeInput(seconds) }));
   }
 
+  const uploading = busy !== null && (progress !== null || busy.startsWith("Uploading"));
+
   return (
     <section id="focus-audio" className="border-border/70 bg-card scroll-mt-24 space-y-3 rounded-2xl border p-4" data-testid="audio-card">
       <header className="flex flex-wrap items-center gap-2">
@@ -106,7 +156,10 @@ export function ListeningAudioCard({
       </header>
 
       {sources.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No recording yet. Upload the one recording of the whole test (MP3, WAV or M4A, up to {MAX_AUDIO_FILE_SIZE_LABEL}). It goes straight to storage, so a large file is fine.</p>
+        <p className="text-muted-foreground text-sm">
+          No recording yet. Upload the one recording of the whole test (MP3, WAV or M4A, up to {MAX_AUDIO_FILE_SIZE_LABEL}). It goes straight to storage, so a large file is fine. A 30-minute MP3 is
+          about 30 MB; a WAV of the same length is far larger - export it as MP3 first.
+        </p>
       ) : (
         <>
           <p className="text-sm" data-testid="audio-file">
@@ -117,7 +170,15 @@ export function ListeningAudioCard({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <input ref={fileRef} type="file" accept={AUDIO_INPUT_ACCEPT} className="hidden" data-testid="audio-file-input" disabled={disabled || busy !== null} onChange={(event) => event.target.files?.[0] && void upload(event.target.files[0])} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept={AUDIO_INPUT_ACCEPT}
+          className="hidden"
+          data-testid="audio-file-input"
+          disabled={disabled || busy !== null}
+          onChange={(event) => event.target.files?.[0] && void upload(event.target.files[0])}
+        />
         <Button type="button" variant="outline" size="sm" disabled={disabled || busy !== null} onClick={() => fileRef.current?.click()} data-testid="upload-recording">
           {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />} {sources.length ? "Replace the recording" : "Upload the recording"}
         </Button>
@@ -126,16 +187,55 @@ export function ListeningAudioCard({
             <Trash2 className="size-4" /> Remove
           </Button>
         )}
-        {busy && <span className="text-muted-foreground text-xs" data-testid="audio-busy">{busy}{progress != null ? ` ${progress}%` : ""}</span>}
       </div>
 
-      {sources.length > 1 && !shared && <p className="text-muted-foreground text-sm">The parts have recordings of their own, so the student&apos;s screen follows them from part to part by itself. Start times are only needed for one shared recording.</p>}
+      {busy && (
+        <div className="space-y-1.5" role="status" aria-live="polite" data-testid="upload-progress">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-muted-foreground text-xs" data-testid="audio-busy">
+              {progressText(progress, busy)}
+            </span>
+            {uploading && (
+              <Button type="button" variant="ghost" size="sm" onClick={cancel} data-testid="upload-cancel">
+                <X className="size-3.5" /> Cancel
+              </Button>
+            )}
+          </div>
+          {progress && progress.state !== "waiting-to-retry" && (
+            <div className="bg-secondary h-2 w-full overflow-hidden rounded-full" aria-hidden="true">
+              <div className="bg-accent h-full rounded-full transition-[width] duration-300" style={{ width: `${progress.percent}%` }} data-testid="upload-bar" data-percent={progress.percent} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {failure && !busy && (
+        <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-start gap-3 rounded-xl border px-3 py-2.5 text-sm" role="alert" data-testid="upload-error">
+          <AlertCircle className="text-destructive mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1">{failure.message}</p>
+          {validateAudioFile(failure.file).valid && (
+            <Button type="button" variant="outline" size="sm" onClick={() => void upload(failure.file)} data-testid="upload-retry">
+              Try again
+            </Button>
+          )}
+          <Button type="button" variant="ghost" size="sm" onClick={() => setFailure(null)} aria-label="Dismiss">
+            <X className="size-3.5" />
+          </Button>
+        </div>
+      )}
+
+      {sources.length > 1 && !shared && (
+        <p className="text-muted-foreground text-sm">
+          The parts have recordings of their own, so the student&apos;s screen follows them from part to part by itself. Start times are not needed.
+        </p>
+      )}
 
       {shared && (
         <div id="focus-times" className="scroll-mt-24 space-y-2" data-testid="start-times">
           <p className="text-sm font-medium">Where each part starts in the recording</p>
           <p className="text-muted-foreground text-xs">
-            Play the recording, stop where Part 2 begins and press &quot;Set to current position&quot;. When Parts 2 to {parts.length} all have a start time, the student&apos;s screen moves to the next part by itself at that moment. Leave them all empty to keep the old behaviour (the student turns the parts).
+            Play the recording, stop where Part 2 begins and press &quot;Set to current position&quot;. When Parts 2 to {parts.length} all have a start time, the student&apos;s screen moves to the
+            next part by itself as the recording reaches it.
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {parts.slice(1).map((_, offset) => {

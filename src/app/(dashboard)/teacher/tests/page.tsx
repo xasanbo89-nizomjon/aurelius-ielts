@@ -99,6 +99,7 @@ export default async function TeacherTestsPage({
             type: true,
             category: true,
             difficulty: true,
+            testFormat: true,
             isPublished: true,
             isArchived: true,
             coverImagePath: true,
@@ -277,6 +278,11 @@ export default async function TeacherTestsPage({
                       <span className="flex items-center gap-1.5">
                         {test.type.toLowerCase()}
                         {test.category === "CAMBRIDGE" && <Badge variant="success">Cambridge</Badge>}
+                        {test.testFormat === "CUSTOM" && (
+                          <Badge variant="accent" data-testid="custom-badge">
+                            Custom
+                          </Badge>
+                        )}
                         {isInternalTestTitle(test.title) && <Badge variant="outline">Temporary</Badge>}
                       </span>
                     </TableCell>

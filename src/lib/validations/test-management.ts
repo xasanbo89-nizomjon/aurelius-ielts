@@ -10,6 +10,9 @@ export const createTestSchema = z.object({
   // `valueAsNumber`, and coerce's `unknown` input type breaks zodResolver's
   // inference for react-hook-form.
   durationMinutes: z.number().int().positive().max(300).optional(),
+  /** Phase Q - the kind of paper (default: a full IELTS test of 40 questions) and, for a custom test, how many parts it starts with. */
+  format: z.enum(["FULL_IELTS", "CUSTOM"]).optional(),
+  partCount: z.number().int().min(1).max(12).optional(),
 });
 export type CreateTestInput = z.infer<typeof createTestSchema>;
 

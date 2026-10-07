@@ -3,6 +3,7 @@ import type { QuestionType } from "@prisma/client";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
 import { chooseChunks, importedQuestionGroupJsonSchema, missingSummaryBlankNumbers, type ImportedQuestionGroupJson } from "@/lib/exam/pdf-import-conversion";
 import { LISTENING_PART_COUNT, LISTENING_TOTAL_QUESTIONS, listeningPartOf, listeningPartRange } from "@/lib/exam/listening-structure";
+import { FULL_IELTS_QUESTIONS } from "@/lib/exam/test-format";
 
 /**
  * Phase 50.4 — the completeness gate for a PDF import. Pure (no DB, no
@@ -38,7 +39,8 @@ export type ImportIssueCode =
   | "ANSWER_WITHOUT_QUESTION"
   | "QUESTION_WITHOUT_ANSWER"
   | "INVALID_GROUP"
-  | "INCOMPLETE_LISTENING";
+  | "INCOMPLETE_LISTENING"
+  | "CUSTOM_NUMBERING";
 
 export type ImportIssue = { code: ImportIssueCode; message: string; questionNumbers: number[]; passageId?: string; groupId?: string };
 
@@ -76,6 +78,10 @@ export type ImportValidation = {
   duplicateNumbers: number[];
   answersWithoutQuestion: number[];
   questionsWithoutAnswer: number[];
+  /** Phase Q - which kind of test this import is being checked as. */
+  format: "FULL_IELTS" | "CUSTOM";
+  /** Phase Q - when the paper does not hold exactly 40 questions: the way out that does not block the teacher - import it as a Custom test of this many questions. */
+  suggestCustom: { questions: number } | null;
 };
 
 const MAX_RANGE_SPAN = 500;
@@ -207,8 +213,11 @@ export function validateImportedTest(
     sectionLabel?: "Passage" | "Section";
     /** Phase B — hold the import to the fixed shape of a real Listening test (4 parts, questions 1–40, ten per part), so a partial Listening test can never be created. */
     listeningStructure?: boolean;
+    /** Phase Q - a Custom test: any number of questions and parts, numbered 1..N. The fixed Listening shape does not apply; every other check does. */
+    custom?: boolean;
   } = {}
 ): ImportValidation {
+  const custom = options.custom === true;
   const sectionLabel = options.sectionLabel ?? "Passage";
   const issues: ImportIssue[] = [];
   const notes: string[] = [];
@@ -337,7 +346,15 @@ export function validateImportedTest(
     });
   }
 
-  if (options.listeningStructure && passages.length > 0) {
+  // Phase Q - a Custom test starts at question 1 and has no gaps (a gap inside the numbers is reported above as a missing question).
+  if (custom && questionSet.size > 0) {
+    const lowest = Math.min(...questionSet);
+    if (lowest !== 1) {
+      issues.push({ code: "CUSTOM_NUMBERING", message: `A custom test is numbered from question 1, but the first question found is ${lowest}.`, questionNumbers: [lowest] });
+    }
+  }
+
+  if (options.listeningStructure && !custom && passages.length > 0) {
     const problems: string[] = [];
     if (passages.length !== LISTENING_PART_COUNT) {
       problems.push(`it has ${passages.length} part${passages.length === 1 ? "" : "s"} instead of ${LISTENING_PART_COUNT}`);
@@ -364,8 +381,11 @@ export function validateImportedTest(
   }
 
   const ok = issues.length === 0 && passages.length > 0;
-  if (ok && questionSet.size !== 40) {
-    notes.push(`This import has ${questionSet.size} questions — a full IELTS test has 40. That's fine if this is a partial test.`);
+  const suggestCustom = !custom && passages.length > 0 && questionSet.size > 0 && questionSet.size !== FULL_IELTS_QUESTIONS ? { questions: questionSet.size } : null;
+  if (ok && custom) {
+    notes.push(`Custom test: ${questionSet.size} question${questionSet.size === 1 ? "" : "s"} in ${passages.length} ${sectionLabel.toLowerCase()}${passages.length === 1 ? "" : "s"}, numbered 1–${Math.max(...questionSet)}. Students will see their score and percentage, never an IELTS band.`);
+  } else if (ok && questionSet.size !== FULL_IELTS_QUESTIONS) {
+    notes.push(`This import has ${questionSet.size} questions — a full IELTS test has ${FULL_IELTS_QUESTIONS}. As a Full IELTS test it cannot be published; import it as a Custom test instead.`);
   }
 
   return {
@@ -379,5 +399,7 @@ export function validateImportedTest(
     duplicateNumbers,
     answersWithoutQuestion,
     questionsWithoutAnswer,
+    format: custom ? "CUSTOM" : "FULL_IELTS",
+    suggestCustom,
   };
 }

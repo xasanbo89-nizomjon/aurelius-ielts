@@ -5,23 +5,22 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CONTRAST_OPTIONS, TEXT_SIZE_OPTIONS, type ExamPreferences } from "@/lib/exam/ui-preferences";
 import { ExamTimer } from "@/components/exam/exam-timer";
 
-/** Over this many seconds left the clock reads "57 minutes left"; inside it, minutes AND seconds, in the warning style. */
+/** In the last ten minutes the clock is drawn in the warning style. */
 export const WARNING_SECONDS = 10 * 60;
 
-/** "57 minutes left" while there is time to spare; "9 minutes 59 seconds left" (long) / "9:59 left" (short, on phones) in the last ten minutes. */
-export function timeLeftText(remainingSeconds: number): { long: string; short: string; warning: boolean } {
-  if (remainingSeconds > WARNING_SECONDS) {
-    const minutes = Math.ceil(remainingSeconds / 60);
-    const text = `${minutes} minutes left`;
-    return { long: text, short: text, warning: false };
-  }
-  const minutes = Math.floor(remainingSeconds / 60);
-  const seconds = remainingSeconds % 60;
+/**
+ * The clock, minutes AND seconds the whole way through: "59:32 left" (and "9:59 left" in the last ten minutes, in the warning style). `spoken` is the same time
+ * in words for a screen reader. The seconds are derived from the server-anchored deadline by `ExamTimer`; only this text is drawn here.
+ */
+export function timeLeftText(remainingSeconds: number): { text: string; spoken: string; warning: boolean } {
+  const total = Math.max(0, Math.floor(remainingSeconds));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   return {
-    long: `${plural(minutes, "minute")} ${plural(seconds, "second")} left`,
-    short: `${minutes}:${String(seconds).padStart(2, "0")} left`,
-    warning: true,
+    text: `${minutes}:${String(seconds).padStart(2, "0")} left`,
+    spoken: `${plural(minutes, "minute")} ${plural(seconds, "second")} left`,
+    warning: total <= WARNING_SECONDS,
   };
 }
 
@@ -31,9 +30,8 @@ function Clock({ remaining, announcement }: { remaining: number | null; announce
   return (
     <>
       {/* Not a live region: it changes every second. The 5-minute / 1-minute / time's-up announcements below are. */}
-      <span role="timer" aria-live="off" className="ex-clock" data-warning={text.warning ? "true" : "false"}>
-        <span className="ex-time-long">{text.long}</span>
-        <span className="ex-time-short">{text.short}</span>
+      <span role="timer" aria-live="off" aria-label={text.spoken} className="ex-clock" data-warning={text.warning ? "true" : "false"} data-testid="exam-clock">
+        {text.text}
       </span>
       <span role="status" aria-live="assertive" className="ex-sr-only">
         {announcement}

@@ -94,6 +94,18 @@ export function isYesNoInstructions(instructions: string | null | undefined): bo
 
 const capitalise = (word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
 
+/**
+ * Phase Q - may ONE option of a matching task (a heading, a letter) be used for more than one question? The task says so itself ("You may use any letter more
+ * than once"); a heading list is "each heading once" unless it says otherwise. More questions than options can only be answered by using an option twice, so
+ * that always allows it (the screen must never hide an option the student still needs). Everything else defaults to once: a used option leaves the list.
+ */
+export function matchingAllowsReuse(instructions: string | null | undefined, promptCount: number, optionCount: number): boolean {
+  if (promptCount > optionCount) return true;
+  const text = (instructions ?? "").replace(/\s+/g, " ");
+  if (/\b(not|never|cannot|can't|n't)\b[^.?!]{0,80}\bmore than once\b/i.test(text) || /\bonly once\b|\bonce only\b|\bused once\b|\bjust once\b|\bone time only\b/i.test(text)) return false;
+  return /\bmore than once\b/i.test(text);
+}
+
 /** The heading of the box that lists a matching task's options: "List of Headings", "List of Endings", "List of Places"… */
 export function matchingListLabel(...texts: (string | null | undefined)[]): string {
   const joined = texts.filter(Boolean).join(" ");

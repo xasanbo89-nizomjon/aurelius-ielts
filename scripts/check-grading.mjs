@@ -35,14 +35,21 @@ function wrongAnswer(type, key) {
 }
 
 try {
-  const questions = await db.question.findMany({ select: { id: true, type: true, options: true, correctAnswer: true, mockTest: { select: { title: true, isPublished: true } } } });
+  const questions = await db.question.findMany({ select: { id: true, type: true, options: true, correctAnswer: true, mockTest: { select: { title: true, isPublished: true, _count: { select: { results: true } } } } } });
   let invalid = 0;
+  // A draft nobody has attempted may be incomplete while a teacher is still typing (an empty key is not a regression); the publish check covers it. Everything a
+  // student can sit - a published test - and everything that has an attempt is checked in full.
+  let draftsSkipped = 0;
   const legacy = [];
   let selfWrong = 0;
   let altered = 0;
   const byType = new Map();
   for (const q of questions) {
     byType.set(q.type, (byType.get(q.type) ?? 0) + 1);
+    if (!q.mockTest.isPublished && q.mockTest._count.results === 0) {
+      draftsSkipped++;
+      continue;
+    }
     if (q.correctAnswer == null) continue;
     const shape = QUESTION_TYPE_META[q.type].responseSchema.safeParse(q.correctAnswer);
     if (!shape.success) { invalid++; console.log(`  key of the wrong shape: "${q.mockTest.title.slice(0, 30)}" ${q.type} ${q.id}`); }
@@ -53,6 +60,7 @@ try {
   }
   console.log(`1+2. ${questions.length} stored questions (${[...byType].map(([t, n]) => `${t} ${n}`).join(", ")})`);
   for (const q of legacy) console.log(`  note (older data, unrelated to answers): "${q.mockTest.title.slice(0, 30)}" ${q.mockTest.isPublished ? "PUBLISHED" : "draft"}, summary question ${q.id} has no {{n}} blank markers - the publish check will block it.`);
+  if (draftsSkipped > 0) console.log(`     (${draftsSkipped} question(s) of unpublished drafts nobody has attempted were not checked: a draft may still be incomplete)`);
   console.log(`     keys of the wrong shape: ${invalid} - keys that do not score themselves: ${selfWrong} - altered answers scored right: ${altered}`);
   if (invalid || selfWrong || altered) failed = 1;
 

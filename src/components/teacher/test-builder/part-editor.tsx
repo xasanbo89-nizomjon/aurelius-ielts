@@ -101,6 +101,7 @@ export function PartEditor({
   onMoveGroup,
   onDeleteGroup,
   onAddGroup,
+  onRemove,
 }: {
   testId: string;
   part: BuilderPart;
@@ -114,6 +115,8 @@ export function PartEditor({
   onMoveGroup: (groupIndex: number, direction: "up" | "down") => void;
   onDeleteGroup: (groupIndex: number) => void;
   onAddGroup: (group: BuilderGroup) => void;
+  /** Phase Q - a custom test may drop a part (asks first when it has questions). Absent: the part is part of the official layout. */
+  onRemove?: () => void;
 }) {
   const [kind, setKind] = useState<GroupKind>("TRUE_FALSE_NOT_GIVEN");
   const name = skill === "LISTENING" ? `Part ${partIndex + 1}` : `Passage ${partIndex + 1}`;
@@ -126,6 +129,11 @@ export function PartEditor({
         <span className="text-muted-foreground text-sm tabular-nums" data-testid="part-range">
           {layout.count > 0 ? `Questions ${layout.first}–${layout.last} (${layout.count})` : "No questions yet"}
         </span>
+        {onRemove && (
+          <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive ml-auto" onClick={onRemove} data-testid="remove-part">
+            <Trash2 className="size-3.5" /> Remove this {skill === "LISTENING" ? "part" : "passage"}
+          </Button>
+        )}
       </header>
 
       <div className="space-y-1.5">

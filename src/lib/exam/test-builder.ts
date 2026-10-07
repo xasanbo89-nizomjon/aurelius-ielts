@@ -7,6 +7,7 @@ import { authorScope } from "@/lib/exam/test-access";
 import { getTestEditState, assertTestEditable, type TestEditState } from "@/lib/exam/test-lock";
 import { OwnershipError, deleteStoredFilesIfUnreferenced } from "@/lib/exam/test-management";
 import { fromRows, toRows, type BuilderModel, type Skill } from "@/lib/exam/builder-model";
+import { CUSTOM_MAX_PARTS, formatOf, type TestFormatValue } from "@/lib/exam/test-format";
 import { newRowId } from "@/lib/exam/row-ids";
 import { parseEvidence, reanchorItems, serializeEvidence } from "@/lib/exam/answer-evidence-store";
 import { ensureRecordingLengths } from "@/lib/exam/recording-length";
@@ -87,6 +88,7 @@ export async function getBuilderState(testId: string, teacherId: string): Promis
     description: test.description,
     durationMinutes: test.durationMinutes,
     category: test.category,
+    format: formatOf(test.testFormat),
     passages: test.passages.map((p) => ({ id: p.id, title: p.title, content: p.content, orderIndex: p.orderIndex, audioStartSeconds: p.audioStartSeconds })),
     groups: test.passages.flatMap((p) => p.questionGroups.map((g) => ({ id: g.id, passageId: g.passageId, instructions: g.instructions, orderIndex: g.orderIndex }))),
     questions: test.questions.map((q) => ({ id: q.id, passageId: q.passageId, questionGroupId: q.questionGroupId, type: q.type, prompt: q.prompt, options: q.options, correctAnswer: q.correctAnswer, orderIndex: q.orderIndex })),
@@ -104,12 +106,17 @@ export async function getBuilderState(testId: string, teacherId: string): Promis
 }
 
 /** The wizard's "by hand": the test with its empty parts (3 passages / 4 parts) in place, so the editor can open on it. */
-export async function createTestWithParts(teacherId: string, input: { type: Skill; title: string; description?: string; durationMinutes?: number | null; category?: MockTestCategory }) {
+export async function createTestWithParts(
+  teacherId: string,
+  input: { type: Skill; title: string; description?: string; durationMinutes?: number | null; category?: MockTestCategory; format?: TestFormatValue; partCount?: number }
+) {
   const testId = newRowId();
-  const count = PART_COUNT[input.type];
+  const format: TestFormatValue = input.format === "CUSTOM" ? "CUSTOM" : "FULL_IELTS";
+  // A Full IELTS test always starts with its official parts; a Custom test with the number the teacher asked for (it can add and remove parts in the editor).
+  const count = format === "CUSTOM" ? Math.min(CUSTOM_MAX_PARTS, Math.max(1, Math.floor(input.partCount ?? PART_COUNT[input.type]))) : PART_COUNT[input.type];
   await prisma.$transaction([
     prisma.mockTest.create({
-      data: { id: testId, title: input.title, description: input.description || null, type: input.type, category: input.category ?? "GENERAL", durationMinutes: input.durationMinutes ?? (input.type === "LISTENING" ? 30 : 60), createdById: teacherId },
+      data: { id: testId, title: input.title, description: input.description || null, type: input.type, testFormat: format, category: input.category ?? "GENERAL", durationMinutes: input.durationMinutes ?? (input.type === "LISTENING" ? 30 : 60), createdById: teacherId },
     }),
     prisma.passage.createMany({
       data: Array.from({ length: count }, (_, index) => ({ id: newRowId(), mockTestId: testId, title: input.type === "LISTENING" ? `Part ${index + 1}` : `Passage ${index + 1}`, content: "", orderIndex: index })),
@@ -130,6 +137,8 @@ export type SavedBuilder = {
   total: number;
   /** The ids given to the elements that had none yet, by the key the editor knows them under (part / group / `<group key>:row` / item). */
   ids: Record<string, string>;
+  /** Phase Q - the parts with their recordings, sent when a save added or removed a part (a new part shares the recording of the others). */
+  parts?: BuilderPartInfo[];
 };
 
 /**
@@ -140,6 +149,12 @@ export async function saveBuilder(testId: string, teacherId: string, model: Buil
   const test = await loadOwnedTest(testId, teacherId);
   await assertTestEditable(testId); // L1: a draft nobody has attempted, not inside a live Full Mock
   if (test.updatedAt.toISOString() !== version) throw new BuilderConflictError();
+
+  // Phase Q - a test that is part of a Full Mock must stay a Full IELTS test (40 questions): it cannot be turned into a Custom one while it is linked.
+  if (model.format === "CUSTOM" && formatOf(test.testFormat) !== "CUSTOM") {
+    const links = (await prisma.fullMockReadingSection.count({ where: { mockTestId: testId } })) + (await prisma.fullMockListeningSection.count({ where: { mockTestId: testId } }));
+    if (links > 0 || test.packageFullMockTestId) throw new Error("This test is part of a Full Mock, and a Full Mock needs a Full IELTS test of exactly 40 questions - so it cannot be made a Custom test.");
+  }
 
   const ownPassages = new Set(test.passages.map((p) => p.id));
   const ownGroups = new Set(test.passages.flatMap((p) => p.questionGroups.map((g) => g.id)));
@@ -175,7 +190,14 @@ export async function saveBuilder(testId: string, teacherId: string, model: Buil
       // Takes the test's row: a second save based on the same version waits here, then finds the version moved on.
       const touched = await tx.mockTest.updateMany({
         where: { id: testId, updatedAt: test.updatedAt },
-        data: { title: model.title.trim(), description: model.description.trim() || null, durationMinutes: model.durationMinutes, category: model.category },
+        data: {
+          title: model.title.trim(),
+          description: model.description.trim() || null,
+          durationMinutes: model.durationMinutes,
+          category: model.category,
+          // Phase Q - the kind of paper is only written when the teacher changed it (a test with none stays as it is: none means Full IELTS).
+          ...(model.format && model.format !== formatOf(test.testFormat) ? { testFormat: model.format } : {}),
+        },
       });
       if (touched.count !== 1) throw new BuilderConflictError();
 
@@ -186,6 +208,26 @@ export async function saveBuilder(testId: string, teacherId: string, model: Buil
           ON CONFLICT ("id") DO UPDATE SET "title" = EXCLUDED."title", "content" = EXCLUDED."content", "orderIndex" = EXCLUDED."orderIndex", "audioStartSeconds" = EXCLUDED."audioStartSeconds", "updatedAt" = now()
           WHERE "passages"."mockTestId" = ${testId}
             AND ("passages"."title", "passages"."content", "passages"."orderIndex", "passages"."audioStartSeconds") IS DISTINCT FROM (EXCLUDED."title", EXCLUDED."content", EXCLUDED."orderIndex", EXCLUDED."audioStartSeconds")`;
+      }
+      // Phase Q - a part added to a Listening test whose parts all share ONE recording shares that recording as well (the teacher uploads it once).
+      const addedPassageIds = rows.passages.filter((p) => !ownPassages.has(p.id)).map((p) => p.id);
+      if (test.type === "LISTENING" && addedPassageIds.length > 0 && test.passages.length > 0) {
+        const recorded = test.passages.filter((p) => p.audioPath || p.audioUrl);
+        const sources = new Set(recorded.map((p) => p.audioPath ?? p.audioUrl));
+        if (recorded.length === test.passages.length && sources.size === 1) {
+          const source = recorded[0];
+          await tx.passage.updateMany({
+            where: { id: { in: addedPassageIds } },
+            data: {
+              audioPath: source.audioPath,
+              audioUrl: source.audioUrl,
+              audioFileName: source.audioFileName,
+              audioMimeType: source.audioMimeType,
+              audioSize: source.audioSize,
+              audioDurationSeconds: source.audioDurationSeconds,
+            },
+          });
+        }
       }
       if (rows.groups.length > 0) {
         await tx.$executeRaw`
@@ -236,7 +278,8 @@ export async function saveBuilder(testId: string, teacherId: string, model: Buil
   );
 
   if (removedFiles.length > 0) await deleteStoredFilesIfUnreferenced(removedFiles);
-  return { version: newVersion, total: rows.total, ids: created };
+  const partsChanged = removedPassages.length > 0 || rows.passages.some((p) => !ownPassages.has(p.id));
+  return { version: newVersion, total: rows.total, ids: created, ...(partsChanged ? { parts: await partInfos(testId) } : {}) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { gradeResponses } from "@/lib/exam/grading";
 import { resolveBandForScore } from "@/lib/analytics/band-conversion";
+import { canBeBanded } from "@/lib/exam/test-format";
 import { recordStudentActivity } from "@/lib/study-activity";
 import { allowedSecondsFor, timeUsedSeconds } from "@/lib/exam/timing";
 import { EXPIRY_GRACE_SECONDS, deadlineFrom, isPastDeadline, sectionAllowedSeconds } from "@/lib/exam/section-deadline";
@@ -96,6 +97,8 @@ export async function getAttemptSummary(resultId: string, studentId: string) {
           id: true,
           title: true,
           type: true,
+          // Phase Q - a Custom test is shown as a score and a percentage, never as a band.
+          testFormat: true,
           // Phase 44 — Part 2's per-passage/part breakdown, extended Phase 46
           // for the real split-screen review (passage text / real Listening
           // transcript via the same `content` field, plus real audio path).
@@ -252,6 +255,7 @@ export async function finalizeAttempt(resultId: string, options: FinalizeAttempt
         select: {
           createdById: true,
           durationMinutes: true,
+          testFormat: true,
           questions: { select: { id: true, type: true, correctAnswer: true, points: true } },
         },
       },
@@ -281,7 +285,8 @@ export async function finalizeAttempt(resultId: string, options: FinalizeAttempt
   // one that covers the score, otherwise the official IELTS conversion (scaled
   // onto the 40-mark table when the paper isn't worth 40). Never guessed.
   const totalPoints = result.mockTest.questions.reduce((sum, question) => sum + question.points, 0);
-  const bandScore = await resolveBandForScore(result.skill, rawScore, totalPoints, result.mockTest.createdById);
+  // Phase Q - the IELTS table is only valid for a 40-question paper: a Custom test has a raw score and a percentage and NO band (stored as null, shown as such).
+  const bandScore = canBeBanded(result.mockTest.testFormat) ? await resolveBandForScore(result.skill, rawScore, totalPoints, result.mockTest.createdById) : null;
 
   await prisma.$transaction([
     ...gradedAnswered.map((item) =>

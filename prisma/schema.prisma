@@ -53,6 +53,14 @@ enum MockTestDifficulty {
   ADVANCED
 }
 
+/// Phase Q - what kind of paper a Reading / Listening test is. FULL_IELTS: exactly 40 questions in the official parts, banded with the IELTS table, and the only
+/// kind a Full Mock may use. CUSTOM: any number of questions and parts (numbered 1..N); its result is a raw score and a percentage, never a band.
+/// Stored as null on every test made before this phase, and null means FULL_IELTS.
+enum TestFormat {
+  FULL_IELTS
+  CUSTOM
+}
+
 enum SpeakingTaskStatus {
   DRAFT
   PUBLISHED
@@ -398,6 +406,8 @@ model MockTest {
   /// Phase 34 — real, teacher-set difficulty badge (Part 2/3's "Difficulty
   /// badge"). Null for every test created before this phase existed.
   difficulty      MockTestDifficulty?
+  /// Phase Q - null = FULL_IELTS (every test made before this phase). See the TestFormat enum.
+  testFormat      TestFormat?
   /// Phase 47 — Skill Media Library's "Content thumbnails" for Reading/Listening tests. Null until a teacher uploads one.
   coverImagePath  String?
   /// Phase L - set on a copy made with "Create new version": the test it replaces. SetNull so deleting the old test never touches the new one.
@@ -606,6 +616,8 @@ model ImportedTest {
   /// The raw PDF text extraction, kept for debugging/re-parsing — never shown in any UI.
   rawExtractedText String?            @db.Text
   errorMessage     String?
+  /// Phase Q - chosen in the import review ("Import as Custom test (N questions)") and carried to the live test when the import is confirmed. null = FULL_IELTS.
+  testFormat       TestFormat?
 
   /// Set once the teacher confirms the import — the real, live MockTest this staging data became. SetNull (not Cascade) so deleting the live test later never cascades back into deleting this audit row.
   resultMockTestId String?   @unique

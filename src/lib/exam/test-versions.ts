@@ -129,6 +129,8 @@ export async function copyTest(testId: string, teacherId: string, mode: CopyMode
         type: source.type,
         category: source.category,
         difficulty: source.difficulty,
+        // Phase Q - a copy is the same kind of paper (null stays null: a Full IELTS test).
+        testFormat: source.testFormat,
         durationMinutes: source.durationMinutes,
         coverImagePath: source.coverImagePath,
         // A new version stays with the author of the test it replaces (a Root Teacher making it for them changes nothing); a duplicate belongs to whoever made it.

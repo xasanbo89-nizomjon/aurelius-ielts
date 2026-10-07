@@ -4,6 +4,7 @@ import { numberQuestions, summaryBlankKeys, type NumberedQuestion } from "@/lib/
 import { chooseCountOf, chooseWord } from "@/lib/exam/choose-many";
 import { evidenceCoverage } from "@/lib/exam/answer-evidence-store";
 import { answerKeysOf, parseSummaryText } from "@/lib/exam/summary-blanks";
+import { CUSTOM_MAX_PARTS, FULL_IELTS_QUESTIONS, LISTENING_PART_COUNT, READING_PART_COUNT, isCustomFormat, type TestFormatValue } from "@/lib/exam/test-format";
 
 /**
  * Phase L - the one definition of "this Reading / Listening test is ready for students". Pure and client-safe: the editor's checklist runs it on
@@ -11,9 +12,9 @@ import { answerKeysOf, parseSummaryText } from "@/lib/exam/summary-blanks";
  * live. Every problem names where it is, so the editor can link to the exact field.
  */
 
-export const REQUIRED_QUESTIONS = 40;
-export const READING_PART_COUNT = 3;
-export const LISTENING_PART_COUNT = 4;
+/** What a FULL IELTS test must have. A Custom test (Phase Q) is checked against its own questions instead: see `format` in ValidateTestInput. */
+export const REQUIRED_QUESTIONS = FULL_IELTS_QUESTIONS;
+export { READING_PART_COUNT, LISTENING_PART_COUNT };
 
 export type ValidatorPart = {
   id: string;
@@ -223,6 +224,8 @@ function checkQuestion(row: Numbered, groupInstructions: string | null): TestIss
 
 export type ValidateTestInput = {
   type: "READING" | "LISTENING";
+  /** Phase Q - FULL_IELTS (or absent / null: the kind of every older test) must have exactly 40 questions in the official parts; CUSTOM may have any number of questions (at least 1) and parts. */
+  format?: TestFormatValue | null;
   title: string;
   parts: ValidatorPart[];
   groups: ValidatorGroup[];
@@ -237,8 +240,12 @@ export function validateTestStructure(input: ValidateTestInput): TestValidation 
 
   if (input.title.trim().length < 3) add("TITLE", "Give the test a title (at least 3 characters).", { kind: "test" });
 
+  const custom = isCustomFormat(input.format);
   const expectedParts = listening ? LISTENING_PART_COUNT : READING_PART_COUNT;
-  if (input.parts.length !== expectedParts) {
+  if (custom) {
+    if (input.parts.length < 1) add("PART_COUNT", `A custom test needs at least one ${listening ? "part" : "passage"}.`, { kind: "test" });
+    else if (input.parts.length > CUSTOM_MAX_PARTS) add("PART_COUNT", `A custom test has at most ${CUSTOM_MAX_PARTS} ${listening ? "parts" : "passages"}; this one has ${input.parts.length}.`, { kind: "test" });
+  } else if (input.parts.length !== expectedParts) {
     add("PART_COUNT", `A ${listening ? "Listening" : "Reading"} test has ${expectedParts} ${listening ? "parts" : "passages"}; this one has ${input.parts.length}.`, { kind: "test" });
   }
 
@@ -246,7 +253,9 @@ export function validateTestStructure(input: ValidateTestInput): TestValidation 
   const sorted = [...input.questions].sort((a, b) => a.order - b.order);
   const numbered = numberQuestions(sorted.map((q) => ({ ...q, blankKeys: q.type === "SUMMARY_COMPLETION" ? answerKeysOf(q.correctAnswer) : null }))) as Numbered[];
   const total = numbered.length > 0 ? numbered[numbered.length - 1].endNumber : 0;
-  if (total !== REQUIRED_QUESTIONS) {
+  if (custom) {
+    if (total < 1) add("TOTAL", `The test has no questions yet; a custom test needs at least 1.`, { kind: "test" });
+  } else if (total !== REQUIRED_QUESTIONS) {
     add("TOTAL", `The test has ${total} question${total === 1 ? "" : "s"}; a ${listening ? "Listening" : "Reading"} test must have exactly ${REQUIRED_QUESTIONS}.`, { kind: "test" });
   }
 
@@ -270,7 +279,7 @@ export function validateTestStructure(input: ValidateTestInput): TestValidation 
     const index = row.partId ? partIndex.get(row.partId) : undefined;
     if (index === undefined) continue;
     if (index < highest) {
-      add("ORDER", `${questionLabel(row)} belongs to ${partName(index)} but comes after questions of a later ${listening ? "part" : "passage"}; the numbers would not run 1–${REQUIRED_QUESTIONS} through the parts in order.`, { kind: "question", questionId: row.id, partId: row.partId ?? undefined });
+      add("ORDER", `${questionLabel(row)} belongs to ${partName(index)} but comes after questions of a later ${listening ? "part" : "passage"}; the numbers would not run 1–${custom ? total : REQUIRED_QUESTIONS} through the parts in order.`, { kind: "question", questionId: row.id, partId: row.partId ?? undefined });
       break;
     }
     highest = Math.max(highest, index);

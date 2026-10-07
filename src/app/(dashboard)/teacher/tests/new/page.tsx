@@ -13,8 +13,8 @@ export const metadata: Metadata = { title: "New Test" };
 type TestKind = "reading" | "listening" | "full-mock" | "writing";
 
 const KINDS: { kind: TestKind; title: string; description: string; icon: LucideIcon }[] = [
-  { kind: "reading", title: "Reading test", description: "3 passages, 40 questions, 60 minutes.", icon: BookOpen },
-  { kind: "listening", title: "Listening test", description: "4 parts, 40 questions, one recording.", icon: Headphones },
+  { kind: "reading", title: "Reading test", description: "A full IELTS paper (3 passages, 40 questions, 60 minutes) or a custom test of any length.", icon: BookOpen },
+  { kind: "listening", title: "Listening test", description: "A full IELTS paper (4 parts, 40 questions, one recording) or a custom test of any length.", icon: Headphones },
   { kind: "full-mock", title: "Full Mock test", description: "Listening, Reading, Writing (and Speaking) as one timed exam.", icon: Layers },
   { kind: "writing", title: "Writing task", description: "A Task 1 or Task 2 prompt for the task bank.", icon: PenLine },
 ];

@@ -9,6 +9,8 @@ export type CreateImportedTestInput = z.infer<typeof createImportedTestSchema>;
 
 export const updateImportedTestSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(160).optional(),
+  /** Phase Q - "Import as Custom test (N questions)" and back to a Full IELTS test. */
+  testFormat: z.enum(["FULL_IELTS", "CUSTOM"]).optional(),
 });
 export type UpdateImportedTestInput = z.infer<typeof updateImportedTestSchema>;
 

@@ -122,6 +122,31 @@ read-only, exactly as in L1 (`getTestEditState`).
   them ("21 A  22 C", "21-22 A, C", "21&22 A/C") - instead of one single-answer question per number. The review screen says so under the block's instructions; a key
   that does not name exactly the right number of different letters is listed in the import warnings. Any other block is converted exactly as before.
 
+## Test formats: Full IELTS or Custom (Phase Q)
+
+Every Reading and Listening test has a **format** (`mock_tests.testFormat`; nothing stored = **Full IELTS**, which is what every test made before Phase Q is - they were not touched).
+The title never decides it ("B2 Listening" is just a name). `src/lib/exam/test-format.ts` is the one place that says what each format means.
+
+| | Full IELTS test (40 questions) | Custom test (any number of questions) |
+| --- | --- | --- |
+| Questions | exactly 40, in the official parts (Reading 3 passages, Listening 4 parts) | at least 1, any number of parts (1-12), numbered 1..N straight through the parts |
+| Part ranges | the official ones | worked out from the questions (no "Section 2 holds 11-20" rule) |
+| Everything else | the same checks: a prompt and a valid answer for every question, instructions for every group, a recording for every Listening part, start times that make sense | the same |
+| Result | the IELTS band (the conversion table is defined for 40 questions) | the score and the percentage (**18/24, 75%**), never a band; the stored band stays empty |
+| Full Mock | yes (the only kind a Full Mock can use) | no: not offered in the pickers, refused when linked, and a test that is already in a Full Mock cannot be made Custom |
+| Parity guard | student count = teacher count = editor count = **40** | student = teacher = editor = **N**, the number of questions the paper really holds |
+
+- **Where it is set**: the New test wizard ("Test format", and for a Custom test how many parts to start with), the editor's settings card (while the test is a draft), and the
+  PDF import review. A Custom test shows a **Custom** badge in the Tests list.
+- **The editor of a Custom test** has **Add a part / passage** and **Remove this part**. A part added to a Listening test whose parts share one recording shares it too
+  (the teacher uploads it once). A part still called "Part 3" is renamed to its new place; one the teacher named is left alone.
+- **PDF import**: when the paper does not hold exactly 40 questions the review is not a dead end. It says "This paper has 24 questions, not 40" and offers
+  **Import as Custom test (24 questions)**. The choice is stored with the import (`imported_tests.testFormat`), so a reload keeps it, and the check changes to "numbered
+  from 1, no gaps, every question has an answer, no duplicates" - the fixed Listening shape (4 parts x 10) no longer applies. "Use the Full IELTS rules instead" goes back.
+- **Results**: the results dialog and the review header say "Score: 18/24 (75%)" for a Custom test; the older results page shows the percentage; the teacher's results table
+  already shows marks out of the paper's real total, so it reads "18 / 24".
+- **Checks**: `npm run check:q` (the rules, no database), `npm run check:parity` (per-test expected count), `npm run check:publish` / `check:l1` (unchanged: Full IELTS rules).
+
 ## Listening recording and part times (Phase L2)
 
 - **One way to upload**: the signed direct upload for every recording (browser -> storage, nothing large goes through the app). The recording's length is
@@ -132,6 +157,10 @@ read-only, exactly as in L1 (`getTestEditState`).
   recording reaches its start time, and so on. It still lets the student turn parts by hand. **No start times = the old behaviour** (the student turns the
   parts); a test whose parts each have their own recording is unchanged.
 - The validator refuses start times that do not increase, that run past the end of the recording, or that are only partly filled in.
+- **The upload (Phase Q)** shows a real progress bar (percent, megabytes, speed), can be cancelled, is given up on when no byte has moved for 45 seconds, and is tried
+  again by itself (3 tries in all) when the connection drops or the storage service has a hiccup; a refusal (expired link, file too large) is explained at once with
+  "Try again" for the same file. The limit is 50 MB (a 30-minute MP3 is about 30 MB; a WAV of the same length is far larger - export it as MP3). The same helper
+  (`src/lib/uploads/supabase-browser.ts`) serves every signed upload of the app (articles, libraries, PDFs, the Full Mock builder).
 
 ## Writing tests and the PDF picture (Phase L2)
 
@@ -233,6 +262,7 @@ nothing. A new detail route with a `loading.tsx` needs a rule in that file.
 | `npm run check:builder` | no database: the editor's model (every type -> rows -> the student's numbers), the answer-key paste, the start-time rules and part switching |
 | `npm run check:choose` | no database: "Choose TWO" - numbering, 0 / 1 / 2 marks in any order, review, validator, editor round trip, key paste |
 | `npm run check:tables` | no database: tables - reading a title / note / short row, the grid's row and column operations, storage, scoring, and both exam screens drawn to HTML |
+| `npm run check:q` | no database, no network: the exam clock text ("59:32 left"), the matching reuse rule, the upload rules (tries, stall, plain errors), the test formats (validator, band-less result, Full Mock guard inputs) and the Custom PDF import checks |
 | `npm run check:results` | no database: answer evidence, the review's per-number answers, part times and the statistics maths (a hand-calculated example) |
 | `npm run check:m2` | the review model (stored verdicts, Yes / No wording, "Choose TWO" number by number, filters) offline; then the real database with its own fixtures: the explanation lifecycle (draft / approved / outdated), who may write them, what a student gets, copy with a version, the AI rules **without calling the model**, token usage, and that no stored score moved |
 | `npm run check:sw` | no browser, no database: the service worker (`src/app/sw.js/route.ts`) in a sandbox - build-named cache, old caches deleted on activate, network first, nothing cached from a failed answer, never an uncaught rejection - and the page's ChunkLoadError detection (see `docs/service-worker.md`) |

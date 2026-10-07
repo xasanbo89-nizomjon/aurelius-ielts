@@ -5,6 +5,7 @@ import type { MockTestCategory, MockTestDifficulty, WritingTaskCategory, Writing
 import { prisma } from "@/lib/prisma";
 import { getQuestionNumberCounts } from "@/lib/exam/question-counts";
 import { versionNumbersFor } from "@/lib/exam/version-numbers";
+import { FULL_IELTS_ONLY, isCustomFormat } from "@/lib/exam/test-format";
 import { collectTestDependencies, deleteStoredFilesIfUnreferenced } from "@/lib/exam/test-management";
 import { deleteBucketObjects } from "@/lib/uploads/storage-cleanup";
 import { TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
@@ -271,7 +272,8 @@ export async function listPickableTestsForFullMock(
 ): Promise<PickableMockTest[]> {
   const tests = await prisma.mockTest.findMany({
     // A test that belongs to another Full Mock package isn't offered here — it can only ever be part of its own package.
-    where: { ...(await authorScope(teacherId)), type, isPublished: true, isArchived: false, packageFullMockTestId: null },
+    // Phase Q - only a Full IELTS test (40 questions) can be part of a Full Mock: a Custom test is never offered.
+    where: { ...(await authorScope(teacherId)), type, isPublished: true, isArchived: false, packageFullMockTestId: null, AND: [FULL_IELTS_ONLY] },
     orderBy: { createdAt: "desc" },
     select: { id: true, title: true, durationMinutes: true, versionOfId: true, _count: { select: { versions: true } } },
   });
@@ -295,6 +297,7 @@ async function setFullMockSkillTest(
       where: { id: mockTestId, ...(await authorScope(teacherId)), type: skill, isPublished: true, isArchived: false },
     });
     if (!test) throw new Error(`That ${skill.toLowerCase()} test isn't available.`);
+    if (isCustomFormat(test.testFormat)) throw new Error(`"${test.title}" is a Custom test (any number of questions): a Full Mock needs a Full IELTS test of exactly 40 questions.`);
     if (test.packageFullMockTestId && test.packageFullMockTestId !== fullMockTestId) {
       throw new Error(`That ${skill.toLowerCase()} test belongs to another Full Mock package and can't be used here.`);
     }
@@ -459,13 +462,15 @@ export type FullMockCompleteness = {
   foreignPackageTests: string[];
   /** Phase B — titles of linked Reading/Listening tests that are not published (a student could not start them). */
   unpublishedTests: string[];
+  /** Phase Q - titles of linked tests that are Custom tests (any number of questions): a Full Mock only takes Full IELTS tests. */
+  customTests: string[];
   /** Phase A — Speaking is optional (a Listening + Reading + Writing mock is a valid Full Mock). When ANY speaking task exists the mock must have all three parts, so a half-built Speaking section can't go live. */
   hasSpeaking: boolean;
   isComplete: boolean;
 };
 
 type SectionTestInfo = {
-  mockTest: { title: string; isPublished: boolean; packageFullMockTestId: string | null; passages: { audioPath: string | null; audioUrl: string | null }[] };
+  mockTest: { title: string; isPublished: boolean; testFormat?: string | null; packageFullMockTestId: string | null; passages: { audioPath: string | null; audioUrl: string | null }[] };
 };
 
 function computeCompleteness(test: {
@@ -492,6 +497,7 @@ function computeCompleteness(test: {
   const linked = [...test.readingSections, ...test.listeningSections];
   const foreignPackageTests = linked.filter((s) => s.mockTest.packageFullMockTestId && s.mockTest.packageFullMockTestId !== test.id).map((s) => s.mockTest.title);
   const unpublishedTests = linked.filter((s) => !s.mockTest.isPublished).map((s) => s.mockTest.title);
+  const customTests = linked.filter((s) => isCustomFormat(s.mockTest.testFormat)).map((s) => s.mockTest.title);
 
   return {
     hasReading,
@@ -505,8 +511,9 @@ function computeCompleteness(test: {
     listeningAudioReady,
     foreignPackageTests,
     unpublishedTests,
+    customTests,
     isComplete:
-      hasReading && hasListening && hasTask1 && hasTask2 && speakingOk && listeningAudioReady && foreignPackageTests.length === 0 && unpublishedTests.length === 0,
+      hasReading && hasListening && hasTask1 && hasTask2 && speakingOk && listeningAudioReady && foreignPackageTests.length === 0 && unpublishedTests.length === 0 && customTests.length === 0,
   };
 }
 
@@ -524,6 +531,7 @@ export async function publishFullMockTest(id: string, teacherId: string): Promis
     if (completeness.hasListening && !completeness.listeningAudioReady) missing.push("the Listening audio on every part");
     if (completeness.foreignPackageTests.length > 0) missing.push(`tests from this mock's own package (${completeness.foreignPackageTests.join(", ")} belongs to another mock)`);
     if (completeness.unpublishedTests.length > 0) missing.push(`published Reading/Listening tests (${completeness.unpublishedTests.join(", ")} isn't published)`);
+    if (completeness.customTests.length > 0) missing.push(`Full IELTS tests of 40 questions (${completeness.customTests.join(", ")} is a Custom test)`);
     throw new Error(`This mock can't be published yet — it still needs ${missing.join("; ")}.`);
   }
 
@@ -559,6 +567,7 @@ export async function getFullMockTestForEdit(id: string, teacherId: string) {
             title: true,
             durationMinutes: true,
             isPublished: true,
+            testFormat: true,
             packageFullMockTestId: true,
             passages: { select: { audioPath: true, audioUrl: true } },
             _count: { select: { questions: true } },
@@ -571,6 +580,7 @@ export async function getFullMockTestForEdit(id: string, teacherId: string) {
             title: true,
             durationMinutes: true,
             isPublished: true,
+            testFormat: true,
             packageFullMockTestId: true,
             passages: { select: { audioPath: true, audioUrl: true } },
             _count: { select: { questions: true } },

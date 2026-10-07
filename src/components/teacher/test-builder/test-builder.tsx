@@ -9,7 +9,8 @@ import { getBuilderVersionAction, saveBuilderAction } from "@/actions/test-build
 import { previousLiveVersionAction, setPublishedAction, setTestCoverImageAction } from "@/actions/test-management.actions";
 import type { PreviousLiveVersion } from "@/lib/exam/test-versions";
 import { applyAnswerKey, parseAnswerKey } from "@/lib/exam/answer-key-paste";
-import { layoutOf, moveWithin, previewOf, toValidatorInput, type BuilderGroup, type BuilderModel, type BuilderPart, type Skill } from "@/lib/exam/builder-model";
+import { emptyPart, layoutOf, moveWithin, previewOf, toValidatorInput, type BuilderGroup, type BuilderModel, type BuilderPart, type Skill } from "@/lib/exam/builder-model";
+import { CUSTOM_MAX_PARTS, FORMAT_LABEL, isCustomFormat, type TestFormatValue } from "@/lib/exam/test-format";
 import type { BuilderPartInfo } from "@/lib/exam/test-builder";
 import { validateTestStructure, type IssueTarget, type TestIssue } from "@/lib/exam/test-validation";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import { ContentCoverImageUploader } from "@/components/teacher/content-cover-im
 import { PublishIssuesDialog } from "@/components/teacher/publish-issues-dialog";
 import { PublishVersionDialog, publishMessage } from "@/components/teacher/publish-version-dialog";
 import { ChecklistPanel } from "@/components/teacher/test-builder/checklist-panel";
-import { FIELD } from "@/components/teacher/test-builder/controls";
+import { FIELD, NativeSelect } from "@/components/teacher/test-builder/controls";
 import { ListeningAudioCard } from "@/components/teacher/test-builder/listening-audio-card";
 import { PartEditor } from "@/components/teacher/test-builder/part-editor";
 import { PasteKeyDialog } from "@/components/teacher/test-builder/paste-key-dialog";
@@ -43,6 +44,14 @@ function mergeIds(model: BuilderModel, ids: Record<string, string>): BuilderMode
     }
   }
   return next;
+}
+
+/** After a part was added or removed: a part still called "Part 3" (the name it got) is renamed to its new place; a part the teacher named is left alone. */
+function relabelDefaultTitles(parts: BuilderPart[], skill: Skill) {
+  const word = skill === "LISTENING" ? "Part" : "Passage";
+  parts.forEach((part, index) => {
+    if (/^(Part|Passage) \d+$/.test(part.title.trim())) part.title = `${word} ${index + 1}`;
+  });
 }
 
 /** Brings the element a problem is about into view and flashes it. Works with ids of stored rows and with the keys of rows not saved yet. */
@@ -134,6 +143,8 @@ export function TestBuilder({
           }
           versionRef.current = result.version;
           savedRevision.current = rev;
+          // A save that added or removed a part says what recordings the parts have now (a new part shares the recording of the others).
+          if (result.parts) setPartInfos(result.parts);
           const merged = mergeIds(modelRef.current, result.ids);
           if (merged !== modelRef.current) {
             modelRef.current = merged;
@@ -216,7 +227,25 @@ export function TestBuilder({
   const audio = useMemo(() => new Map(partInfos.map((info) => [info.id, { src: info.audioSrc, durationSeconds: info.audioDurationSeconds }])), [partInfos]);
   const validation = useMemo(() => validateTestStructure(toValidatorInput(model, skill, audio)), [model, skill, audio]);
 
+  const custom = isCustomFormat(model.format);
   const changePart = (partIndex: number, apply: (part: BuilderPart) => void) => change((draft) => apply(draft.parts[partIndex]));
+
+  function addPart() {
+    change((draft) => {
+      draft.parts.push(emptyPart(draft.parts.length, skill));
+      relabelDefaultTitles(draft.parts, skill);
+    });
+  }
+
+  function removePart(partIndex: number) {
+    const count = layout.parts[partIndex]?.count ?? 0;
+    const name = `${skill === "LISTENING" ? "Part" : "Passage"} ${partIndex + 1}`;
+    if (!window.confirm(count > 0 ? `Remove ${name} and its ${count} question${count === 1 ? "" : "s"}? This cannot be undone.` : `Remove ${name}?`)) return;
+    change((draft) => {
+      draft.parts.splice(partIndex, 1);
+      relabelDefaultTitles(draft.parts, skill);
+    });
+  }
   const changeGroup = (partIndex: number, groupIndex: number, apply: (group: BuilderGroup) => void) => change((draft) => apply(draft.parts[partIndex].groups[groupIndex]));
 
   /** The preview shows what is STORED, so anything not saved yet is saved first. The tab is opened at once (a click may open one; after an await it may not). */
@@ -332,6 +361,26 @@ export function TestBuilder({
               </label>
               <Textarea id="builder-description" rows={2} value={model.description} onChange={(event) => change((d) => void (d.description = event.target.value))} />
             </div>
+            <div className="space-y-1.5" data-testid="format-setting">
+              <label className="text-sm font-medium" htmlFor="builder-format">
+                Test format
+              </label>
+              <NativeSelect
+                id="builder-format"
+                value={model.format ?? "FULL_IELTS"}
+                onChange={(event) => change((d) => void (d.format = event.target.value as TestFormatValue))}
+                disabled={status === "conflict" || status === "locked"}
+                data-testid="test-format"
+              >
+                <option value="FULL_IELTS">{FORMAT_LABEL.FULL_IELTS}</option>
+                <option value="CUSTOM">{FORMAT_LABEL.CUSTOM}</option>
+              </NativeSelect>
+              <p className="text-muted-foreground text-xs" data-testid="format-note">
+                {custom
+                  ? `Any number of questions (at least 1) and up to ${CUSTOM_MAX_PARTS} parts, numbered 1 to the last straight through. Students see their score and percentage, never an IELTS band, and it cannot be used in a Full Mock.`
+                  : "Exactly 40 questions in the official parts. Results are given an IELTS band, and the test can be used in a Full Mock."}
+              </p>
+            </div>
             <label className="flex items-center gap-3 text-sm">
               <Switch checked={model.category === "CAMBRIDGE"} onCheckedChange={(checked) => change((d) => void (d.category = checked ? "CAMBRIDGE" : "GENERAL"))} />
               Cambridge test (free for every student, no subscription required)
@@ -377,12 +426,24 @@ export function TestBuilder({
               onMoveGroup={(groupIndex, direction) => change((d) => moveWithin(d.parts[partIndex].groups, groupIndex, direction))}
               onDeleteGroup={(groupIndex) => change((d) => void d.parts[partIndex].groups.splice(groupIndex, 1))}
               onAddGroup={(group) => change((d) => void d.parts[partIndex].groups.push(group))}
+              onRemove={custom && model.parts.length > 1 ? () => removePart(partIndex) : undefined}
             />
           ))}
+
+          {custom && (
+            <div className="border-border/70 flex flex-wrap items-center gap-3 rounded-xl border border-dashed p-3" data-testid="add-part">
+              <Button type="button" variant="outline" onClick={addPart} disabled={model.parts.length >= CUSTOM_MAX_PARTS || status === "conflict" || status === "locked"} data-testid="add-part-button">
+                Add {skill === "LISTENING" ? "a part" : "a passage"}
+              </Button>
+              <span className="text-muted-foreground text-xs">
+                {model.parts.length} of {CUSTOM_MAX_PARTS} {skill === "LISTENING" ? "parts" : "passages"}. {skill === "LISTENING" ? "A new part shares the recording already uploaded." : ""}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="xl:sticky xl:top-16 xl:self-start">
-          <ChecklistPanel validation={validation} onGo={jumpTo} />
+          <ChecklistPanel validation={validation} onGo={jumpTo} format={model.format} />
         </div>
       </div>
 

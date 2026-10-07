@@ -154,10 +154,6 @@
   font-weight: 400;
 }
 
-.ex-time-short {
-  display: none;
-}
-
 .ex-header-end {
   display: flex;
   justify-content: flex-end;
@@ -869,14 +865,6 @@
 
   .ex-candidate {
     display: none;
-  }
-
-  .ex-time-long {
-    display: none;
-  }
-
-  .ex-time-short {
-    display: inline;
   }
 
   .ex-partbar {

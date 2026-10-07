@@ -144,6 +144,61 @@ function ReanalyzeButton({ importedTestId }: { importedTestId: string }) {
   );
 }
 
+/**
+ * Phase Q - the kind of test this import becomes. A paper that does not hold exactly 40 questions is never a dead end: "Import as Custom test (N questions)" turns
+ * the check into "numbered 1..N, every question has an answer" and the test is scored as a raw score and a percentage. The choice is stored with the import, so a
+ * reload keeps it; "Use the Full IELTS rules" goes back.
+ */
+function FormatCard({ importedTestId, validation }: { importedTestId: string; validation: ImportValidation }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  if (validation.format !== "CUSTOM" && !validation.suggestCustom) return null;
+
+  function choose(testFormat: "FULL_IELTS" | "CUSTOM") {
+    startTransition(async () => {
+      const result = await updateImportedTestMetaAction(importedTestId, { testFormat });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  if (validation.format === "CUSTOM") {
+    return (
+      <Card className="border-accent/40" data-testid="import-format-custom">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+          <div className="space-y-1">
+            <h2 className="font-display text-lg font-medium">Custom test: {validation.totalQuestions} question{validation.totalQuestions === 1 ? "" : "s"}</h2>
+            <p className="text-muted-foreground text-sm">
+              Any number of questions and parts, numbered 1 to the last. Students get their score and percentage (for example 18/24, 75%) and no IELTS band, and it cannot be used in a Full Mock.
+            </p>
+          </div>
+          <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => choose("FULL_IELTS")} data-testid="import-format-full">
+            {pending && <Loader2 className="size-3.5 animate-spin" />} Use the Full IELTS rules instead
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+  return (
+    <Card className="border-accent/40" data-testid="import-format-offer">
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+        <div className="space-y-1">
+          <h2 className="font-display text-lg font-medium">This paper has {validation.suggestCustom!.questions} question{validation.suggestCustom!.questions === 1 ? "" : "s"}, not 40</h2>
+          <p className="text-muted-foreground text-sm">
+            A Full IELTS test has exactly 40 questions. You can import this one as a Custom test instead: any number of questions, scored as a raw score and a percentage.
+          </p>
+        </div>
+        <Button type="button" disabled={pending} onClick={() => choose("CUSTOM")} data-testid="import-as-custom">
+          {pending && <Loader2 className="size-4 animate-spin" />} Import as Custom test ({validation.suggestCustom!.questions} questions)
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ImportChecklist({ importedTestId, validation }: { importedTestId: string; validation: ImportValidation }) {
   const blockCount = validation.passages.reduce((sum, p) => sum + p.groups.length, 0);
   const keyMismatch = validation.answerCount !== validation.totalQuestions;
@@ -628,7 +683,7 @@ function ConfirmImportPanel({ importedTestId, defaultTitle, validation }: { impo
         router.refresh();
         return;
       }
-      toast.success(`Test imported — ${validation.totalQuestions} questions.`);
+      toast.success(`${validation.format === "CUSTOM" ? "Custom test" : "Test"} imported — ${validation.totalQuestions} questions.`);
       router.push(`/teacher/tests/${result.mockTestId}`);
     });
   }
@@ -742,6 +797,8 @@ export function PdfTestImportReviewer({ importedTest, validation }: { importedTe
           </div>
         </CardContent>
       </Card>
+
+      <FormatCard importedTestId={importedTest.id} validation={validation} />
 
       <ImportChecklist importedTestId={importedTest.id} validation={validation} />
 

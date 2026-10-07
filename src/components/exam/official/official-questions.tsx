@@ -10,7 +10,7 @@ import {
   summaryCompletionOptionsSchema,
 } from "@/lib/exam/question-types";
 import { completeBlankIds, detectSummaryLayout, parseSummaryText, splitSummaryPart, type SummaryPart } from "@/lib/exam/summary-blanks";
-import { buildGroupViews, findPromptBlank, isYesNoInstructions, matchingListLabel, promptRepeatsInstructions, type GroupView, type QuestionGroupInfo } from "@/lib/exam/question-groups";
+import { buildGroupViews, findPromptBlank, isYesNoInstructions, matchingAllowsReuse, matchingListLabel, promptRepeatsInstructions, type GroupView, type QuestionGroupInfo } from "@/lib/exam/question-groups";
 import { formatNumberRange, type NumberedQuestion } from "@/lib/exam/question-numbering";
 import { chooseCountOf } from "@/lib/exam/choose-many";
 import type { ExamQuestion } from "@/components/exam/exam-runner";
@@ -221,14 +221,32 @@ const ChoiceRow = memo(function ChoiceRow({ row, value, onAnswer, choices, allow
  * (touch screens, which cannot drag), or with the item's own drop-down (keyboard / screen reader).
  * All three write the same answer: { item id → option id }.
  */
-const MatchingRow = memo(function MatchingRow({ row, value, onAnswer, prompts, options, listLabel, showPrompt }: RowProps & { prompts: { id: string; text: string }[]; options: { id: string; text: string }[]; listLabel: string; showPrompt: boolean }) {
+const MatchingRow = memo(function MatchingRow({ row, value, onAnswer, prompts, options, listLabel, showPrompt, allowReuse }: RowProps & { prompts: { id: string; text: string }[]; options: { id: string; text: string }[]; listLabel: string; showPrompt: boolean; allowReuse: boolean }) {
   const answers = asRecord(value);
   const review = useReviewRow(row.id);
   const [armed, setArmed] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const labelOf = (id: string) => optionLabel(id, Math.max(0, options.findIndex((option) => option.id === id)));
 
+  // Phase Q - a heading (or letter) that is used once leaves the list and the other questions' drop-downs; clearing it (x) brings it back in its original place.
+  // Nothing is hidden when the task lets an option be used again, nor in a review (where nothing can be chosen any more and every option stays listed).
+  const hideUsed = !review && !allowReuse;
+  const usedBy = (optionId: string): string | null => prompts.find((prompt) => answers[prompt.id] === optionId)?.id ?? null;
+  const optionsFor = (promptId: string | null) =>
+    hideUsed
+      ? options.filter((option) => {
+          const user = usedBy(option.id);
+          return user == null || user === promptId;
+        })
+      : options;
+
   const place = (promptId: string, optionId: string) => {
+    // an option already used for another question cannot be put here as well (only a stale pick could try)
+    const user = usedBy(optionId);
+    if (hideUsed && user != null && user !== promptId) {
+      setArmed(null);
+      return;
+    }
     onAnswer(row.id, { ...answers, [promptId]: optionId });
     setArmed(null);
   };
@@ -243,7 +261,7 @@ const MatchingRow = memo(function MatchingRow({ row, value, onAnswer, prompts, o
       {showPrompt && <OfficialQuestionText as="p" className="ex-item-text" questionId={row.id} part="prompt" text={row.prompt} />}
       <div className="ex-list" role="group" aria-label={listLabel}>
         <p className="ex-list-title">{listLabel}</p>
-        {options.map((option, index) => (
+        {optionsFor(null).map((option) => (
           <button
             key={option.id}
             type="button"
@@ -258,7 +276,7 @@ const MatchingRow = memo(function MatchingRow({ row, value, onAnswer, prompts, o
             }}
             onClick={() => setArmed(armed === option.id ? null : option.id)}
           >
-            <strong>{optionLabel(option.id, index)}</strong>
+            <strong>{optionLabel(option.id, options.indexOf(option))}</strong>
             <span>{option.text}</span>
           </button>
         ))}
@@ -310,11 +328,11 @@ const MatchingRow = memo(function MatchingRow({ row, value, onAnswer, prompts, o
               data-question-number={number}
             >
               <option value="" hidden>
-                {review ? NO_ANSWER : number}
+                {review ? NO_ANSWER : "Choose"}
               </option>
-              {options.map((option, optionIndex) => (
+              {optionsFor(prompt.id).map((option) => (
                 <option key={option.id} value={option.id}>
-                  {optionLabel(option.id, optionIndex)}
+                  {optionLabel(option.id, options.indexOf(option))}
                 </option>
               ))}
             </select>
@@ -547,6 +565,7 @@ const RowView = memo(function RowView({ row, value, onAnswer, instructions, yesN
           prompts={parsed.prompts}
           options={parsed.options}
           listLabel={matchingListLabel(instructions, row.prompt)}
+          allowReuse={matchingAllowsReuse([instructions, row.prompt].filter(Boolean).join(" "), parsed.prompts.length, parsed.options.length)}
           showPrompt={!promptRepeatsInstructions(row.prompt, instructions)}
         />
       );

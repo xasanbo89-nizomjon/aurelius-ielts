@@ -11,6 +11,7 @@ import type { QuestionGroupInfo } from "@/lib/exam/question-groups";
 import { formatNumberRange } from "@/lib/exam/question-numbering";
 import { QUESTION_TYPE_META, QUESTION_TYPE_ORDER } from "@/lib/exam/question-types";
 import { buildReviewRows, evidenceNumberOf, numberMatchesStatus, type ReviewSource, type ReviewStatusFilter } from "@/lib/exam/official-review";
+import { percentOf } from "@/lib/exam/test-format";
 import type { ReviewEvidenceRange, ReviewNote, ReviewQuestionHighlight } from "@/lib/exam/review-model";
 import { examPreferencesCookie, textSizePx, type ExamPreferences } from "@/lib/exam/ui-preferences";
 import { questionRegion } from "@/lib/exam/text-highlight";
@@ -47,6 +48,8 @@ export type OfficialReviewProps = {
   preferencesCookieName: string;
   initialPreferences: ExamPreferences;
   band: number | null;
+  /** Phase Q - a Custom test: no band, the header and the dialog show "Score: 18/24 (75%)". */
+  custom?: boolean;
   rawScore: number;
   totalPoints: number;
   passages: ExamPassage[];
@@ -372,7 +375,9 @@ export function OfficialReview(props: OfficialReviewProps) {
   const partCorrect = parts.find((part) => part.group.key === currentGroup?.key)?.correct ?? 0;
 
   const dialogNumbers = useMemo(() => rows.flatMap((row) => row.numbers), [rows]);
-  const bandText = band != null ? band.toFixed(1) : "—";
+  const custom = props.custom === true;
+  const percent = percentOf(rawScore, totalPoints);
+  const bandText = custom ? `${rawScore}/${totalPoints}${percent != null ? ` (${percent}%)` : ""}` : band != null ? band.toFixed(1) : "—";
   const hasLeft = testType === "READING" || sortedPassages.some((passage) => passage.content.trim().length > 0);
   const audioSrc = testType === "LISTENING" ? (displayedPassage?.audioUrl ?? null) : null;
   const sideLabel = testType === "LISTENING" ? "Transcript" : "Passage";
@@ -438,9 +443,9 @@ export function OfficialReview(props: OfficialReviewProps) {
       <OfficialHeader
         candidateName={props.candidateName}
         center={
-          <span className="ex-band" data-testid="review-band">
-            <span className="ex-rv-long">Band score: </span>
-            <span className="ex-rv-short">Band </span>
+          <span className="ex-band" data-testid="review-band" data-kind={custom ? "score" : "band"}>
+            <span className="ex-rv-long">{custom ? "Score: " : "Band score: "}</span>
+            <span className="ex-rv-short">{custom ? "Score " : "Band "}</span>
             {bandText}
           </span>
         }
@@ -530,7 +535,7 @@ export function OfficialReview(props: OfficialReviewProps) {
         hasNext={adjacentNumber(groupsOfParts, activeNumber, 1) !== null}
       />
 
-      <OfficialReviewDialog open={dialogOpen} onOpenChange={changeDialog} container={root} band={band} rawScore={rawScore} totalPoints={totalPoints} numbers={dialogNumbers} detailsHref={`/student/exam/attempt/${props.resultId}/results`} />
+      <OfficialReviewDialog open={dialogOpen} onOpenChange={changeDialog} container={root} band={band} custom={custom} rawScore={rawScore} totalPoints={totalPoints} numbers={dialogNumbers} detailsHref={`/student/exam/attempt/${props.resultId}/results`} />
 
       {noteView && (
         <div className="ex-note-view" style={{ left: noteView.left, top: noteView.top }} role="note" data-testid="note-view">

@@ -3,6 +3,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 
 import type { ReviewNumber } from "@/lib/exam/official-review";
+import { percentOf } from "@/lib/exam/test-format";
 
 /**
  * Phase M2 - the first thing a student sees after handing in: their band score, their raw score and one line per question number - what they answered and
@@ -14,6 +15,7 @@ export function OfficialReviewDialog({
   onOpenChange,
   container,
   band,
+  custom = false,
   rawScore,
   totalPoints,
   numbers,
@@ -23,6 +25,8 @@ export function OfficialReviewDialog({
   onOpenChange: (open: boolean) => void;
   container: HTMLElement | null;
   band: number | null;
+  /** Phase Q - a Custom test has no band: the dialog shows the score and the percentage instead. */
+  custom?: boolean;
   rawScore: number;
   totalPoints: number;
   numbers: readonly ReviewNumber[];
@@ -39,12 +43,19 @@ export function OfficialReviewDialog({
           </DialogPrimitive.Title>
           <DialogPrimitive.Description asChild>
             <dl className="ex-results-scores">
+              {custom ? (
+                <div>
+                  <dt>Percentage</dt>
+                  <dd data-testid="dialog-percent">{percentOf(rawScore, totalPoints) != null ? `${percentOf(rawScore, totalPoints)}%` : "—"}</dd>
+                </div>
+              ) : (
+                <div>
+                  <dt>Band score</dt>
+                  <dd data-testid="dialog-band">{band != null ? band.toFixed(1) : "—"}</dd>
+                </div>
+              )}
               <div>
-                <dt>Band score</dt>
-                <dd data-testid="dialog-band">{band != null ? band.toFixed(1) : "—"}</dd>
-              </div>
-              <div>
-                <dt>Raw score</dt>
+                <dt>{custom ? "Score" : "Raw score"}</dt>
                 <dd data-testid="dialog-raw">
                   {rawScore}/{totalPoints}
                 </dd>

@@ -4,13 +4,15 @@ import { AlertTriangle, CheckCircle2, CircleAlert } from "lucide-react";
 
 import type { IssueTarget, TestValidation } from "@/lib/exam/test-validation";
 import { REQUIRED_QUESTIONS } from "@/lib/exam/test-validation";
+import { isCustomFormat, type TestFormatValue } from "@/lib/exam/test-format";
 import { cn } from "@/lib/utils";
 
 /**
  * The publish checklist, live: the SAME rules the publish button enforces (validateTestStructure), run on what is in the editor right now. Every problem
  * is written in the numbers the student sees and jumps to the element to fix.
  */
-export function ChecklistPanel({ validation, onGo, className }: { validation: TestValidation; onGo: (target: IssueTarget) => void; className?: string }) {
+export function ChecklistPanel({ validation, onGo, className, format }: { validation: TestValidation; onGo: (target: IssueTarget) => void; className?: string; format?: TestFormatValue | null }) {
+  const custom = isCustomFormat(format);
   const errors = validation.issues.filter((issue) => issue.severity === "error");
   const warnings = validation.issues.filter((issue) => issue.severity === "warning");
 
@@ -22,7 +24,8 @@ export function ChecklistPanel({ validation, onGo, className }: { validation: Te
       </div>
 
       <p className="text-sm" data-testid="checklist-total">
-        <span className={cn("font-semibold tabular-nums", validation.total === REQUIRED_QUESTIONS ? "text-success" : "text-foreground")}>{validation.total}</span> of {REQUIRED_QUESTIONS} questions
+        <span className={cn("font-semibold tabular-nums", custom ? (validation.total >= 1 ? "text-success" : "text-foreground") : validation.total === REQUIRED_QUESTIONS ? "text-success" : "text-foreground")}>{validation.total}</span>{" "}
+        {custom ? `question${validation.total === 1 ? "" : "s"} (custom test)` : `of ${REQUIRED_QUESTIONS} questions`}
         {validation.parts.length > 0 && <span className="text-muted-foreground"> · {validation.parts.map((p) => p.count).join(" / ")}</span>}
       </p>
 

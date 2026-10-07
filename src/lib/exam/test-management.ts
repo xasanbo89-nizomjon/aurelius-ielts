@@ -90,6 +90,8 @@ export async function createTest(
     type: TestType;
     category?: MockTestCategory;
     durationMinutes?: number;
+    /** Phase Q - the kind of paper (default: Full IELTS). */
+    format?: "FULL_IELTS" | "CUSTOM";
   }
 ) {
   return prisma.mockTest.create({
@@ -99,6 +101,7 @@ export async function createTest(
       type: input.type,
       category: input.category,
       durationMinutes: input.durationMinutes,
+      testFormat: input.format ?? "FULL_IELTS",
       createdById: teacherId,
     },
   });
