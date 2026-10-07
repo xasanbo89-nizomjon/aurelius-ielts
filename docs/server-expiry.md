@@ -55,6 +55,9 @@ The route refuses to run (503) unless `CRON_SECRET` is set, and answers 401 to a
      Vercel sends `Authorization: Bearer <CRON_SECRET>` by itself when the project has a `CRON_SECRET`.
    * **Vercel Hobby, or any other host** - use an external pinger (cron-job.org, GitHub Actions, UptimeRobot) that calls
      `https://<your-domain>/api/cron/finalize-expired` every 5 minutes with the header `Authorization: Bearer <CRON_SECRET>`.
+   **The Speaking practice has a second job on the same secret** (Phase Q-B, `docs/speaking-practice-ai.md`): `GET /api/cron/speaking-audio` finishes recorded practices whose AI assessment was never
+   started or whose worker died, and drops practices that were started more than a day ago but never received their recording. Schedule it the same way (every 5 minutes is plenty); without it a stuck assessment
+   is picked up when somebody looks at it.
 3. Check it: `curl -i -H "Authorization: Bearer <CRON_SECRET>" https://<your-domain>/api/cron/finalize-expired` answers 200 with the counts
    (`standaloneAttempts`, `fullMockAttempts`, `fullMockSteps`, `writingSittings`, `errors`); without the header it answers 401.
 

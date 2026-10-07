@@ -51,7 +51,8 @@ export function DashboardShell({
         </div>
       </aside>
 
-      <div className="flex min-h-svh flex-1 flex-col">
+      {/* min-w-0: a flex item is never narrower than its widest unbreakable content unless told so, so one long single-line title or a wide table made the whole page (and its header) wider than a phone. */}
+      <div className="flex min-h-svh min-w-0 flex-1 flex-col">
         <header className="bg-background/85 border-border/70 sticky top-0 z-30 flex h-18 items-center gap-1.5 border-b px-4 backdrop-blur-sm sm:px-6 sm:gap-2 lg:px-10">
           <MobileSidebar items={navItems} />
           <div className="min-w-0 flex-1" />

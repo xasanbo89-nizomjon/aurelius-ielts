@@ -49,6 +49,8 @@ const TEACHER_RULES: Rule<TeacherWho>[] = [
   { pattern: /^\/teacher\/students\/([^/]+)$/, exists: async ([id], who) => has(await prisma.studentProfile.findFirst({ where: { id, ...(who.isRootTeacher ? {} : { teacherId: who.id }) }, select: { id: true } })) },
   // writing-reviews/[submissionId] - getSubmissionReportForTeacher: { id, status not DRAFT, student of this teacher }
   { pattern: /^\/teacher\/writing-reviews\/([^/]+)$/, exists: async ([id], who) => has(await prisma.writingSubmission.findFirst({ where: { id, status: { not: "DRAFT" }, student: { teacherId: who.id } }, select: { id: true } })) },
+  // speaking-recordings/[practiceId] - getPractice for a teacher: a practice of one of their own students; a Root Teacher's every practice (/usage is a page of its own)
+  { pattern: /^\/teacher\/speaking-recordings\/(?!usage$)([^/]+)$/, exists: async ([id], who) => has(await prisma.speakingAudioPractice.findFirst({ where: { id, student: who.isRootTeacher ? {} : { teacherId: who.id } }, select: { id: true } })) },
 ];
 
 const STUDENT_RULES: Rule<StudentWho>[] = [
@@ -62,6 +64,8 @@ const STUDENT_RULES: Rule<StudentWho>[] = [
   { pattern: /^\/student\/writing\/(?!new$|history$|tasks$)([^/]+)$/, exists: async ([id], who) => has(await prisma.writingSubmission.findFirst({ where: { id, studentId: who.id }, select: { id: true } })) },
   // speaking/[submissionId] - getSpeakingResultDetail: { id, studentId }; the page shows a lock screen (not a 404) without access, so so does the guard
   { pattern: /^\/student\/speaking\/([^/]+)$/, exists: async ([id], who) => !(await hasActiveAccess(who.id)) || has(await prisma.speakingSubmission.findFirst({ where: { id, studentId: who.id }, select: { id: true } })) },
+  // speaking-practice/record/[practiceId] - getPractice for a student: { id, studentId } (reading one's own feedback is not a Premium feature, so there is no lock screen here)
+  { pattern: /^\/student\/speaking-practice\/record\/([^/]+)$/, exists: async ([id], who) => has(await prisma.speakingAudioPractice.findFirst({ where: { id, studentId: who.id }, select: { id: true } })) },
   // speaking-practice/attempt/[attemptId] and /results - getSpeakingAttemptForStudent: { id, studentId }
   { pattern: /^\/student\/speaking-practice\/attempt\/([^/]+)(?:\/results)?$/, exists: async ([id], who) => has(await prisma.speakingAttempt.findFirst({ where: { id, studentId: who.id }, select: { id: true } })) },
   // articles/[articleId] - getArticleForStudent (published, by the student's own teacher); a lock screen without access

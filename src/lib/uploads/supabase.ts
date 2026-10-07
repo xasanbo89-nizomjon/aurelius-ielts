@@ -167,3 +167,49 @@ export async function downloadFromSupabase(bucket: string, objectPath: string): 
 
   return Buffer.from(await data.arrayBuffer());
 }
+
+const privateBucketsReady = new Set<string>();
+
+/**
+ * Phase Q-B - makes sure a PRIVATE bucket exists (no public URL: every read goes through a short-lived signed link). Call it BEFORE the first signed upload to the
+ * bucket, because createSignedUploadUrl above creates a missing bucket as public. A bucket that exists but is public is refused: the Speaking recordings of students
+ * must never be reachable by a guessable address.
+ */
+export async function ensurePrivateBucket(bucket: string, options: { fileSizeLimitBytes?: number; allowedMimeTypes?: string[] } = {}): Promise<void> {
+  if (privateBucketsReady.has(bucket)) return;
+  const client = getSupabaseAdmin();
+
+  const { error } = await client.storage.createBucket(bucket, { public: false, fileSizeLimit: options.fileSizeLimitBytes, allowedMimeTypes: options.allowedMimeTypes });
+  if (error && !/already exists|duplicate/i.test(error.message)) {
+    throw new Error(`Could not prepare the storage bucket (${bucket}): ${error.message}`);
+  }
+
+  const { data, error: readError } = await client.storage.getBucket(bucket);
+  if (readError || !data) throw new Error(`Could not check the storage bucket (${bucket}): ${readError?.message ?? "unknown error"}`);
+  if (data.public) throw new Error(`The storage bucket "${bucket}" is public. Recordings are private: make the bucket private in Supabase (or use another name) before using it.`);
+  privateBucketsReady.add(bucket);
+}
+
+/** Phase Q-B - a link to one object of a private bucket that stops working after `expiresInSeconds`. */
+export async function createSignedReadUrl(bucket: string, objectPath: string, expiresInSeconds: number): Promise<string> {
+  const client = getSupabaseAdmin();
+  const { data, error } = await client.storage.from(bucket).createSignedUrl(objectPath, expiresInSeconds);
+  if (error || !data?.signedUrl) {
+    throw new Error(`Could not create a link to the file: ${error?.message ?? "unknown error"}`);
+  }
+  return data.signedUrl;
+}
+
+/** Phase Q-B - the size in bytes of one stored object, or null when it is not there (the upload never finished). */
+export async function getStoredObjectSize(bucket: string, objectPath: string): Promise<number | null> {
+  const client = getSupabaseAdmin();
+  const slash = objectPath.lastIndexOf("/");
+  const folder = slash >= 0 ? objectPath.slice(0, slash) : "";
+  const name = objectPath.slice(slash + 1);
+
+  const { data, error } = await client.storage.from(bucket).list(folder, { limit: 100, search: name });
+  if (error) throw new Error(`Could not look up the file in storage (${bucket}): ${error.message}`);
+  const entry = (data ?? []).find((item) => item.name === name);
+  const size = entry?.metadata?.size;
+  return typeof size === "number" ? size : null;
+}

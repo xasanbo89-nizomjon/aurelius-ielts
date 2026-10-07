@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { MessageCircle, Presentation, Shuffle, Users } from "lucide-react";
+import { AudioLines, History, MessageCircle, Presentation, Shuffle, Users } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { hasActiveAccess } from "@/lib/subscription";
@@ -66,6 +66,32 @@ export default async function SpeakingPracticePage({
         </div>
       )}
 
+      {/* Phase Q-B - the spoken practice with an AI assessment of the real recording sits above the typed practice below it. */}
+      <Card className="border-accent/30 bg-accent/5" data-testid="record-card">
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="bg-secondary text-accent flex size-11 shrink-0 items-center justify-center rounded-xl">
+              <AudioLines className="size-5" strokeWidth={1.75} />
+            </span>
+            <div className="space-y-1">
+              <h2 className="font-display text-lg font-medium">Speak and get an AI assessment</h2>
+              <p className="text-muted-foreground text-sm">Record your answer to a Part 1, 2 or 3 question. The AI listens to it and gives you a band for fluency, vocabulary, grammar and pronunciation - an estimate, not an official score.</p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="/student/speaking-practice/recordings">
+                <History className="size-4" /> My recordings
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/student/speaking-practice/record">Record an answer</Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <h2 className="font-display text-lg font-medium">Or practise by typing your answer</h2>
       <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
         {PARTS.map(({ part, title, icon: Icon, description, example }) => (
           <Card key={part} className="h-full">

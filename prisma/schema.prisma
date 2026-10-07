@@ -318,6 +318,8 @@ model StudentProfile {
   assignedMockAccessCodes   MockAccessCode[]           @relation("MockAccessCodeAssigned")
   redeemedMockAccessCodes   MockAccessCode[]           @relation("MockAccessCodeRedeemed")
   mockAccessCodeRedemptions MockAccessCodeRedemption[] @relation("MockAccessCodeRedemptions")
+  /// Phase Q-B - recorded Speaking practices with an AI assessment.
+  speakingAudioPractices    SpeakingAudioPractice[]
 
   // Phase M - every teacher screen is scoped by "my students" (a Root Teacher sees all).
   @@index([teacherId])
@@ -377,6 +379,8 @@ model TeacherProfile {
   evidenceSuggestionLogs  EvidenceSuggestionLog[]
   /// Phase M2 - the AI explanation requests of the explanations editor (what its daily limit counts, and its token usage).
   explanationLogs        ExplanationGenerationLog[]
+  /// Phase Q-B - a teacher's comments on a student's recorded Speaking practice.
+  speakingAudioComments  SpeakingAudioComment[]
 
   @@map("teacher_profiles")
 }
@@ -3096,4 +3100,140 @@ model ArticleAttachment {
   createdAt DateTime @default(now())
 
   @@map("article_attachments")
+}
+
+// ---------------------------------------------------------------------------
+// Phase Q-B - Speaking practice with a real recording and an AI assessment.
+//
+// ADDITIVE: four new tables and one new enum; no existing table gets a column (StudentProfile and TeacherProfile only gain a back-reference, which is not a column).
+// Practice only - never part of a Full Mock - and every result is an AI estimate, not an official IELTS score.
+// ---------------------------------------------------------------------------
+
+enum SpeakingAudioStatus {
+  /// The practice exists and the upload link was given out, but the recording has not (all) arrived.
+  AWAITING_UPLOAD
+  /// The recording is stored; the assessment waits for a worker.
+  PENDING
+  /// An assessment is running. It holds a lease: a worker that dies is replaced when the lease runs out.
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model SpeakingAudioPractice {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  /// 1, 2 or 3.
+  part       Int
+  /// "OWN" (typed by the student) or "TOPIC" (taken from Speaking Topics).
+  source     String
+  topicId    String?
+  questionId String?
+  /// The question as it was asked, copied at the time: later edits of a topic never change an old practice.
+  question      String  @db.Text
+  /// Part 2: the "You should say" points (a JSON array of strings).
+  cueCardPoints Json?
+  /// Part 2: what the student wrote in the preparation minute.
+  notes         String? @db.Text
+  /// The language of the written feedback: "en" or "uz".
+  feedbackLanguage String @default("en")
+
+  status SpeakingAudioStatus @default(AWAITING_UPLOAD)
+
+  /// The recording in the private Supabase bucket (<studentId>/<practiceId>.wav): 16 kHz mono 16-bit WAV.
+  audioPath    String?
+  audioBytes   Int?
+  /// The length, read from the WAV header on the server.
+  audioSeconds Float?
+  /// What the speech-to-text tool heard.
+  transcript   String? @db.Text
+
+  fluencyBand            Float?
+  lexicalBand            Float?
+  grammarBand            Float?
+  pronunciationBand      Float?
+  /// The mean of the four, rounded the IELTS way - stored so the student's LATEST speaking band can be read without recomputing (Phase O).
+  overallBand            Float?
+  /// True when the model could not hear the recording and Pronunciation was estimated from the transcript.
+  pronunciationEstimated Boolean @default(false)
+  /// { summary, strengths[], mistakes[{ quote, problem, correction }], vocabulary[{ insteadOf, better, example }], sampleAnswer }
+  assessment             Json?
+  transcribeModel        String?
+  assessModel            String?
+  /// True when the assessment model was given the audio itself.
+  usedAudio              Boolean?
+
+  /// How many times a worker has taken this practice (a retry by the student starts again from 0).
+  attempts            Int       @default(0)
+  failureCode         String?
+  failureMessage      String?
+  processingStartedAt DateTime?
+
+  /// When the recording arrived: the moment the practice counts toward the student's daily limit.
+  submittedAt DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  runs     SpeakingAudioRun[]
+  comments SpeakingAudioComment[]
+
+  @@index([studentId, createdAt])
+  @@index([studentId, submittedAt])
+  @@index([status, updatedAt])
+  @@map("speaking_audio_practices")
+}
+
+/// One AI call made for a practice (the usage log: tokens, audio minutes, an estimated cost). A failed call is logged too.
+model SpeakingAudioRun {
+  id         String                @id @default(cuid())
+  practiceId String
+  practice   SpeakingAudioPractice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  /// "TRANSCRIBE", "ASSESS", "ASSESS_RETRY" (second try after an unusable reply) or "ASSESS_TEXT" (assessment from the transcript alone).
+  kind             String
+  model            String
+  promptTokens     Int     @default(0)
+  completionTokens Int     @default(0)
+  /// The audio part of promptTokens.
+  audioInputTokens Int     @default(0)
+  audioSeconds     Float   @default(0)
+  /// An estimate in millionths of a dollar (whole numbers, so sums are exact).
+  costMicroUsd     Int     @default(0)
+  ok               Boolean
+  error            String?
+  durationMs       Int     @default(0)
+  createdAt        DateTime @default(now())
+
+  @@index([practiceId])
+  @@index([createdAt])
+  @@map("speaking_audio_runs")
+}
+
+/// A teacher's comment on a student's recorded practice (the student sees it under the feedback).
+model SpeakingAudioComment {
+  id         String                @id @default(cuid())
+  practiceId String
+  practice   SpeakingAudioPractice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     TeacherProfile        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  body      String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([practiceId, createdAt])
+  @@map("speaking_audio_comments")
+}
+
+/// Platform-wide settings the Root Teacher can change (a key and a text value). First use: "speaking.dailyPracticeLimit".
+model PlatformSetting {
+  key         String   @id
+  value       String
+  updatedAt   DateTime @updatedAt
+  /// The TeacherProfile id of whoever changed it last (kept as plain text: a setting outlives the account).
+  updatedById String?
+
+  @@map("platform_settings")
 }

@@ -78,6 +78,8 @@ export const TEACHER_NAV_ITEMS: NavItem[] = [
   // Phase 37 — Speaking Practice Center's teacher-side topic bank. Separate
   // from "Speaking" above (the existing audio-recording task bank).
   { label: "Speaking Topics", href: "/teacher/speaking-topics", icon: "MessageCircle" },
+  // Phase Q-B - the students' recorded Speaking practices with their AI assessment: listen, read the feedback, comment. (A Root Teacher also finds the usage page here.)
+  { label: "Speaking Recordings", href: "/teacher/speaking-recordings", icon: "AudioLines" },
   { label: "Assignments", href: "/teacher/assignments", icon: "ListChecks" },
   { label: "Writing", href: "/teacher/writing", icon: "NotebookPen" },
   { label: "Writing Reviews", href: "/teacher/writing-reviews", icon: "PenLine" },

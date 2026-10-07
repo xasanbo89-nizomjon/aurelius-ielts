@@ -34,6 +34,7 @@ import {
   Activity,
   MessageCircle,
   Image,
+  AudioLines,
 } from "lucide-react";
 
 /**
@@ -80,6 +81,7 @@ export const NAV_ICONS = {
   Activity,
   MessageCircle,
   Image,
+  AudioLines,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;

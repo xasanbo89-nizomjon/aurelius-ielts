@@ -15,6 +15,31 @@ Planned work that is not built yet. When a phase ships, delete its section.
 - **The legacy exam screens** (`?ui=legacy`) keep their own matching drop-downs and their own clock (which already showed `m:ss`): the used-once rule is on the official screens only.
 - **Older browser scripts of Phase G** assert the old clock wording ("59 minutes left"); the official screens now read "59:32 left".
 
+## Phase Q-B follow-ups (Speaking practice with an AI assessment)
+
+- **Recordings are kept for ever.** There is no retention rule and no "delete my recordings" for the student (a privacy tool); a teacher's or Root Teacher's view is the only other way to reach them. The private bucket and the scopes are in place; a rule
+  "delete after N months" and a student's delete button are not built.
+- **Safari and iOS Safari could not be tested on this machine.** The recorder follows their rules (the audio context is created inside the click, the `webkit` prefix, the permission steps for iOS, a context that never starts is detected after 3 s, the screen
+  is kept awake while preparing or speaking) and was run in Chrome with a fake microphone that plays speech, plus the iPhone / Mac / Android error messages through a simulated refusal. It uses `ScriptProcessorNode` (deprecated, but in every browser); an
+  `AudioWorklet` is the replacement when it is removed.
+- **A phone call or another app taking the microphone in the middle of a recording** is only detected when the browser reports the track as ended; a recording that went silent is caught at the review ("This recording is silent").
+- **One daily limit for every student.** A per-student override ("give this student 20 a day") is not built.
+- **The assessment is as good as a general audio model.** On text-to-speech samples the bands follow the quality of the English (5.5 / 6.5 / 7.0 for a weak, a middle and a strong answer, the same bands on a repeat) and err on the strict side for a short answer;
+  Pronunciation is judged from the sound by a model that is not a phoneme scorer, and a computer voice has no accent, so it was not tested on real accents. `OPENAI_SPEAKING_ASSESS_MODEL=gpt-audio` (the larger model) is the knob if the marking needs to be finer.
+- **The transcript is a speech-to-text result** and can contain mistakes that are not the student's (the page says so).
+- **Cost** is an estimate from the reported usage and list prices kept in the code (`SPEAKING_PRICES_JSON` overrides them). Measured: about $0.004-0.006 for a 15-25 second Part 1 / 3 answer and about **$0.022 for a two-minute Part 2**.
+- **The scheduled job needs `CRON_SECRET` and a scheduler** (like Phase K's). Without them a stuck assessment is picked up when somebody looks at it (the result page, the status route) and by the `after()` that follows the upload - which covers every case
+  except a student who leaves at once and a server that died at that very moment.
+- **A teacher cannot re-run an assessment** (only the student's "Try again"), and a comment cannot be edited, only removed and written again.
+- **The result is not on the student's dashboard / Band Score Center yet** - Phase O reads the latest speaking band with `getLatestSpeakingBand`.
+- **Some existing pages are still wider than a phone.** The dashboard shell's content column now has `min-w-0` (a long single-line title or a wide table used to make the whole page - and its header - wider than the screen). Measured at 390 px
+  before -> after: teacher Tests 412 -> 0, Writing 617 -> 0, Teacher Management 247 -> 0, Students 794 -> 99; no page got wider (31 pages scanned). Still sideways-scrolling on a phone: `/student/writing` (26 px), `/student/analytics` (332 px) and
+  `/teacher/students` (99 px) - content of their own (tables / charts) that needs a horizontal scroll container.
+- **A hydration warning ("Minified React error #418") shows up in about 1 of 70 page loads in the automated browser that blocks the sidebar's link prefetching** (it makes Next fall back to a hard navigation); a plain browser logged none in 126 loads of the same pages, the
+  old ones included, so it was treated as an artefact of that setup. The screens that show times were made safe anyway (no clock-dependent text in a client component's first render).
+- **The kept recording in the browser** (`IndexedDB`) is one per student per browser, for 24 hours; it is not synchronised between devices. A practice that was started (and holds a place in today's count for an hour) before the tab was closed is not reused when the kept
+  recording is sent - a new one is made.
+
 ## Phase L2 follow-ups (what the test builder still lacks)
 
 Phase L1 and L2 are done (`docs/test-builder.md`). Known limits and what could come next:
