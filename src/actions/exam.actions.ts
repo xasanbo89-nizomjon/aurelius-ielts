@@ -26,7 +26,7 @@ export async function startAttemptAction(mockTestId: string) {
   // only shown to students with active access. Cambridge tests bypass this
   // entirely (the platform's one free tier), checked server-side too.
   if (!(await hasActiveAccessForTest(profile.id, mockTestId))) {
-    redirect("/student/subscription?upgrade=1");
+    redirect("/student/premium?upgrade=1");
   }
 
   const attempt = await attempts.getOrCreateAttempt(profile.id, mockTestId);
@@ -214,7 +214,7 @@ export async function submitAttemptAction(resultId: string) {
   const { profile } = await requireStudentProfile();
 
   if (!(await hasActiveAccessForResult(profile.id, resultId))) {
-    redirect("/student/subscription?upgrade=1");
+    redirect("/student/premium?upgrade=1");
   }
 
   try {

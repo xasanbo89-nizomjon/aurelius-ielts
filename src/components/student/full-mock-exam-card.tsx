@@ -21,7 +21,7 @@ export type FullMockCardStatus = "available" | "inProgress" | "completed" | "loc
 export function FullMockExamCard({ test, status }: { test: FullMockCardData; status: FullMockCardStatus }) {
   const ctaLabel =
     status === "inProgress" ? "Resume Full Mock" : status === "locked" ? "Upgrade to unlock" : "Start Full Mock";
-  const ctaHref = status === "locked" ? "/student/subscription?upgrade=1" : `/student/full-mock/${test.id}`;
+  const ctaHref = status === "locked" ? "/student/premium?upgrade=1" : `/student/full-mock/${test.id}`;
 
   return (
     <Card className="h-full gap-3 py-4 sm:gap-6 sm:py-6">

@@ -24,7 +24,7 @@ const submitSchema = z.object({
 export async function startWritingBundleSittingAction(taskId: string, ui?: string) {
   const { profile } = await requireStudentProfile();
   // Real, server-side gate, the same as starting any other test.
-  if (!(await hasActiveAccess(profile.id))) redirect("/student/subscription?upgrade=1");
+  if (!(await hasActiveAccess(profile.id))) redirect("/student/premium?upgrade=1");
 
   const started = await startWritingBundleSitting(profile.id, idSchema.parse(taskId));
   if (!started.success) redirect("/student/writing/tasks");

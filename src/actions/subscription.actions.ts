@@ -15,7 +15,7 @@ export async function redeemPromoCodeAction(code: string): Promise<RedeemPromoCo
   const { profile } = await requireStudentProfile();
   const result = await redeemPromoCode(profile.id, parsed.data.code);
   if (result.success) {
-    revalidatePath("/student/subscription");
+    revalidatePath("/student/premium");
     revalidatePath("/student/dashboard");
   }
   return result;

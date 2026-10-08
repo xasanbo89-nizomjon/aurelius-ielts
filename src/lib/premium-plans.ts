@@ -80,6 +80,12 @@ export const PREMIUM_PLANS: PremiumPlan[] = [
 /** Every plan a new buyer can actually choose — the live purchase grid filters to this. */
 export const ACTIVE_PREMIUM_PLANS: PremiumPlan[] = PREMIUM_PLANS.filter((plan) => !plan.discontinued);
 
+/** Phase R - the title of the plan a request was made on: the name stored with the request, else the original plan its code names (requests from before plans were editable). */
+export function requestPlanTitle(request: { planName: string | null; planCode: PremiumPlanCode | null }): string {
+  if (request.planName) return request.planName;
+  return request.planCode ? getPremiumPlan(request.planCode).title : "Premium";
+}
+
 export function getPremiumPlan(code: PremiumPlanCode): PremiumPlan {
   const plan = PREMIUM_PLANS.find((p) => p.code === code);
   if (!plan) throw new Error("Unknown premium plan.");

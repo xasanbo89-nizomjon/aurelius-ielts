@@ -5,14 +5,15 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 
 import { NOTE_MAX_LENGTH, cleanNote } from "@/lib/exam/highlight-notes";
 import { isFullyCovered, rangesOverlap, remainingAfterClear, type TextRange } from "@/lib/exam/text-highlight";
+import { DEFAULT_HIGHLIGHT_COLOR, HIGHLIGHT_COLOR_LABEL, OFFERED_HIGHLIGHT_COLORS, type HighlightColorName } from "@/lib/exam/highlight-colors";
 import { selectionToTargets, type HighlightTarget } from "@/components/exam/highlight/selection-targets";
 import type { StoredHighlight } from "@/components/exam/highlight/use-exam-highlights";
 
 /**
  * Phase H - highlighting and notes on the official exam screen, the way the computer-delivered test does it.
  *
- *   select text (passage, questions, instructions)  ->  right-click, or click the small button that appears above it
- *   ->  Highlight | Notes | Clear | Clear all
+ *   select text (passage, questions, instructions)  ->  a small toolbar appears right above it at once: colour swatches, Note, and Clear
+ *   (where the selection touches a highlight) - one click on a colour highlights. Right-click gives the menu Highlight | Notes | Clear | Clear all.
  *
  * On a touch screen the same menu pops up under a long-press selection; from the keyboard Shift+arrows
  * selects and the context-menu key / Shift+F10 opens it. Right-clicking inside an answer box leaves the
@@ -24,14 +25,16 @@ import type { StoredHighlight } from "@/components/exam/highlight/use-exam-highl
 
 type Point = { x: number; y: number };
 type Placement = "corner" | "below-center" | "above-center";
-type Via = "pointer" | "keyboard" | "touch" | "opener";
+type Via = "pointer" | "keyboard" | "touch";
 /**
  * A highlight under the pointer: its region, the id(s) of the highlight(s) drawn there and where they are. A highlight that has just
  * been made gets its real id from the server while the menu is open, so what the menu acts on is found again by position (`hitHighlights`).
  */
 type Hit = { region: string; ids: string[]; ranges: TextRange[] };
 type MenuState = { at: Point; place: Placement; belowY?: number; via: Via; targets: HighlightTarget[]; hit: Hit | null };
-type OpenerState = { x: number; top: number; bottom: number; targets: HighlightTarget[] };
+/** The toolbar over a selection: where it goes (above the first line, or under the last when there is no room / on a touch screen) and what it acts on. */
+type ToolbarState = { at: Point; place: Placement; belowY?: number; targets: HighlightTarget[]; bounds: Bounds | null };
+type Bounds = { left: number; right: number };
 type NoteState = { region: string; pos: number; anchor: Point; mode: "hover" | "edit" };
 type ConfirmState = { title: string; message: string; confirmLabel: string; onConfirm: () => void };
 
@@ -39,7 +42,7 @@ export type AnnotationProps = {
   /** The exam root: events are heard here and the popups are drawn inside it, so they follow the contrast and text-size settings. */
   root: HTMLElement | null;
   highlights: StoredHighlight[];
-  onHighlight: (targets: HighlightTarget[]) => void;
+  onHighlight: (targets: HighlightTarget[], color?: HighlightColorName) => void;
   onClear: (targets: HighlightTarget[]) => void;
   onRemove: (region: string, ids: string[]) => void;
   onSetNote: (region: string, id: string, note: string | null) => void;
@@ -61,7 +64,9 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 const hitHighlights = (hit: Hit, highlights: readonly StoredHighlight[]) => highlights.filter((h) => h.region === hit.region && (hit.ids.includes(h.id) || hit.ranges.some((r) => rangesOverlap(h, r))));
 
 /** Puts a popup where it was asked for and keeps it inside the window. Runs before paint, so nothing flashes in the wrong place. */
-function usePlace(ref: RefObject<HTMLElement | null>, at: Point, place: Placement, belowY?: number) {
+function usePlace(ref: RefObject<HTMLElement | null>, at: Point, place: Placement, belowY?: number, bounds?: Bounds | null) {
+  const boundsLeft = bounds?.left;
+  const boundsRight = bounds?.right;
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -73,15 +78,18 @@ function usePlace(ref: RefObject<HTMLElement | null>, at: Point, place: Placemen
       if (top < margin && belowY !== undefined) top = belowY; // no room above the selection: go under it
     }
     const left = place === "corner" ? at.x : at.x - width / 2;
-    el.style.left = `${clamp(left, margin, window.innerWidth - margin - width)}px`;
+    // Inside the window, and - when the selection sits in a pane - inside that pane too.
+    const minLeft = Math.max(margin, boundsLeft !== undefined ? boundsLeft + 4 : margin);
+    const maxLeft = Math.min(window.innerWidth - margin - width, boundsRight !== undefined ? boundsRight - 4 - width : Infinity);
+    el.style.left = `${maxLeft >= minLeft ? clamp(left, minLeft, maxLeft) : clamp(left, margin, window.innerWidth - margin - width)}px`;
     el.style.top = `${clamp(top, margin, window.innerHeight - margin - height)}px`;
-  }, [ref, at.x, at.y, place, belowY]);
+  }, [ref, at.x, at.y, place, belowY, boundsLeft, boundsRight]);
 }
 
 /** Memoised: its props only change when a highlight does, so typing an answer never re-renders it. */
 export const OfficialAnnotations = memo(function OfficialAnnotations({ root, highlights, onHighlight, onClear, onRemove, onSetNote, onRemoveWhere, inCurrentPart }: AnnotationProps) {
   const [menu, setMenu] = useState<MenuState | null>(null);
-  const [opener, setOpener] = useState<OpenerState | null>(null);
+  const [opener, setOpener] = useState<ToolbarState | null>(null);
   const [note, setNote] = useState<NoteState | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   /** "Notes" on a selection highlights it first; the note box opens as soon as that highlight exists. */
@@ -109,7 +117,7 @@ export const OfficialAnnotations = memo(function OfficialAnnotations({ root, hig
   }, [cancelHoverClose]);
 
   /** The selection as highlight targets of the part on screen, and where it is on the screen - or null when there is nothing to highlight. */
-  const readSelection = useCallback((): { targets: HighlightTarget[]; rects: DOMRect[]; union: DOMRect; end: Point } | null => {
+  const readSelection = useCallback((): { targets: HighlightTarget[]; rects: DOMRect[]; union: DOMRect; end: Point; bounds: Bounds | null } | null => {
     if (!root) return null;
     const active = document.activeElement;
     if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return null; // text selected inside an answer box is not text to highlight
@@ -117,13 +125,16 @@ export const OfficialAnnotations = memo(function OfficialAnnotations({ root, hig
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
     const range = selection.getRangeAt(0);
     if (!root.contains(range.commonAncestorContainer)) return null; // e.g. Ctrl+A selects the whole page: not a highlight
+    const anchorElement = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+    if (anchorElement?.closest(FIELD)) return null; // never over an answer box or any other editable text
     const targets = selectionToTargets(root, range).filter((target) => live.current.inCurrentPart(target.region));
     if (targets.length === 0) return null;
     const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
     const union = range.getBoundingClientRect();
     if (rects.length === 0 || (union.width === 0 && union.height === 0)) return null;
     const last = rects[rects.length - 1];
-    return { targets, rects, union, end: { x: last.right, y: last.bottom } };
+    const pane = (range.startContainer instanceof Element ? range.startContainer : range.startContainer.parentElement)?.closest(".ex-pane")?.getBoundingClientRect();
+    return { targets, rects, union, end: { x: last.right, y: last.bottom }, bounds: pane ? { left: pane.left, right: pane.right } : null };
   }, [root]);
 
   /** Where a note box goes for a highlight: just under its marker if it has one, else under its first line. */
@@ -160,12 +171,14 @@ export const OfficialAnnotations = memo(function OfficialAnnotations({ root, hig
         setMenu((current) => (current && current.via === "touch" ? null : current));
         return;
       }
+      const centre = info.union.left + info.union.width / 2;
       if (isCoarsePointer()) {
-        setOpener(null);
-        setMenu({ at: { x: info.union.left + info.union.width / 2, y: info.end.y + 12 }, place: "below-center", via: "touch", targets: info.targets, hit: null });
+        // A touch screen draws its own selection bar above the text: the toolbar goes under the selection.
+        setMenu(null);
+        setOpener({ at: { x: centre, y: info.end.y + 12 }, place: "below-center", targets: info.targets, bounds: info.bounds });
       } else {
         setMenu((current) => (current ? { ...current, targets: info.targets } : current));
-        setOpener({ x: info.union.left + info.union.width / 2, top: info.rects[0].top - 8, bottom: info.end.y + 8, targets: info.targets });
+        setOpener({ at: { x: centre, y: info.rects[0].top - 8 }, place: "above-center", belowY: info.end.y + 8, targets: info.targets, bounds: info.bounds });
       }
     }
     const scheduleSettled = (delay: number) => {
@@ -327,19 +340,24 @@ export const OfficialAnnotations = memo(function OfficialAnnotations({ root, hig
   }, [pendingNote, highlights, openNote]);
 
   // ---- what the menu does -------------------------------------------------------------------------------------------------
-  const doHighlight = (m: MenuState) => {
-    onHighlight(m.targets);
+  const doHighlight = (m: Pick<MenuState, "targets">, color: HighlightColorName = DEFAULT_HIGHLIGHT_COLOR) => {
+    onHighlight(m.targets, color);
     clearSelection();
     closeTransient();
   };
 
-  const doNotes = (m: MenuState) => {
+  const doNotes = (m: Pick<MenuState, "targets" | "hit">) => {
     closeTransient();
     if (m.targets.length > 0) {
-      // Highlight what is selected (a no-op where it already is), then open the note of the highlight that holds the first part.
+      // Highlight what is selected (yellow), then open the note of the highlight that holds the first part. A stretch that already sits inside one highlight
+      // keeps it - and its colour - as it is.
       const first = m.targets[0];
-      onHighlight(m.targets);
-      setPendingNote({ region: first.region, start: first.start, end: first.end });
+      const insideOne = (t: HighlightTarget) => highlights.find((h) => h.region === t.region && h.start <= t.start && h.end >= t.end);
+      const toHighlight = m.targets.filter((t) => !insideOne(t));
+      if (toHighlight.length > 0) onHighlight(toHighlight, DEFAULT_HIGHLIGHT_COLOR);
+      const existing = insideOne(first);
+      if (existing) openNote(existing, "edit");
+      else setPendingNote({ region: first.region, start: first.start, end: first.end });
       clearSelection();
       return;
     }
@@ -347,7 +365,7 @@ export const OfficialAnnotations = memo(function OfficialAnnotations({ root, hig
     if (found) openNote(found, "edit");
   };
 
-  const doClear = (m: MenuState) => {
+  const doClear = (m: Pick<MenuState, "targets" | "hit">) => {
     closeTransient();
     const askFirst = (run: () => void) => setConfirm({ title: "Clear this highlight?", message: "Its note will be deleted too.", confirmLabel: "Clear", onConfirm: run });
 
@@ -406,18 +424,19 @@ export const OfficialAnnotations = memo(function OfficialAnnotations({ root, hig
       }
     : null;
 
+  // The toolbar over a selection: "Clear" only where the selection touches a highlight.
+  const toolbarCanClear = opener ? opener.targets.some((t) => highlights.some((h) => h.region === t.region && rangesOverlap(h, t))) : false;
+
   if (!root) return null;
   return (
     <>
       {opener && !menu && (
-        <OpenerButton
-          x={opener.x}
-          top={opener.top}
-          bottom={opener.bottom}
-          onOpen={() => {
-            setMenu({ at: { x: opener.x, y: opener.top }, place: "above-center", belowY: opener.bottom, via: "opener", targets: opener.targets, hit: null });
-            setOpener(null);
-          }}
+        <SelectionToolbar
+          state={opener}
+          canClear={toolbarCanClear}
+          onColor={(color) => doHighlight(opener, color)}
+          onNote={() => doNotes({ targets: opener.targets, hit: null })}
+          onClear={() => doClear({ targets: opener.targets, hit: null })}
         />
       )}
       {menu && enabled && (
@@ -454,25 +473,36 @@ export const OfficialAnnotations = memo(function OfficialAnnotations({ root, hig
 
 // -------------------------------------------------------------------------------------------------------------------------
 
-/** The small button above a selection: click it for the same menu a right-click gives. */
-function OpenerButton({ x, top, bottom, onOpen }: { x: number; top: number; bottom: number; onOpen: () => void }) {
-  const ref = useRef<HTMLButtonElement>(null);
-  usePlace(ref, { x, y: top }, "above-center", bottom);
+/**
+ * The toolbar that appears over a selection the moment it is made: a swatch per colour (one click highlights), Note (highlights and opens the note box) and, where
+ * the selection touches a highlight, Clear. It sits above the first line - under the last one when there is no room - and never over the selected text.
+ */
+function SelectionToolbar({ state, canClear, onColor, onNote, onClear }: { state: ToolbarState; canClear: boolean; onColor: (color: HighlightColorName) => void; onNote: () => void; onClear: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  usePlace(ref, state.at, state.place, state.belowY, state.bounds);
   return (
-    <button
+    <div
       ref={ref}
-      type="button"
-      data-ex-popup=""
-      data-testid="annotation-opener"
-      className="ex-opener"
+      role="toolbar"
       aria-label="Highlight and notes"
-      aria-haspopup="menu"
-      // Pressing it must not collapse the selection it acts on.
+      data-ex-popup=""
+      data-testid="annotation-toolbar"
+      className="ex-toolbar"
+      // Pressing a button must not collapse the selection it acts on.
       onMouseDown={(event) => event.preventDefault()}
-      onClick={onOpen}
     >
-      <span aria-hidden="true" />
-    </button>
+      {OFFERED_HIGHLIGHT_COLORS.map((color) => (
+        <button key={color} type="button" className="ex-swatch" data-hl-color={color} data-testid={`toolbar-color-${color}`} aria-label={`Highlight ${HIGHLIGHT_COLOR_LABEL[color].toLowerCase()}`} title={HIGHLIGHT_COLOR_LABEL[color]} onClick={() => onColor(color)} />
+      ))}
+      <button type="button" className="ex-toolbar-text" data-testid="toolbar-note" onClick={onNote}>
+        Note
+      </button>
+      {canClear && (
+        <button type="button" className="ex-toolbar-text" data-testid="toolbar-clear" onClick={onClear}>
+          Clear
+        </button>
+      )}
+    </div>
   );
 }
 

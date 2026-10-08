@@ -5,13 +5,15 @@ import { toast } from "sonner";
 
 import { useExamActions } from "@/components/exam/exam-actions";
 import type { HighlightChange } from "@/lib/exam/annotations";
-import { parseRegion, rangesOverlap, rangesTouch, remainingAfterClear, type HighlightRange } from "@/lib/exam/text-highlight";
-import { cleanNote, combineNotes, noteForPiece } from "@/lib/exam/highlight-notes";
+import { parseRegion, rangesOverlap, remainingAfterClear, type HighlightRange } from "@/lib/exam/text-highlight";
+import { cleanNote, noteForPiece } from "@/lib/exam/highlight-notes";
+import { colorOf, DEFAULT_HIGHLIGHT_COLOR, planHighlight, type HighlightColorName } from "@/lib/exam/highlight-colors";
 import type { HighlightTarget } from "@/components/exam/highlight/selection-targets";
 
 /** A saved highlight, wherever it lives: `region` says which string of the exam its offsets are measured in. */
 /** `note` (Phase H) is the student's note on this highlight, null/absent when it has none. */
-export type StoredHighlight = HighlightRange & { region: string; text: string; note?: string | null };
+/** `color` (Phase R): absent = yellow, the only colour the screen had before. */
+export type StoredHighlight = HighlightRange & { region: string; text: string; note?: string | null; color?: HighlightColorName };
 
 const EMPTY: readonly HighlightRange[] = [];
 const TEMP_PREFIX = "tmp-";
@@ -29,7 +31,7 @@ export function splitRedundant(highlights: StoredHighlight[]): { kept: StoredHig
   const redundant: StoredHighlight[] = [];
   const ordered = [...highlights].sort((a, b) => a.start - b.start || b.end - a.end);
   for (const h of ordered) {
-    const container = kept.find((k) => k.region === h.region && k.start <= h.start && k.end >= h.end);
+    const container = kept.find((k) => k.region === h.region && colorOf(k) === colorOf(h) && k.start <= h.start && k.end >= h.end);
     (container ? redundant : kept).push(h);
   }
   return { kept: highlights.filter((h) => kept.includes(h)), redundant };
@@ -102,8 +104,8 @@ export function useExamHighlights(resultId: string, initial: StoredHighlight[]) 
           if (!parsed) continue;
           change.adds.push(
             parsed.kind === "passage"
-              ? { kind: "passage", passageId: parsed.passageId, text: add.text, startOffset: add.start, endOffset: add.end, note: add.note ?? null }
-              : { kind: "question", questionId: parsed.questionId, part: parsed.part, text: add.text, startOffset: add.start, endOffset: add.end, note: add.note ?? null }
+              ? { kind: "passage", passageId: parsed.passageId, text: add.text, startOffset: add.start, endOffset: add.end, note: add.note ?? null, color: colorOf(add) }
+              : { kind: "question", questionId: parsed.questionId, part: parsed.part, text: add.text, startOffset: add.start, endOffset: add.end, note: add.note ?? null, color: colorOf(add) }
           );
         }
         removes.forEach((h, i) => {
@@ -135,14 +137,11 @@ export function useExamHighlights(resultId: string, initial: StoredHighlight[]) 
   );
 
   const addHighlights = useCallback(
-    (targets: HighlightTarget[]) => {
+    (targets: HighlightTarget[], color: HighlightColorName = DEFAULT_HIGHLIGHT_COLOR) => {
       for (const target of targets) {
-        const touching = latest.current.filter((h) => h.region === target.region && rangesTouch(h, target));
-        const start = Math.min(target.start, ...touching.map((h) => h.start));
-        const end = Math.max(target.end, ...touching.map((h) => h.end));
-        if (touching.length === 1 && touching[0].start === start && touching[0].end === end) continue; // already highlighted
-        // Highlights that merge become one; their notes stay attached to it.
-        commit([{ region: target.region, start, end, text: target.regionText.slice(start, end), note: combineNotes(touching.map((h) => h.note)) }], touching);
+        // Same-colour highlights that touch merge into one (their notes stay attached); highlighting over another colour recolours that stretch.
+        const plan = planHighlight(latest.current, target, color);
+        if (plan) commit(plan.adds, plan.removes as StoredHighlight[]);
       }
     },
     [commit]
@@ -154,7 +153,7 @@ export function useExamHighlights(resultId: string, initial: StoredHighlight[]) 
         const overlapping = latest.current.filter((h) => h.region === target.region && rangesOverlap(h, target));
         if (overlapping.length === 0) continue;
         // A highlight cut in pieces keeps its note on the first piece that is left.
-        const pieces = overlapping.flatMap((old) => remainingAfterClear(old, [target], target.regionText).map((piece, index) => ({ region: old.region, start: piece.start, end: piece.end, text: target.regionText.slice(piece.start, piece.end), note: noteForPiece(old.note, index) })));
+        const pieces = overlapping.flatMap((old) => remainingAfterClear(old, [target], target.regionText).map((piece, index) => ({ region: old.region, start: piece.start, end: piece.end, text: target.regionText.slice(piece.start, piece.end), note: noteForPiece(old.note, index), color: old.color })));
         commit(pieces, overlapping);
       }
     },
@@ -236,7 +235,7 @@ export function useExamHighlights(resultId: string, initial: StoredHighlight[]) 
     }
     for (const [region, list] of map) {
       const before = previousByRegion.current.get(region);
-      if (before && before.length === list.length && before.every((b, i) => b.id === list[i].id && b.start === list[i].start && b.end === list[i].end && b.note === list[i].note)) {
+      if (before && before.length === list.length && before.every((b, i) => b.id === list[i].id && b.start === list[i].start && b.end === list[i].end && b.note === list[i].note && b.color === list[i].color)) {
         map.set(region, before);
       }
     }

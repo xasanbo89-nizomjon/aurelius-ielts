@@ -353,8 +353,8 @@ model TeacherProfile {
   mockTests               MockTest[]
   assignments             Assignment[]
   promoCodes              PromoCode[]
-  reviewedWritings        WritingSubmission[]    @relation("WritingReviewer")
-  reviewedSpeakings       SpeakingSubmission[]   @relation("SpeakingReviewer")
+  reviewedWritings        WritingSubmission[]        @relation("WritingReviewer")
+  reviewedSpeakings       SpeakingSubmission[]       @relation("SpeakingReviewer")
   bandConversionRanges    BandConversionRange[]
   updates                 Update[]
   aiSettings              AiSettings?
@@ -363,7 +363,7 @@ model TeacherProfile {
   trialAuditLogs          TrialAuditLog[]
   writingTasks            WritingTask[]
   speakingTasks           SpeakingTask[]
-  reviewedPremiumRequests PremiumRequest[]       @relation("PremiumRequestReviewer")
+  reviewedPremiumRequests PremiumRequest[]           @relation("PremiumRequestReviewer")
   fullMockTests           FullMockTest[]
   speakingTopics          SpeakingTopic[]
   mediaFiles              MediaFile[]
@@ -380,9 +380,9 @@ model TeacherProfile {
   /// Phase M - the "Suggest with AI" requests of the evidence editor (what its daily limit counts).
   evidenceSuggestionLogs  EvidenceSuggestionLog[]
   /// Phase M2 - the AI explanation requests of the explanations editor (what its daily limit counts, and its token usage).
-  explanationLogs        ExplanationGenerationLog[]
+  explanationLogs         ExplanationGenerationLog[]
   /// Phase Q-B - a teacher's comments on a student's recorded Speaking practice.
-  speakingAudioComments  SpeakingAudioComment[]
+  speakingAudioComments   SpeakingAudioComment[]
 
   @@map("teacher_profiles")
 }
@@ -392,38 +392,38 @@ model TeacherProfile {
 // ---------------------------------------------------------------------------
 
 model MockTest {
-  id              String              @id @default(cuid())
-  title           String
-  description     String?             @db.Text
-  type            TestType
+  id                   String              @id @default(cuid())
+  title                String
+  description          String?             @db.Text
+  type                 TestType
   /// Phase 20 — Tests Hub grouping for READING/LISTENING tests, and the
   /// platform's one free-without-subscription tier (see hasActiveAccess).
   /// Meaningless for FULL_MOCK, which always defaults to GENERAL and is
   /// never surfaced as "Cambridge".
-  category        MockTestCategory    @default(GENERAL)
-  isPublished     Boolean             @default(false)
+  category             MockTestCategory    @default(GENERAL)
+  isPublished          Boolean             @default(false)
   /// Retired tests stay out of the student-facing catalog but keep their
   /// historical results intact. Independent of isPublished so a test can
   /// never be simultaneously "live" and "archived".
-  isArchived      Boolean             @default(false)
+  isArchived           Boolean             @default(false)
   /// Recommended time limit shown before starting and used to drive the
   /// in-exam countdown. Null means untimed.
-  durationMinutes Int?
+  durationMinutes      Int?
   /// Phase 34 — real, teacher-set difficulty badge (Part 2/3's "Difficulty
   /// badge"). Null for every test created before this phase existed.
-  difficulty      MockTestDifficulty?
+  difficulty           MockTestDifficulty?
   /// Phase Q - null = FULL_IELTS (every test made before this phase). See the TestFormat enum.
-  testFormat      TestFormat?
+  testFormat           TestFormat?
   /// Phase O - "Show results to students?", the teacher's answer when the test is made. true = the student sees the band / score and the review; false = the student
   /// sees only "Your test has been submitted." (teachers always see everything). null = a test made before Phase O: its results are shown, as they always were.
   /// A test taken inside a Full Mock is hidden from the student whatever this says.
   showResultsToStudent Boolean?
   /// Phase 47 — Skill Media Library's "Content thumbnails" for Reading/Listening tests. Null until a teacher uploads one.
-  coverImagePath  String?
+  coverImagePath       String?
   /// Phase L - set on a copy made with "Create new version": the test it replaces. SetNull so deleting the old test never touches the new one.
-  versionOfId     String?
-  versionOf       MockTest?  @relation("MockTestVersions", fields: [versionOfId], references: [id], onDelete: SetNull)
-  versions        MockTest[] @relation("MockTestVersions")
+  versionOfId          String?
+  versionOf            MockTest?           @relation("MockTestVersions", fields: [versionOfId], references: [id], onDelete: SetNull)
+  versions             MockTest[]          @relation("MockTestVersions")
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -453,29 +453,29 @@ model Passage {
   mockTestId String
   mockTest   MockTest @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
 
-  title         String
-  content       String  @db.Text
+  title                String
+  content              String  @db.Text
   /// Legacy: an externally-pasted audio link, from before file upload
   /// existed. Kept only for backward compatibility — the passage editor no
   /// longer writes this field.
-  audioUrl      String?
+  audioUrl             String?
   /// The uploaded audio file's servable path — a relative local path
   /// (`/uploads/...`) in dev, or an absolute public Supabase Storage URL
   /// (bucket "listening-audio") in production, set by the upload flow
   /// (src/lib/uploads/audio-storage.ts). Preferred over `audioUrl` whenever
   /// both are present. `updatedAt` doubles as the upload timestamp — it
   /// bumps whenever this field is written.
-  audioPath     String?
-  audioFileName String?
-  audioMimeType String?
-  audioSize     Int?
+  audioPath            String?
+  audioFileName        String?
+  audioMimeType        String?
+  audioSize            Int?
   /// Phase K - the recording's length in whole seconds, measured ON THE SERVER from the file itself (never taken from the browser).
   /// The Listening deadline of a sitting is the sum of its distinct recordings plus the 2 minutes of review time. Null = not measured yet.
   audioDurationSeconds Int?
   /// Phase L - where this part starts inside a recording shared by every part, in seconds (Part 1 = 0 or null). Null = not set: the screen then
   /// behaves as before (the student turns the parts themselves). Ignored when each part has its own recording.
-  audioStartSeconds Int?
-  orderIndex    Int     @default(0)
+  audioStartSeconds    Int?
+  orderIndex           Int     @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -877,7 +877,7 @@ model QuestionHighlight {
   /// "item:<promptId>" (a matching row). Offsets are character offsets into
   /// that one string, so they stay valid however the surrounding UI changes.
   region      String
-  text        String @db.Text
+  text        String         @db.Text
   startOffset Int
   endOffset   Int
   /// The colour the student chose (Yellow by default), same choice as passage highlights.
@@ -973,8 +973,8 @@ model WritingSubmission {
   /// section of a Full Mock Test attempt.
   fullMockSectionResult FullMockSectionResult?
   /// Phase O - the AI assessment this essay was marked in, as Task 1 or as Task 2 of its Writing sitting (a sitting has ONE combined assessment).
-  assessmentAsTask1     WritingAssessment? @relation("AssessmentTask1")
-  assessmentAsTask2     WritingAssessment? @relation("AssessmentTask2")
+  assessmentAsTask1     WritingAssessment?     @relation("AssessmentTask1")
+  assessmentAsTask2     WritingAssessment?     @relation("AssessmentTask2")
 
   @@map("writing_submissions")
 }
@@ -987,10 +987,10 @@ model WritingLateText {
   submissionId String
   submission   WritingSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
-  content     String @db.Text
+  content       String   @db.Text
   /// sha-256 of the text, so the same words uploaded twice (a retry) are stored once.
-  contentHash String
-  wordCount   Int
+  contentHash   String
+  wordCount     Int
   /// When the browser last held this text (the browser's own clock - informational only).
   clientSavedAt DateTime
   receivedAt    DateTime @default(now())
@@ -1118,45 +1118,45 @@ model WritingAiActionLog {
 model WritingTask {
   id String @id @default(cuid())
 
-  title             String
+  title                String
   /// Phase 42 — Academic vs General Training, a real teacher-chosen field
   /// (both share the same 4 IELTS Writing criteria, so this never changes
   /// grading/AI analysis — it's authoring metadata + student-facing label).
-  trainingType      WritingTrainingType @default(ACADEMIC)
-  taskNumber        WritingTaskNumber
-  category          WritingTaskCategory
-  prompt            String              @db.Text
+  trainingType         WritingTrainingType @default(ACADEMIC)
+  taskNumber           WritingTaskNumber
+  category             WritingTaskCategory
+  prompt               String              @db.Text
   /// For Task 1 visual tasks (Graph/Table/Process/Map) — a text description
   /// of the chart/diagram/map, kept for tasks authored before real image
   /// upload existed and as an accessible fallback. Null for Task 2.
-  visualDescription String?             @db.Text
+  visualDescription    String?             @db.Text
   /// Phase 42 — Part 11's real uploaded Task 1 visual (chart/graph/table/
   /// map/process image), reusing the Phase 38 Media Library exactly like
   /// PassageAttachment/ArticleAttachment do. Null for Task 2 and for Task 1
   /// tasks still only using the text description above.
-  imageMediaFileId  String?
-  imageMediaFile    MediaFile?          @relation(fields: [imageMediaFileId], references: [id], onDelete: SetNull)
+  imageMediaFileId     String?
+  imageMediaFile       MediaFile?          @relation(fields: [imageMediaFileId], references: [id], onDelete: SetNull)
   /// Phase F - the Task 1 picture's metadata, copied from the Media Library file at save time (never taken from the browser) so the student pages can show the picture at its real proportions with no join and no layout shift. imageUrl = the served URL, imageType = its MIME type (image/jpeg | image/png | image/webp), width/height = real pixels read from the file. All null when the task has no picture. Tasks saved before Phase F have these null and fall back to imageMediaFile.
-  imageUrl          String?
-  imageType         String?
-  imageWidth        Int?
-  imageHeight       Int?
+  imageUrl             String?
+  imageType            String?
+  imageWidth           Int?
+  imageHeight          Int?
   /// Phase 14 — supersedes the old `isPublished` boolean with a real
   /// 3-state lifecycle (Create -> Publish -> Archive), matching the Root
   /// Teacher Writing Tasks workflow. Only PUBLISHED tasks are ever visible
   /// to students, exactly like isPublished: true was before.
-  status            WritingTaskStatus   @default(DRAFT)
+  status               WritingTaskStatus   @default(DRAFT)
   /// Optional guidance band this task targets, e.g. 6.5 — shown to students, never used to alter AI scoring.
-  targetBand        Float?
+  targetBand           Float?
   /// The assignment deadline. Purely informational (drives "overdue" styling on the student task list) — never blocks a late submission.
-  dueDate           DateTime?
+  dueDate              DateTime?
   /// Phase 47 — Skill Media Library's "Content thumbnails" for Writing assignments, shown in task LISTS (distinct from imageMediaFile above, which is the Task 1 question's own chart/graph content).
-  coverImagePath    String?
+  coverImagePath       String?
   /// Phase L - Task 1 and Task 2 created together in the test builder share one bundleId (a "Writing test"). Null for every task made on its own.
-  bundleId          String?
+  bundleId             String?
   /// Phase L - a Task 1 visual that was uploaded as a PDF: the original file is kept here, the chosen page was turned into the PNG held in imageUrl.
-  visualPdfUrl      String?
-  visualPdfPage     Int?
+  visualPdfUrl         String?
+  visualPdfPage        Int?
   /// Phase O - the same setting as MockTest.showResultsToStudent, for a Writing task / Writing test (both tasks of a bundle carry the same value). null = made before Phase O: shown.
   showResultsToStudent Boolean?
 
@@ -1531,30 +1531,30 @@ enum FullMockTestStatus {
 }
 
 model FullMockTest {
-  id               String              @id @default(cuid())
-  title            String
-  description      String?             @db.Text
-  coverImagePath   String?
-  status           FullMockTestStatus  @default(DRAFT)
+  id                     String              @id @default(cuid())
+  title                  String
+  description            String?             @db.Text
+  coverImagePath         String?
+  status                 FullMockTestStatus  @default(DRAFT)
   /// A real, teacher-set guidance range shown on the card (e.g. 6.0-7.5) —
   /// never computed/invented; null until the teacher sets it in Step 1/6.
   /// Phase K - how long a student may stay on the "Section finished - Continue" screen before the next section starts by itself (it then
   /// starts as of the moment the wait ended, so nothing is gained by waiting). 5 minutes unless a teacher sets otherwise.
-  transitionLimitMinutes Int @default(5)
-  estimatedBandMin Float?
-  estimatedBandMax Float?
+  transitionLimitMinutes Int                 @default(5)
+  estimatedBandMin       Float?
+  estimatedBandMax       Float?
   /// Phase 47 — Mock Exam Center card's "Exam Number" (e.g. "Cambridge Mock 1").
   /// A real teacher-set label, never parsed/guessed from the title.
-  examNumber       Int?
+  examNumber             Int?
   /// Phase 47 — reuses the same enum Reading/Listening MockTests already use,
   /// purely a teacher-set guidance badge (never alters routing/scoring).
-  difficulty       MockTestDifficulty?
+  difficulty             MockTestDifficulty?
   /// Phase 47 — reuses the exact CAMBRIDGE-is-free-without-subscription
   /// convention MockTest already has (see hasActiveAccessForTest); a
   /// CAMBRIDGE-category Full Mock Test is the "Free users: limited" tier's
   /// real free inventory, GENERAL is premium-gated. Defaults to GENERAL so
   /// every pre-Phase-47 test stays premium-gated exactly as it already was.
-  category         MockTestCategory    @default(GENERAL)
+  category               MockTestCategory    @default(GENERAL)
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -1693,13 +1693,13 @@ model FullMockAttempt {
   /// Phase E — when the student pressed "Start Writing". Anchors the single
   /// 60-minute Writing countdown on the server (Reading's and Listening's
   /// countdowns are anchored on their own Result.startedAt). Null until then.
-  writingStartedAt DateTime?
+  writingStartedAt      DateTime?
   /// Phase K - when the Writing paper ended (handed in, expired or ended by the teacher) and how. Time used for Writing is
   /// min(writingEndedAt - writingStartedAt, 60 min); the sitting's total time is the SUM of its sections, not wall-clock.
-  writingEndedAt   DateTime?
-  writingEndReason SectionEndReason?
+  writingEndedAt        DateTime?
+  writingEndReason      SectionEndReason?
 
-  sectionResults FullMockSectionResult[]
+  sectionResults    FullMockSectionResult[]
   /// Phase O - the AI assessment of this sitting's Writing paper (null when the mock has no Writing or it was not handed in yet).
   writingAssessment WritingAssessment?
 
@@ -1921,6 +1921,34 @@ enum PremiumPlanCode {
   TWELVE_MONTHS
 }
 
+/// Phase R - the Premium plans on sale, editable by the Root Teacher (/teacher/premium-plans). The three original plans are seeded by the migration with their old
+/// prices; `legacyCode` ties a seeded plan to the PremiumPlanCode its old requests carry. A plan with requests is hidden (isActive = false), never deleted.
+model PremiumPlan {
+  id           String           @id @default(cuid())
+  name         String
+  durationDays Int
+  price        Float
+  /// "USD" or "UZS".
+  currency     String           @default("USD")
+  /// null | "POPULAR" | "BEST VALUE"
+  badge        String?
+  /// string[] in the order shown.
+  features     Json             @default("[]")
+  /// An https://t.me/... address; empty = the owner's username from the settings.
+  telegramLink String?
+  isActive     Boolean          @default(true)
+  sortOrder    Int              @default(0)
+  legacyCode   PremiumPlanCode? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requests PremiumRequest[]
+
+  @@index([isActive, sortOrder])
+  @@map("premium_plans")
+}
+
 /// Phase 30 — Telegram Premium Sales. A student "buying" Premium creates one
 /// of these (PENDING) and is redirected to Telegram with a prefilled
 /// message; there is no payment gateway, so this row IS the purchase
@@ -1932,12 +1960,19 @@ model PremiumRequest {
   studentId String
   student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  planCode     PremiumPlanCode
+  /// Phase R - null for a request made on a plan the Root Teacher added later (it has no legacy code); `planId` / `planName` say which plan it was.
+  planCode      PremiumPlanCode?
   /// Denormalized snapshot of the plan's price/duration at request time, so
   /// a later change to PREMIUM_PLANS never rewrites what an already-submitted
   /// request actually asked for.
-  priceLabel   String
-  durationDays Int
+  priceLabel    String
+  durationDays  Int
+  /// Phase R - the plan row, the name and the price/currency as they were when the student pressed Buy (snapshots: editing a plan never rewrites what was paid).
+  planId        String?
+  plan          PremiumPlan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
+  planName      String?
+  priceAmount   Float?
+  priceCurrency String?
 
   status PremiumRequestStatus @default(PENDING)
 
@@ -2239,23 +2274,23 @@ model AiSettings {
   teacher   TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
 
   /// "Explain More" requests a single student can generate fresh per day.
-  dailyExplanationLimit        Int @default(20)
+  dailyExplanationLimit        Int      @default(20)
   /// AI writing actions (analysis, rewrite, or sentence improvement) a
   /// single student can generate fresh per day.
-  dailyWritingActionLimit      Int @default(10)
+  dailyWritingActionLimit      Int      @default(10)
   /// Fresh AI Vocabulary Assistant generations (word intelligence + Explain
   /// Word combined) a single student can trigger per day. Cache hits never
   /// count against this.
-  dailyVocabularyAiLimit       Int @default(50)
+  dailyVocabularyAiLimit       Int      @default(50)
   /// Phase 26 — Study Coin Rewards' configurable daily cap (coins, not
   /// requests) — see src/lib/coins.ts settleStudyCoinsForToday. Same
   /// per-teacher-configurable pattern as the 3 limits above.
-  dailyStudyCoinCap            Int @default(45)
+  dailyStudyCoinCap            Int      @default(45)
   /// Phase 27 — real-time AI Speaking evaluations (Whisper transcription +
   /// scoring) a single student can trigger per day — see
   /// src/lib/speaking.ts assertWithinSpeakingRateLimit. Counted directly
   /// from SpeakingSubmission rows created today, no separate log table.
-  dailySpeakingEvaluationLimit Int @default(15)
+  dailySpeakingEvaluationLimit Int      @default(15)
   /// Phase M - the teacher has switched on "Suggest with AI" in the answer-evidence editor. Null = off (what every existing row and a missing row mean).
   evidenceSuggestionsEnabled   Boolean?
   /// Phase M - AI evidence suggestions this teacher may ask for per day. Null = the default (see src/lib/ai/evidence-suggestions.ts).
@@ -3139,19 +3174,19 @@ model SpeakingAudioPractice {
   student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   /// 1, 2 or 3.
-  part       Int
+  part             Int
   /// "OWN" (typed by the student) or "TOPIC" (taken from Speaking Topics).
-  source     String
-  topicId    String?
-  questionId String?
+  source           String
+  topicId          String?
+  questionId       String?
   /// The question as it was asked, copied at the time: later edits of a topic never change an old practice.
-  question      String  @db.Text
+  question         String  @db.Text
   /// Part 2: the "You should say" points (a JSON array of strings).
-  cueCardPoints Json?
+  cueCardPoints    Json?
   /// Part 2: what the student wrote in the preparation minute.
-  notes         String? @db.Text
+  notes            String? @db.Text
   /// The language of the written feedback: "en" or "uz".
-  feedbackLanguage String @default("en")
+  feedbackLanguage String  @default("en")
 
   status SpeakingAudioStatus @default(AWAITING_UPLOAD)
 
@@ -3170,7 +3205,7 @@ model SpeakingAudioPractice {
   /// The mean of the four, rounded the IELTS way - stored so the student's LATEST speaking band can be read without recomputing (Phase O).
   overallBand            Float?
   /// True when the model could not hear the recording and Pronunciation was estimated from the transcript.
-  pronunciationEstimated Boolean @default(false)
+  pronunciationEstimated Boolean  @default(false)
   /// { summary, strengths[], mistakes[{ quote, problem, correction }], vocabulary[{ insteadOf, better, example }], sampleAnswer }
   assessment             Json?
   transcribeModel        String?
@@ -3208,16 +3243,16 @@ model SpeakingAudioRun {
   /// "TRANSCRIBE", "ASSESS", "ASSESS_RETRY" (second try after an unusable reply) or "ASSESS_TEXT" (assessment from the transcript alone).
   kind             String
   model            String
-  promptTokens     Int     @default(0)
-  completionTokens Int     @default(0)
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
   /// The audio part of promptTokens.
-  audioInputTokens Int     @default(0)
-  audioSeconds     Float   @default(0)
+  audioInputTokens Int      @default(0)
+  audioSeconds     Float    @default(0)
   /// An estimate in millionths of a dollar (whole numbers, so sums are exact).
-  costMicroUsd     Int     @default(0)
+  costMicroUsd     Int      @default(0)
   ok               Boolean
   error            String?
-  durationMs       Int     @default(0)
+  durationMs       Int      @default(0)
   createdAt        DateTime @default(now())
 
   @@index([practiceId])

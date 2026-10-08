@@ -145,6 +145,7 @@ export default async function ExamAttemptPage({
         text: highlight.text,
         startOffset: highlight.startOffset,
         endOffset: highlight.endOffset,
+        color: highlight.color,
         note: highlight.note,
       }))}
       initialNotes={attempt.notes.map((note) => ({

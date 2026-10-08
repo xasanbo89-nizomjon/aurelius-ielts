@@ -914,6 +914,68 @@
   box-shadow: 0 0 0 1px var(--exam-highlight);
 }
 
+/*
+ * Phase R - the other highlight colours. Each sets the same two variables the yellow uses, so the thin edge on the black screens and the note marker follow it; the ink
+ * stays black on every light colour, so the text is readable in all three contrast settings.
+ */
+.official-exam .exam-highlight[data-hl-color="BLUE"],
+.official-exam .ex-swatch[data-hl-color="BLUE"] {
+  --exam-highlight: #8fd0ff;
+  --exam-highlight-ink: #000000;
+}
+.official-exam .exam-highlight[data-hl-color="RED"],
+.official-exam .ex-swatch[data-hl-color="RED"] {
+  --exam-highlight: #ff9fa9;
+  --exam-highlight-ink: #000000;
+}
+.official-exam .exam-highlight[data-hl-color="GREEN"] {
+  --exam-highlight: #9be8a4;
+  --exam-highlight-ink: #000000;
+}
+
+/* The toolbar over a selection (Phase R): colour swatches, Note, Clear. */
+.ex-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.3em 0.4em;
+  max-width: calc(100vw - 1em);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ex-swatch {
+  width: 1.7em;
+  height: 1.7em;
+  padding: 0;
+  border: 1px solid var(--ex-fg);
+  background: var(--exam-highlight);
+  cursor: pointer;
+}
+
+.ex-swatch:hover,
+.ex-swatch:focus-visible {
+  outline: 2px solid var(--ex-accent);
+  outline-offset: 1px;
+}
+
+.ex-toolbar-text {
+  min-height: 1.7em;
+  padding: 0 0.6em;
+  border: 1px solid var(--ex-control);
+  background: var(--ex-bg);
+  color: var(--ex-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ex-toolbar-text:hover,
+.ex-toolbar-text:focus-visible {
+  background: var(--ex-bar);
+  outline: 2px solid var(--ex-accent);
+  outline-offset: 1px;
+}
+
 /* The little "this highlight has a note" button after a highlight. It holds no text, so it can never be copied with the passage. */
 .ex-note-marker {
   display: inline-flex;
@@ -946,7 +1008,7 @@
 
 /* The menu, the small button above a selection and the note box are drawn inside the exam root, so they follow its contrast and text size. */
 .ex-ctx,
-.ex-opener,
+.ex-toolbar,
 .ex-note {
   position: fixed;
   z-index: 40;
@@ -995,28 +1057,6 @@
   margin: 0.25em 0;
   border: 0;
   border-top: 1px solid var(--ex-border);
-}
-
-.ex-opener {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.4em;
-  height: 1.8em;
-  padding: 0;
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-/* Three dots, drawn here so the button holds no text. */
-.ex-opener span::before {
-  content: "\2022\2022\2022";
-  letter-spacing: 0.08em;
-}
-
-.ex-opener:hover {
-  background: var(--ex-bar);
 }
 
 .ex-note {

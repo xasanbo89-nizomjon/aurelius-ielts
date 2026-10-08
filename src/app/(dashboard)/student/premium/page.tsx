@@ -4,13 +4,14 @@ import { CalendarClock, Check, CheckCircle2, Crown, History, Send, X } from "luc
 
 import { requireStudentProfile } from "@/lib/session";
 import { getSubscriptionSummary } from "@/lib/subscription";
-import { ACTIVE_PREMIUM_PLANS } from "@/lib/premium-plans";
+import { listPlansForStudents } from "@/lib/premium-plan-store";
 import { getTelegramOwnerUsername } from "@/lib/telegram";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PremiumPlanCard } from "@/components/student/premium-plan-card";
+import { PremiumAccountSections } from "@/components/student/premium-account-sections";
 
 export const metadata: Metadata = { title: "Premium" };
 
@@ -28,8 +29,9 @@ const FEATURE_COMPARISON: { feature: string; free: boolean; premium: boolean }[]
 
 export default async function StudentPremiumPage() {
   const { user, profile } = await requireStudentProfile();
-  const summary = await getSubscriptionSummary(profile.id);
-  const telegramConfigured = getTelegramOwnerUsername() != null;
+  const [summary, plans] = await Promise.all([getSubscriptionSummary(profile.id), listPlansForStudents()]);
+  // A plan with its own Telegram link does not need the owner username; the warning shows only when some plan has neither.
+  const telegramConfigured = getTelegramOwnerUsername() != null || plans.every((plan) => plan.telegramLink != null);
 
   return (
     <>
@@ -79,10 +81,11 @@ export default async function StudentPremiumPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-6 pt-2 sm:grid-cols-3">
-        {ACTIVE_PREMIUM_PLANS.map((plan) => (
-          <PremiumPlanCard key={plan.code} plan={plan} studentEmail={user.email ?? ""} studentId={profile.id} />
+      <div id="plans" className="grid grid-cols-1 gap-6 pt-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="premium-plans">
+        {plans.map((plan) => (
+          <PremiumPlanCard key={plan.id} plan={plan} studentEmail={user.email ?? ""} studentId={profile.id} />
         ))}
+        {plans.length === 0 && <p className="text-muted-foreground col-span-full text-center text-sm">No plans are on sale right now. Please check back soon.</p>}
       </div>
 
       <section className="space-y-4">
@@ -138,6 +141,8 @@ export default async function StudentPremiumPage() {
           </div>
         </CardContent>
       </Card>
+
+      <PremiumAccountSections studentId={profile.id} teacherId={profile.teacherId} />
     </>
   );
 }

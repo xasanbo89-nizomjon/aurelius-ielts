@@ -3,7 +3,7 @@ import type { TrialAuditAction, SubscriptionStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { addDays, getSubscriptionSummary, TRIAL_DURATION_DAYS, type SubscriptionSummary } from "@/lib/subscription";
-import { PREMIUM_PLANS } from "@/lib/premium-plans";
+import { requestPlanTitle } from "@/lib/premium-plans";
 
 const TRIAL_EXTENSION_DAYS = 30;
 
@@ -276,12 +276,12 @@ export async function listSubscribersForRoot(status?: SubscriptionStatus | "ALL"
       ? await prisma.premiumRequest.findMany({
           where: { studentId: { in: telegramStudentIds }, status: "APPROVED" },
           orderBy: { reviewedAt: "desc" },
-          select: { studentId: true, planCode: true },
+          select: { studentId: true, planCode: true, planName: true },
         })
       : [];
-  const latestPlanCodeByStudent = new Map<string, string>();
+  const latestPlanTitleByStudent = new Map<string, string>();
   for (const request of approvedRequests) {
-    if (!latestPlanCodeByStudent.has(request.studentId)) latestPlanCodeByStudent.set(request.studentId, request.planCode);
+    if (!latestPlanTitleByStudent.has(request.studentId)) latestPlanTitleByStudent.set(request.studentId, requestPlanTitle(request));
   }
 
   const now = new Date();
@@ -289,8 +289,7 @@ export async function listSubscribersForRoot(status?: SubscriptionStatus | "ALL"
   return subscriptions.map((sub) => {
     let planLabel: string;
     if (sub.source === "TELEGRAM_PURCHASE") {
-      const planCode = latestPlanCodeByStudent.get(sub.studentId);
-      planLabel = planCode ? (PREMIUM_PLANS.find((p) => p.code === planCode)?.title ?? "Telegram Purchase") : "Telegram Purchase";
+      planLabel = latestPlanTitleByStudent.get(sub.studentId) ?? "Telegram Purchase";
     } else if (sub.source === "ADMIN_GRANT") {
       planLabel = ADMIN_GRANT_LABEL;
     } else if (sub.source === "COIN_REDEMPTION") {

@@ -22,7 +22,7 @@ export async function startFullMockAttemptAction(fullMockTestId: string) {
   const { profile } = await requireStudentProfile();
 
   if (!(await hasActiveAccessForFullMockTest(profile.id, fullMockTestId))) {
-    redirect("/student/subscription?upgrade=1");
+    redirect("/student/premium?upgrade=1");
   }
 
   const existing = await findInProgressFullMockAttempt(profile.id, fullMockTestId);

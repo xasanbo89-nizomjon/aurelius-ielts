@@ -22,7 +22,7 @@ export function PremiumNavBadge({ isPremium, daysRemaining }: { isPremium: boole
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
-          href={isPremium ? "/student/subscription" : "/student/premium"}
+          href={isPremium ? "/student/premium" : "/student/premium"}
           aria-label={label}
           className={cn(
             "focus-visible:ring-ring/50 flex h-10 items-center gap-1 rounded-full px-2 outline-none transition-colors focus-visible:ring-2",

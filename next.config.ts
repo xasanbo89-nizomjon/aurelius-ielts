@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/teacher/**": ["./node_modules/@hyzyla/pdfium/dist/pdfium.wasm"],
   },
+  // Phase R - the Subscription page was folded into Premium. Redirecting here (before any page renders) keeps old bookmarks and ?upgrade=1 links working
+  // without a client-side redirect from inside the dashboard layout.
+  async redirects() {
+    return [{ source: "/student/subscription", destination: "/student/premium", permanent: false }];
+  },
   experimental: {
     serverActions: {
       // Default is 1MB — raised so teachers can upload listening audio

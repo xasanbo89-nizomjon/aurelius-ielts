@@ -2,7 +2,8 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { addDays, getSubscriptionSummary, type SubscriptionSummary } from "@/lib/subscription";
-import { getPremiumPlan, type PremiumPlanCode } from "@/lib/premium-plans";
+import { requestPlanTitle, type PremiumPlanCode } from "@/lib/premium-plans";
+import { formatPlanPrice } from "@/lib/premium-plan-rules";
 
 async function assertStudentExists(studentId: string): Promise<void> {
   const exists = await prisma.studentProfile.findUnique({ where: { id: studentId }, select: { id: true } });
@@ -15,7 +16,7 @@ async function assertStudentExists(studentId: string): Promise<void> {
 
 export type PremiumRequestRow = {
   id: string;
-  planCode: PremiumPlanCode;
+  planCode: PremiumPlanCode | null;
   planTitle: string;
   priceLabel: string;
   durationDays: number;
@@ -31,10 +32,21 @@ export type PremiumRequestRow = {
  * "buy" click — no payment gateway, so this PENDING row genuinely is the
  * entire transaction until a root teacher reviews it.
  */
-export async function createPremiumRequest(studentId: string, planCode: PremiumPlanCode) {
-  const plan = getPremiumPlan(planCode);
+export async function createPremiumRequest(studentId: string, planId: string) {
+  const plan = await prisma.premiumPlan.findUnique({ where: { id: planId } });
+  if (!plan || !plan.isActive) throw new Error("This plan is not available any more. Reload the page.");
+  // Phase R - the name, price and currency as the student saw them are stored with the request.
   return prisma.premiumRequest.create({
-    data: { studentId, planCode, priceLabel: plan.priceLabel, durationDays: plan.durationDays },
+    data: {
+      studentId,
+      planId: plan.id,
+      planName: plan.name,
+      planCode: plan.legacyCode,
+      priceLabel: formatPlanPrice(plan.price, plan.currency),
+      priceAmount: plan.price,
+      priceCurrency: plan.currency,
+      durationDays: plan.durationDays,
+    },
   });
 }
 
@@ -54,7 +66,7 @@ export async function listPremiumRequestsForStudent(studentId: string): Promise<
   return requests.map((r) => ({
     id: r.id,
     planCode: r.planCode,
-    planTitle: getPremiumPlan(r.planCode).title,
+    planTitle: requestPlanTitle(r),
     priceLabel: r.priceLabel,
     durationDays: r.durationDays,
     status: r.status,
@@ -86,7 +98,7 @@ export async function listPremiumRequestsForRoot(): Promise<PremiumRequestForRev
     studentName: r.student.user.name,
     studentEmail: r.student.user.email,
     planCode: r.planCode,
-    planTitle: getPremiumPlan(r.planCode).title,
+    planTitle: requestPlanTitle(r),
     priceLabel: r.priceLabel,
     durationDays: r.durationDays,
     status: r.status,

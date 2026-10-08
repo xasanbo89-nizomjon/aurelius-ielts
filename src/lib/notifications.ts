@@ -3,7 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { writingShownToStudentWhere } from "@/lib/exam/result-visibility";
 import { getSubscriptionSummary } from "@/lib/subscription";
-import { getPremiumPlan } from "@/lib/premium-plans";
+import { requestPlanTitle } from "@/lib/premium-plans";
 
 export type NotificationCategory = "TEACHER_UPDATE" | "NEW_ARTICLE" | "WRITING_REVIEW" | "SPEAKING_REVIEW" | "SYSTEM_NOTICE" | "PREMIUM_REQUEST";
 
@@ -69,7 +69,7 @@ export async function getNotificationInbox(studentId: string, teacherId: string 
       where: { studentId, status: { not: "PENDING" }, reviewedAt: { not: null } },
       orderBy: { reviewedAt: "desc" },
       take: PER_CATEGORY_LIMIT,
-      select: { id: true, planCode: true, status: true, reviewedAt: true },
+      select: { id: true, planCode: true, planName: true, status: true, reviewedAt: true },
     }),
     getSubscriptionSummary(studentId),
     prisma.notificationRead.findMany({ where: { studentId }, select: { itemKey: true } }),
@@ -120,9 +120,9 @@ export async function getNotificationInbox(studentId: string, teacherId: string 
       title: request.status === "APPROVED" ? "Premium request approved" : "Premium request declined",
       content:
         request.status === "APPROVED"
-          ? `Your ${getPremiumPlan(request.planCode).title} purchase was approved — Premium is now active.`
-          : `Your ${getPremiumPlan(request.planCode).title} purchase request was declined. Message the owner on Telegram if you have questions.`,
-      href: request.status === "APPROVED" ? "/student/subscription" : "/student/premium",
+          ? `Your ${requestPlanTitle(request)} purchase was approved — Premium is now active.`
+          : `Your ${requestPlanTitle(request)} purchase request was declined. Message the owner on Telegram if you have questions.`,
+      href: request.status === "APPROVED" ? "/student/premium" : "/student/premium",
       at: request.reviewedAt as Date,
       isRead: readKeys.has(`premium-request-${request.id}`),
     })),

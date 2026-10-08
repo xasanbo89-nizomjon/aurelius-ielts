@@ -3,6 +3,7 @@ import type { HighlightColor } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { HIGHLIGHT_MAX_OFFSET, HIGHLIGHT_MAX_TEXT_LENGTH, QUESTION_REGION_PART_PATTERN } from "@/lib/exam/text-highlight";
 import { NOTE_MAX_LENGTH, cleanNote } from "@/lib/exam/highlight-notes";
+import { isHighlightColor } from "@/lib/exam/highlight-colors";
 
 /** One attempt never needs more than this; it only stops a runaway client from filling the table. */
 const MAX_HIGHLIGHTS_PER_ATTEMPT = 800;
@@ -98,8 +99,8 @@ export async function removeQuestionHighlight(resultId: string, studentId: strin
 export type HighlightChange = {
   /** New highlights to store, in order — the result lists their ids in the same order. A highlight may carry its note (Phase H). */
   adds: (
-    | { kind: "passage"; passageId: string; text: string; startOffset: number; endOffset: number; note?: string | null }
-    | { kind: "question"; questionId: string; part: string; text: string; startOffset: number; endOffset: number; note?: string | null }
+    | { kind: "passage"; passageId: string; text: string; startOffset: number; endOffset: number; note?: string | null; color?: HighlightColor }
+    | { kind: "question"; questionId: string; part: string; text: string; startOffset: number; endOffset: number; note?: string | null; color?: HighlightColor }
   )[];
   removePassageIds: string[];
   removeQuestionIds: string[];
@@ -133,6 +134,7 @@ export async function applyHighlightChange(resultId: string, studentId: string, 
   for (const add of change.adds) {
     if (add.note != null && (typeof add.note !== "string" || add.note.length > NOTE_MAX_LENGTH)) throw new Error("That note isn't valid.");
     assertValidRange(add.text, add.startOffset, add.endOffset);
+    if (add.color !== undefined && !isHighlightColor(add.color)) throw new Error("That highlight colour isn't valid.");
     if (add.kind === "question") {
       if (add.text.length !== add.endOffset - add.startOffset || !QUESTION_REGION_PART_PATTERN.test(add.part)) throw new Error("That highlight isn't valid.");
     }
@@ -158,8 +160,8 @@ export async function applyHighlightChange(resultId: string, studentId: string, 
   const writes = [
     ...change.adds.map((add) =>
       add.kind === "passage"
-        ? prisma.highlight.create({ data: { resultId, passageId: add.passageId, text: add.text, startOffset: add.startOffset, endOffset: add.endOffset, color: "YELLOW", note: cleanNote(add.note) }, select: { id: true } })
-        : prisma.questionHighlight.create({ data: { resultId, questionId: add.questionId, region: add.part, text: add.text, startOffset: add.startOffset, endOffset: add.endOffset, color: "YELLOW", note: cleanNote(add.note) }, select: { id: true } })
+        ? prisma.highlight.create({ data: { resultId, passageId: add.passageId, text: add.text, startOffset: add.startOffset, endOffset: add.endOffset, color: add.color ?? "YELLOW", note: cleanNote(add.note) }, select: { id: true } })
+        : prisma.questionHighlight.create({ data: { resultId, questionId: add.questionId, region: add.part, text: add.text, startOffset: add.startOffset, endOffset: add.endOffset, color: add.color ?? "YELLOW", note: cleanNote(add.note) }, select: { id: true } })
     ),
     ...(change.removePassageIds.length ? [prisma.highlight.deleteMany({ where: { id: { in: change.removePassageIds }, resultId } })] : []),
     ...(change.removeQuestionIds.length ? [prisma.questionHighlight.deleteMany({ where: { id: { in: change.removeQuestionIds }, resultId } })] : []),
@@ -181,7 +183,7 @@ export async function listQuestionHighlights(resultId: string) {
     return await prisma.questionHighlight.findMany({
       where: { resultId },
       orderBy: { createdAt: "asc" },
-      select: { id: true, questionId: true, region: true, text: true, startOffset: true, endOffset: true, note: true },
+      select: { id: true, questionId: true, region: true, text: true, startOffset: true, endOffset: true, color: true, note: true },
     });
   } catch (error) {
     console.error("[exam] could not load question highlights", error instanceof Error ? error.message : error);

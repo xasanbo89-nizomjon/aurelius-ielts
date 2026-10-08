@@ -149,7 +149,7 @@ export default async function ExamStartPage({
           ) : (
             <>
               <Button asChild size="lg" className="w-full">
-                <Link href="/student/subscription?upgrade=1">
+                <Link href="/student/premium?upgrade=1">
                   <Lock className="size-4" /> Upgrade to Premium
                 </Link>
               </Button>

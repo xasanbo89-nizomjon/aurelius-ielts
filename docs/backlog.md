@@ -195,3 +195,13 @@ Phase L1 and L2 are done (`docs/test-builder.md`). Known limits and what could c
 - Students' Scores lists the latest Full Mock only; a trend chart of a student's mocks is not built. Earlier mocks show Listening/Reading/Writing (no Overall: Speaking is "latest practice" only).
 - The jobs need `CRON_SECRET` + a scheduler (see `docs/server-expiry.md`); without them a stuck assessment is restarted when a page or the status route sees it.
 - "Only one active Full Mock" archives the publisher's own mocks (a Root Teacher: all); another teacher's mock is not touched.
+
+## Phase R follow-ups (Subscription → Premium, instant highlight toolbar, editable Premium plans)
+
+- **Review pages still draw a student's highlights in yellow**: the colour is stored and shown during the exam (Reading, Listening, Writing prompt use the same layer), but the result review does not read it yet.
+- The toolbar offers Yellow, Blue, Red. GREEN (older attempts) is still drawn but not offered, because a review draws the teacher's evidence in green. Highlighting over another colour recolours that stretch.
+- Premium plans: `premium_plans` (Root only at `/teacher/premium-plans`). A plan with purchase requests is hidden, never deleted. `premium_requests.planCode` is now nullable (a plan added later has no legacy code); the name, price (`priceLabel`, `priceAmount`, `priceCurrency`) are copied onto each request when the student presses Buy.
+- Premium Analytics revenue figures (if any) still read `priceLabel`; they do not yet sum `priceAmount` per currency.
+- The teacher sidebar shows Root-only pages (Premium Plans, like Premium Requests) to every teacher; the page itself sends a normal teacher to the dashboard.
+- `/student/subscription` is a redirect in `next.config.ts` (the page file stays as a fallback); the teacher-side "Subscription Plans" page is a different feature and was not touched.
+- Checks: `npm run check:r` (no database).

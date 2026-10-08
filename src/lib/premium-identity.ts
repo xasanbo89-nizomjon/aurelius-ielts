@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionSummary } from "@/lib/subscription";
-import { getPremiumPlan } from "@/lib/premium-plans";
+import { requestPlanTitle } from "@/lib/premium-plans";
 
 export type PremiumIdentity = {
   isPremium: boolean;
@@ -34,9 +34,9 @@ export async function getPremiumIdentity(studentId: string): Promise<PremiumIden
     const lastApprovedRequest = await prisma.premiumRequest.findFirst({
       where: { studentId, status: "APPROVED" },
       orderBy: { reviewedAt: "desc" },
-      select: { planCode: true },
+      select: { planCode: true, planName: true },
     });
-    planName = lastApprovedRequest ? getPremiumPlan(lastApprovedRequest.planCode).title : "Premium";
+    planName = lastApprovedRequest ? requestPlanTitle(lastApprovedRequest) : "Premium";
   }
 
   return {

@@ -46,7 +46,7 @@ function UpgradeNotice() {
   return (
     <>
       <p>Your free trial has ended. Upgrade or redeem a promo code to keep taking tests.</p>
-      <Link href="/student/subscription?upgrade=1" className="ex-button ex-button-primary" style={{ display: "inline-block", textDecoration: "none" }}>
+      <Link href="/student/premium?upgrade=1" className="ex-button ex-button-primary" style={{ display: "inline-block", textDecoration: "none" }}>
         Upgrade to Premium
       </Link>
     </>

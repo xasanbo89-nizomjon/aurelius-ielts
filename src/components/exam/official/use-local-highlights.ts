@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { cleanNote, combineNotes, noteForPiece } from "@/lib/exam/highlight-notes";
-import { rangesOverlap, rangesTouch, remainingAfterClear } from "@/lib/exam/text-highlight";
+import { cleanNote, noteForPiece } from "@/lib/exam/highlight-notes";
+import { DEFAULT_HIGHLIGHT_COLOR, isHighlightColor, planHighlight, type HighlightColorName } from "@/lib/exam/highlight-colors";
+import { rangesOverlap, remainingAfterClear } from "@/lib/exam/text-highlight";
 import type { HighlightTarget } from "@/components/exam/highlight/selection-targets";
 import type { StoredHighlight } from "@/components/exam/highlight/use-exam-highlights";
 
@@ -25,10 +26,10 @@ function readStored(raw: string | null): StoredHighlight[] {
     const out: StoredHighlight[] = [];
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
-      const { id, region, start, end, text, note } = item as Partial<StoredHighlight>;
+      const { id, region, start, end, text, note, color } = item as Partial<StoredHighlight>;
       if (typeof id !== "string" || typeof region !== "string" || typeof text !== "string") continue;
       if (typeof start !== "number" || typeof end !== "number" || !Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start) continue;
-      out.push({ id, region, start, end, text, note: typeof note === "string" ? note : null });
+      out.push({ id, region, start, end, text, note: typeof note === "string" ? note : null, color: isHighlightColor(color) ? color : undefined });
     }
     return out;
   } catch {
@@ -70,15 +71,13 @@ export function useLocalHighlights(storageKey: string) {
   const newId = () => `local-${Date.now().toString(36)}-${(counter.current += 1)}`;
 
   const addHighlights = useCallback(
-    (targets: HighlightTarget[]) => {
+    (targets: HighlightTarget[], color: HighlightColorName = DEFAULT_HIGHLIGHT_COLOR) => {
       for (const target of targets) {
-        const touching = latest.current.filter((h) => h.region === target.region && rangesTouch(h, target));
-        const start = Math.min(target.start, ...touching.map((h) => h.start));
-        const end = Math.max(target.end, ...touching.map((h) => h.end));
-        if (touching.length === 1 && touching[0].start === start && touching[0].end === end) continue; // already highlighted
-        // Highlights that merge become one; their notes stay attached to it.
-        const merged: StoredHighlight = { id: newId(), region: target.region, start, end, text: target.regionText.slice(start, end), note: combineNotes(touching.map((h) => h.note)) };
-        apply((current) => [...current.filter((h) => !touching.includes(h)), merged]);
+        const plan = planHighlight(latest.current, target, color);
+        if (!plan) continue;
+        const added: StoredHighlight[] = plan.adds.map((add) => ({ ...add, id: newId() }));
+        const removed = new Set<string>(plan.removes.map((h) => h.id));
+        apply((current) => [...current.filter((h) => !removed.has(h.id)), ...added]);
       }
     },
     [apply]
@@ -91,7 +90,7 @@ export function useLocalHighlights(storageKey: string) {
         if (overlapping.length === 0) continue;
         // A highlight cut in pieces keeps its note on the first piece that is left.
         const pieces: StoredHighlight[] = overlapping.flatMap((old) =>
-          remainingAfterClear(old, [target], target.regionText).map((piece, index) => ({ id: newId(), region: old.region, start: piece.start, end: piece.end, text: target.regionText.slice(piece.start, piece.end), note: noteForPiece(old.note, index) }))
+          remainingAfterClear(old, [target], target.regionText).map((piece, index) => ({ id: newId(), region: old.region, start: piece.start, end: piece.end, text: target.regionText.slice(piece.start, piece.end), note: noteForPiece(old.note, index), color: old.color }))
         );
         apply((current) => [...current.filter((h) => !overlapping.includes(h)), ...pieces]);
       }
@@ -134,7 +133,7 @@ export function useLocalHighlights(storageKey: string) {
     }
     for (const [region, list] of map) {
       const before = previousByRegion.current.get(region);
-      if (before && before.length === list.length && before.every((b, i) => b.id === list[i].id && b.start === list[i].start && b.end === list[i].end && b.note === list[i].note)) map.set(region, before);
+      if (before && before.length === list.length && before.every((b, i) => b.id === list[i].id && b.start === list[i].start && b.end === list[i].end && b.note === list[i].note && b.color === list[i].color)) map.set(region, before);
     }
     previousByRegion.current = map;
     return map;

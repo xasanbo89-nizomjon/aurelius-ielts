@@ -3,10 +3,11 @@
 import { Fragment, createContext, memo, useContext, useMemo, type ElementType, type ReactNode } from "react";
 
 import { buildOfficialPieces, splitAtLineBreaks } from "@/lib/exam/passage-layout";
+import { colorOf } from "@/lib/exam/highlight-colors";
 import { questionRegion, type HighlightRange, type TextRange } from "@/lib/exam/text-highlight";
 
 /** A highlight as the screen draws it; `note` (Phase H) puts a small marker after the highlighted text. */
-export type DrawnHighlight = HighlightRange & { note?: string | null };
+export type DrawnHighlight = HighlightRange & { note?: string | null; color?: string | null };
 
 /**
  * Phase M2 - in a review the stretch of a passage a teacher confirmed as the evidence of question N is drawn like a highlight whose id is `ev:N`: green
@@ -75,6 +76,9 @@ export const OfficialText = memo(function OfficialText({
     return byEnd;
   }, [highlights, text.length]);
 
+  /** Phase R - the colour of each highlight (absent = yellow). */
+  const colourById = useMemo(() => new Map(highlights.map((h) => [h.id, colorOf(h)])), [highlights]);
+
   const children: ReactNode[] = pieces.map((piece) => {
     const slice = text.slice(piece.start, piece.end);
     let node: ReactNode = slice;
@@ -89,7 +93,7 @@ export const OfficialText = memo(function OfficialText({
         return run.lineBreak ? (
           part
         ) : (
-          <mark key={index} data-hl-ids={ids || undefined} data-ev-ids={evidence.length > 0 ? evidence.join(" ") : undefined} data-ev-active={active ? "true" : undefined} className={className}>
+          <mark key={index} data-hl-ids={ids || undefined} data-hl-color={own.length > 0 ? colourById.get(own[0]) : undefined} data-ev-ids={evidence.length > 0 ? evidence.join(" ") : undefined} data-ev-active={active ? "true" : undefined} className={className}>
             {part}
           </mark>
         );

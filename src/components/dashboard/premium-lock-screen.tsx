@@ -27,7 +27,7 @@ export function PremiumLockScreen({ feature }: { feature: string }) {
             </p>
           </div>
           <Button asChild size="lg" className="w-full">
-            <Link href="/student/subscription?upgrade=1">Upgrade to Premium</Link>
+            <Link href="/student/premium?upgrade=1">Upgrade to Premium</Link>
           </Button>
         </CardContent>
       </Card>

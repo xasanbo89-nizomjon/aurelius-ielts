@@ -21,7 +21,7 @@ const submitSchema = z.object({ submissionId: idSchema, content: z.string().max(
 export async function startWritingSittingAction(taskId: string, ui?: string) {
   const { profile } = await requireStudentProfile();
   // Real, server-side gate, the same as starting a Reading or Listening test.
-  if (!(await hasActiveAccess(profile.id))) redirect("/student/subscription?upgrade=1");
+  if (!(await hasActiveAccess(profile.id))) redirect("/student/premium?upgrade=1");
 
   const started = await startWritingSitting(profile.id, idSchema.parse(taskId));
   if (!started.success) redirect("/student/writing/tasks");
