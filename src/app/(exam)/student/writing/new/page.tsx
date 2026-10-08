@@ -21,6 +21,8 @@ import { OfficialPreTest } from "@/components/exam/official/official-start-scree
 import { OfficialWritingStandalone } from "@/components/student/official-writing-standalone";
 
 export const metadata: Metadata = { title: "Writing Assignment" };
+// Phase O - the AI assessment of a handed-in sitting runs AFTER the response (see lib/writing-assessment/queue): this is the time that background work may take.
+export const maxDuration = 120;
 
 type SearchParams = { draftId?: string; taskId?: string; ui?: string | string[]; step?: string | string[] };
 
@@ -53,8 +55,8 @@ export default async function NewWritingSubmissionPage({ searchParams }: { searc
       if (bundleSitting) {
         // The hour is over, or a part was already handed in: what is saved is handed in now (both parts), exactly as if the clock had reached zero here.
         if (bundleSitting.kind === "settle") {
-          await submitWritingBundleSitting(profile.id, { submissionId: draftId, drafts: [] });
-          redirect("/student/writing/tasks");
+          const settled = await submitWritingBundleSitting(profile.id, { submissionId: draftId, drafts: [] });
+          redirect(settled.success ? settled.nextHref : "/student/writing/tasks");
         }
         return (
           <OfficialWritingBundle
@@ -79,7 +81,7 @@ export default async function NewWritingSubmissionPage({ searchParams }: { searc
       // The time ran out while the student was away: what was saved is handed in now, exactly as if the clock had reached zero here.
       if (sitting.remainingSeconds === 0) {
         const handedIn = await submitWritingSitting(profile.id, { submissionId: sitting.submissionId });
-        if (handedIn.success) redirect(`/student/writing/${handedIn.submissionId}`);
+        if (handedIn.success) redirect(handedIn.nextHref);
         // Not handed in (a database hiccup): the screen opens with no time left and keeps trying.
       }
       return (

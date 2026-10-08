@@ -2,7 +2,7 @@ import "server-only";
 import { authorScope } from "@/lib/exam/test-access";
 
 import { prisma } from "@/lib/prisma";
-import { bandForSection, overallBandFromSections, requiredSectionsFor } from "@/lib/full-mock-band-composition";
+import { WRITING_BAND_SELECT, bandForSection, overallBandFromSections, requiredSectionsFor } from "@/lib/full-mock-band-composition";
 
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -50,7 +50,7 @@ export async function getFullMockTestAnalytics(fullMockTestId: string, teacherId
         select: {
           section: true,
           result: { select: { bandScore: true } },
-          writingSubmission: { select: { bandScore: true, taskType: true, analysis: { select: { estimatedBand: true } } } },
+          writingSubmission: { select: WRITING_BAND_SELECT },
           speakingSubmission: { select: { bandScore: true } },
         },
       },
@@ -125,7 +125,7 @@ export async function getFullMockTeacherOverviewAnalytics(teacherId: string): Pr
             select: {
               section: true,
               result: { select: { bandScore: true } },
-              writingSubmission: { select: { bandScore: true, taskType: true, analysis: { select: { estimatedBand: true } } } },
+              writingSubmission: { select: WRITING_BAND_SELECT },
               speakingSubmission: { select: { bandScore: true } },
             },
           },

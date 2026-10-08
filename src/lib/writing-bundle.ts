@@ -71,7 +71,7 @@ export async function createWritingBundle(teacherId: string, input: WritingBundl
     pdfExtras = { visualPdfUrl: visual.pdfUrl, visualPdfPage: visual.page };
   }
 
-  const common = { trainingType: input.trainingType, assignedStudentIds: [] as string[] };
+  const common = { trainingType: input.trainingType, assignedStudentIds: [] as string[], showResultsToStudent: input.showResultsToStudent };
   const task1 = await createWritingTask(
     teacherId,
     { ...common, title: `${input.name} - Task 1`, taskNumber: "TASK_1", category: input.task1.category, prompt: input.task1.prompt, visualDescription: input.task1.visualDescription || undefined, imageMediaFileId: mediaFileId },

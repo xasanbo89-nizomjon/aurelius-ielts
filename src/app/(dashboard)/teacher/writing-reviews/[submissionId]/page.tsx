@@ -6,6 +6,13 @@ import { AlertTriangle, ArrowLeft, Clock, Gauge, ListChecks, User } from "lucide
 import { requireTeacherProfile } from "@/lib/session";
 import { getSubmissionReportForTeacher } from "@/lib/ai/writing";
 import { listLateTexts } from "@/lib/writing-late-text";
+import { getAssessmentOfSubmission, nudgeIfStuck, shownToStudent, writingTeacherViewer } from "@/lib/writing-assessment/assessment";
+import { failureMessage } from "@/lib/writing-assessment/status";
+import { AI_ESTIMATE_LABEL } from "@/lib/writing-assessment/constants";
+import { AssessmentReport } from "@/components/writing-assessment/assessment-report";
+import { WritingAssessmentProgress } from "@/components/writing-assessment/assessment-progress";
+import { RetryWritingAssessmentButton } from "@/components/writing-assessment/retry-button";
+import { StartWritingAssessmentButton } from "@/components/writing-assessment/start-button";
 import { Button } from "@/components/ui/button";
 import { WritingTaskImageView } from "@/components/student/writing-task-image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +21,8 @@ import { WritingAnalysisView } from "@/components/student/writing-analysis-view"
 import { WritingFeedbackForm } from "@/components/teacher/writing-feedback-form";
 
 export const metadata: Metadata = { title: "Writing Review" };
+// A waiting AI assessment may be started again from this page; it runs after the response.
+export const maxDuration = 120;
 
 export default async function TeacherWritingReviewPage({
   params,
@@ -27,6 +36,10 @@ export default async function TeacherWritingReviewPage({
   if (!report) notFound();
   // Phase K - words the student's browser still held when the paper had ended (offline at the time). Never part of the submission.
   const lateTexts = await listLateTexts(report.id);
+  // Phase O - the AI assessment of the whole sitting this essay belongs to (one combined report: both tasks, the Writing band).
+  const found = await getAssessmentOfSubmission(await writingTeacherViewer(profile.id), report.id);
+  const assessment = found?.kind === "ok" ? found.view : null;
+  if (assessment) nudgeIfStuck(assessment.record);
   const stamp = (date: Date) => date.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
   return (
@@ -110,13 +123,42 @@ export default async function TeacherWritingReviewPage({
         </Card>
       )}
 
+      <section className="space-y-4" data-testid="teacher-assessment">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="font-display text-xl font-medium tracking-tight">AI assessment of the whole sitting</h2>
+          <span className="text-muted-foreground text-xs">{AI_ESTIMATE_LABEL}</span>
+          {assessment && !shownToStudent(assessment.record) && <Badge variant="outline">Hidden from the student</Badge>}
+        </div>
+        {!assessment ? (
+          <Card>
+            <CardContent className="space-y-3 py-5">
+              <p className="text-sm">No AI assessment exists for this essay yet.</p>
+              <StartWritingAssessmentButton submissionId={report.id} />
+            </CardContent>
+          </Card>
+        ) : assessment.status === "DONE" && assessment.report ? (
+          <AssessmentReport report={assessment.report} bands={assessment.bands} model={assessment.record.model} />
+        ) : assessment.status === "FAILED" ? (
+          <Card data-testid="writing-assessment-failed">
+            <CardContent className="space-y-3 py-5">
+              <p className="font-medium">The AI assessment could not be completed.</p>
+              <p className="text-muted-foreground text-sm">{failureMessage(assessment.record.failureCode, assessment.record.failureMessage)}</p>
+              {assessment.canRetry && <RetryWritingAssessmentButton assessmentId={assessment.record.id} />}
+            </CardContent>
+          </Card>
+        ) : (
+          <WritingAssessmentProgress assessmentId={assessment.record.id} initialStatus={assessment.status} sinceIso={assessment.record.createdAt.toISOString()} leaveHref="/teacher/writing-reviews" leaveLabel="Back to writing reviews" />
+        )}
+        <p className="text-muted-foreground text-xs">Your own mark and feedback below stand in front of the AI estimate: when you mark an essay, your band is the one that counts for it.</p>
+      </section>
+
       {report.analysis && <WritingAnalysisView analysis={report.analysis} content={report.content} />}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Gauge className="text-accent size-4.5" aria-hidden="true" /> AI assessment
+              <Gauge className="text-accent size-4.5" aria-hidden="true" /> AI analysis of this essay
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">

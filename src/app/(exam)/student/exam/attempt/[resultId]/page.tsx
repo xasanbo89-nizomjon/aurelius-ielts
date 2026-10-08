@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { requireStudentProfile } from "@/lib/session";
 import { finalizeAttempt, getAttemptDetail } from "@/lib/exam/attempts";
+import { finishedAttemptHref } from "@/lib/exam/result-visibility";
 import { EXPIRY_GRACE_SECONDS, isPastDeadline, secondsLeft } from "@/lib/exam/section-deadline";
 import { resolvePassageAudioSrc } from "@/lib/uploads/audio-constraints";
 import { getBookmarkedQuestionIds } from "@/lib/bookmarks";
@@ -44,7 +45,8 @@ export default async function ExamAttemptPage({
     if (!attempt) notFound();
   }
   // Phase M2 - a finished attempt opens its review (with the results dialog), not the older results page.
-  if (attempt.completedAt) redirect(`/student/exam/attempt/${resultId}/review?results=1`);
+  // Phase O - or the "submitted" note, when the teacher chose to hide this test's results.
+  if (attempt.completedAt) redirect(await finishedAttemptHref(resultId, profile.id));
 
   const initialAnswers: Record<string, unknown> = {};
   for (const answer of attempt.answers) {

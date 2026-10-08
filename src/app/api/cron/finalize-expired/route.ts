@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { settleExpiredAttempts } from "@/lib/full-mock-attempts";
 import { settleExpiredWritingSittings } from "@/lib/writing-sitting";
 import { settleExpiredWritingBundleSittings } from "@/lib/writing-bundle-sitting";
+import { processDue as processDueWriting } from "@/lib/writing-assessment/processing";
 
 /**
  * Phase K - the scheduled job that finalises what has run past its deadline for students nobody is looking at (see docs/server-expiry.md):
@@ -18,7 +19,8 @@ import { settleExpiredWritingBundleSittings } from "@/lib/writing-bundle-sitting
  * that anyone is looking at.
  */
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Phase O - after settling, the job also finishes the AI assessment of the Writing sittings it has just handed in (a few at most), which can take a minute each.
+export const maxDuration = 120;
 
 function authorised(request: Request, secret: string): boolean {
   const header = request.headers.get("authorization") ?? "";
@@ -39,7 +41,18 @@ export async function GET(request: Request) {
     const writingSittings = await settleExpiredWritingSittings();
     // Phase L3 - Writing tests (Task 1 + Task 2 in one 60-minute sitting)
     const writingTestSittings = await settleExpiredWritingBundleSittings();
-    return NextResponse.json({ ok: true, ...attempts, writingSittings, writingTestSittings, tookMs: Date.now() - startedAt });
+    // Phase O - the Writing sittings handed in above are queued for their AI assessment (hand-in itself never waits for it): the job now works through what is due, starting
+    // none after 40 seconds and giving each what is left of the function's time.
+    let writingAssessments: { looked: number; done: number; failed: number } | { error: string } = { looked: 0, done: 0, failed: 0 };
+    try {
+      if (Date.now() - startedAt < 40_000) {
+        writingAssessments = await processDueWriting({ max: 3, stopAfterMs: 40_000 - (Date.now() - startedAt), deps: { deadline: startedAt + 105_000 } });
+      }
+    } catch (error) {
+      console.error("[cron] writing assessments failed:", error);
+      writingAssessments = { error: "see the server log" };
+    }
+    return NextResponse.json({ ok: true, ...attempts, writingSittings, writingTestSittings, writingAssessments, tookMs: Date.now() - startedAt });
   } catch (error) {
     console.error("[cron] finalize-expired failed:", error);
     return NextResponse.json({ ok: false, error: "The run failed; see the server log." }, { status: 500 });

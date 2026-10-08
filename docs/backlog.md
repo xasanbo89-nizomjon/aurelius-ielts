@@ -187,3 +187,11 @@ Phase L1 and L2 are done (`docs/test-builder.md`). Known limits and what could c
 | `npm run tests:validate` | read-only: what the publish rules say about every test already in the database (`-- --only-problems`) |
 | `npm run check:parity` | student list, student exam, teacher list and teacher editor all count the same questions |
 | `npm run tests:temp` | lists temporary (`_...`) tests and who attempted them |
+
+## Phase O follow-ups (Writing assessment, visibility, Students' Scores)
+
+- **The AI band is an estimate**: calibrate with a few real teacher marks and consider a stronger `OPENAI_WRITING_ASSESS_MODEL`. Length caps (10/50/70/90 %) are the app's own scale, not in the public descriptors.
+- Full Mock sittings handed in **before** Phase O have no assessment: a teacher presses "Assess with AI" on the essay or on the student's page (one real Writing submission exists today).
+- Students' Scores lists the latest Full Mock only; a trend chart of a student's mocks is not built. Earlier mocks show Listening/Reading/Writing (no Overall: Speaking is "latest practice" only).
+- The jobs need `CRON_SECRET` + a scheduler (see `docs/server-expiry.md`); without them a stuck assessment is restarted when a page or the status route sees it.
+- "Only one active Full Mock" archives the publisher's own mocks (a Root Teacher: all); another teacher's mock is not touched.

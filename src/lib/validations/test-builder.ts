@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { CUSTOM_MAX_PARTS } from "@/lib/exam/test-format";
+import { showResultsSchema } from "@/lib/validations/show-results";
 
 /**
  * Phase L2 - the shape of a test sent by the structured editor. Sizes are bounded so a request cannot be used to write an unreasonable amount, and no text
@@ -82,6 +83,8 @@ export const newTestSchema = z.object({
   /** Phase Q - "Full IELTS" (40 questions, the default) or "Custom" (any number of questions); a Custom test starts with `partCount` empty parts. */
   format: z.enum(["FULL_IELTS", "CUSTOM"]).optional(),
   partCount: z.number().int().min(1).max(CUSTOM_MAX_PARTS).optional(),
+  /** Phase O - "Show results to students?" - the teacher's required Yes / No. */
+  showResultsToStudent: showResultsSchema,
 });
 
 /** The recording the browser says it uploaded; the server checks the URL is one of this teacher's own uploads. */

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Clock, Gauge, Headphones, Lock, Mic, PenLine } from "lucide-react";
+import { BookOpen, CheckCircle2, Clock, Gauge, Headphones, Lock, Mic, PenLine } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { MOCK_TEST_DIFFICULTY_BADGE_VARIANT, MOCK_TEST_DIFFICULTY_LABELS } from "@/lib/labels";
@@ -20,13 +20,8 @@ export type FullMockCardStatus = "available" | "inProgress" | "completed" | "loc
 /** Phase 47 — the Mock Exam Center card: Exam Name, Exam Number, Estimated Band, Duration, Difficulty, Premium Badge — every value real, passed straight from getStudentFullMockDashboard. */
 export function FullMockExamCard({ test, status }: { test: FullMockCardData; status: FullMockCardStatus }) {
   const ctaLabel =
-    status === "inProgress" ? "Resume Full Mock" : status === "completed" ? "View Results" : status === "locked" ? "Upgrade to unlock" : "Start Full Mock";
-  const ctaHref =
-    status === "completed" && test.latestAttemptId
-      ? `/student/full-mock/attempt/${test.latestAttemptId}/results`
-      : status === "locked"
-        ? "/student/subscription?upgrade=1"
-        : `/student/full-mock/${test.id}`;
+    status === "inProgress" ? "Resume Full Mock" : status === "locked" ? "Upgrade to unlock" : "Start Full Mock";
+  const ctaHref = status === "locked" ? "/student/subscription?upgrade=1" : `/student/full-mock/${test.id}`;
 
   return (
     <Card className="h-full gap-3 py-4 sm:gap-6 sm:py-6">
@@ -65,25 +60,27 @@ export function FullMockExamCard({ test, status }: { test: FullMockCardData; sta
             <Clock className="size-3 sm:size-3.5" aria-hidden="true" />
             ~{test.totalDurationMinutes} min total
           </span>
-          {status === "completed" && test.latestOverallBand != null ? (
-            <span className="text-foreground flex items-center gap-1 font-medium">
+          {status !== "completed" && test.estimatedBandMin != null && test.estimatedBandMax != null && (
+            <span className="flex items-center gap-1">
               <Gauge className="size-3 sm:size-3.5" aria-hidden="true" />
-              Band {test.latestOverallBand.toFixed(1)}
+              Band {test.estimatedBandMin.toFixed(1)}–{test.estimatedBandMax.toFixed(1)}
             </span>
-          ) : (
-            test.estimatedBandMin != null &&
-            test.estimatedBandMax != null && (
-              <span className="flex items-center gap-1">
-                <Gauge className="size-3 sm:size-3.5" aria-hidden="true" />
-                Band {test.estimatedBandMin.toFixed(1)}–{test.estimatedBandMax.toFixed(1)}
-              </span>
-            )
           )}
         </div>
 
-        <Button asChild className="w-full" variant={status === "locked" ? "outline" : "default"}>
-          <Link href={ctaHref}>{ctaLabel}</Link>
-        </Button>
+        {status === "completed" ? (
+          // Phase O - a finished Full Mock shows no band to the student: only that it was handed in.
+          <div className="space-y-1 text-center" data-testid="full-mock-submitted">
+            <Badge variant="success" className="mx-auto flex w-fit items-center gap-1">
+              <CheckCircle2 className="size-3" aria-hidden="true" /> Submitted
+            </Badge>
+            <p className="text-muted-foreground text-xs">Your teacher will share your result with you.</p>
+          </div>
+        ) : (
+          <Button asChild className="w-full" variant={status === "locked" ? "outline" : "default"}>
+            <Link href={ctaHref}>{ctaLabel}</Link>
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

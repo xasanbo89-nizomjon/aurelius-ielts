@@ -15,6 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { FIELD, NativeSelect } from "@/components/teacher/test-builder/controls";
 import { WritingTaskImageField } from "@/components/teacher/writing-task-image-field";
 import { WritingPdfVisualField, type PdfVisualChoice } from "@/components/teacher/writing-pdf-visual-field";
+import { ShowResultsField } from "@/components/teacher/show-results-field";
+import { SHOW_RESULTS_REQUIRED_MESSAGE } from "@/lib/exam/result-visibility-rules";
 
 type VisualMode = "none" | "image" | "pdf";
 
@@ -37,14 +39,23 @@ export function WritingBundleForm() {
   const [pdf, setPdf] = useState<PdfVisualChoice | null>(null);
   const [category2, setCategory2] = useState<WritingTaskCategoryValue>("OPINION");
   const [prompt2, setPrompt2] = useState("");
+  // Phase O - "Show results to students?": not chosen until the teacher picks Yes or No.
+  const [showResults, setShowResults] = useState<boolean | null>(null);
+  const [showResultsError, setShowResultsError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function submit() {
+    if (showResults === null) {
+      setShowResultsError(SHOW_RESULTS_REQUIRED_MESSAGE);
+      toast.error(SHOW_RESULTS_REQUIRED_MESSAGE);
+      return;
+    }
     setSubmitting(true);
     const visual = mode === "image" && image ? ({ kind: "image", mediaFileId: image.mediaFileId } as const) : mode === "pdf" && pdf ? ({ kind: "pdf", pdfUrl: pdf.pdfUrl, page: pdf.page } as const) : null;
     const result = await createWritingBundleAction({
       name,
       trainingType,
+      showResultsToStudent: showResults,
       task1: { category: category1, prompt: prompt1, visualDescription: description || undefined, visual },
       task2: { category: category2, prompt: prompt2 },
     });
@@ -160,6 +171,15 @@ export function WritingBundleForm() {
           </div>
         </div>
       </section>
+
+      <ShowResultsField
+        value={showResults}
+        onChange={(next) => {
+          setShowResults(next);
+          setShowResultsError(null);
+        }}
+        error={showResultsError ?? undefined}
+      />
 
       <Button type="button" onClick={() => void submit()} disabled={submitting} data-testid="create-bundle">
         {submitting && <Loader2 className="size-4 animate-spin" />} Create the Writing test

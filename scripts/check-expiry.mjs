@@ -114,11 +114,18 @@ test("the combined figure rounds to the nearest half band: 6.25 -> 6.5, 6.75 -> 
   assert.equal(overallBandFromSections(rows(7, 7, 6.5), three), 7.0, "6.8333");
   assert.equal(overallBandFromSections(rows(6.5, 6.5, 6.5), three), 6.5, "6.5 stays 6.5");
 });
-test("Writing is the teacher's mark only: no mark, no Writing band and no combined figure", () => {
+test("Phase O: a task's band is the teacher's mark, else the AI assessment's band; with neither there is no Writing band and no combined figure", () => {
   assert.equal(bandForSection(rows(7, 7, null), "WRITING"), null);
   assert.equal(overallBandFromSections(rows(7, 7, null), three), null);
-  const aiOnly = [{ section: "WRITING", result: null, writingSubmission: { bandScore: null, taskType: "Task 1", analysis: { estimatedBand: 9 } }, speakingSubmission: null }];
-  assert.equal(bandForSection(aiOnly, "WRITING"), null, "the AI estimate never stands in for the teacher's mark");
+  const legacyAnalysisOnly = [{ section: "WRITING", result: null, writingSubmission: { bandScore: null, taskType: "Task 1", analysis: { estimatedBand: 9 } }, speakingSubmission: null }];
+  assert.equal(bandForSection(legacyAnalysisOnly, "WRITING"), null, "an old per-essay estimate with no AI assessment is feedback, not a band");
+  const assessed = (task1, task2, marks = [null, null]) => [
+    { section: "WRITING", result: null, writingSubmission: { bandScore: marks[0], taskType: "Task 1", assessmentAsTask1: { task1Band: task1, status: "DONE" } }, speakingSubmission: null },
+    { section: "WRITING", result: null, writingSubmission: { bandScore: marks[1], taskType: "Task 2", assessmentAsTask2: { task2Band: task2, status: "DONE" } }, speakingSubmission: null },
+  ];
+  assert.equal(bandForSection(assessed(6, 7), "WRITING"), 6.5, "(6 + 14) / 3 = 6.67 -> 6.5");
+  assert.equal(bandForSection(assessed(6, null), "WRITING"), null, "Task 2 is not assessed yet: no Writing band");
+  assert.equal(bandForSection(assessed(6, 5, [null, 7]), "WRITING"), 6.5, "the teacher's mark of Task 2 (7) stands in front of the AI's 5");
 });
 test("Writing band = (Task 1 + 2 x Task 2) / 3 rounded to a half band", () => {
   const split = [
@@ -132,12 +139,21 @@ test("the combined figure says which skills it is made of and that it is unoffic
   assert.equal(overallBandLabel(four), "Overall (L/R/W/S, unofficial)");
 });
 test("the Writing status words a teacher sees", () => {
-  const sub = (status, band) => ({ section: "WRITING", writingSubmission: { status, bandScore: band } });
+  const sub = (status, band, extra = {}) => ({ section: "WRITING", writingSubmission: { status, bandScore: band, ...extra } });
   assert.equal(writingProgressLabel({ taskCount: 0, started: false, rows: [] }), null);
   assert.equal(writingProgressLabel({ taskCount: 2, started: false, rows: [] }), "Not started");
   assert.equal(writingProgressLabel({ taskCount: 2, started: true, rows: [] }), "In progress");
   assert.equal(writingProgressLabel({ taskCount: 2, started: true, rows: [sub("SUBMITTED", null)] }), "1 of 2 tasks submitted");
-  assert.equal(writingProgressLabel({ taskCount: 2, started: true, rows: [sub("SUBMITTED", null), sub("SUBMITTED", null)] }), "Submitted — awaiting teacher review");
+  assert.equal(writingProgressLabel({ taskCount: 2, started: true, rows: [sub("SUBMITTED", null), sub("SUBMITTED", null)] }), "Submitted — not yet assessed", "handed in, no AI assessment exists yet");
+  const open = (status) => [sub("PENDING", null, { assessmentAsTask1: { task1Band: null, status } }), sub("PENDING", null, { assessmentAsTask2: { task2Band: null, status } })];
+  assert.equal(writingProgressLabel({ taskCount: 2, started: true, rows: open("PENDING") }), "Processing");
+  assert.equal(writingProgressLabel({ taskCount: 2, started: true, rows: open("PROCESSING") }), "Processing");
+  assert.equal(writingProgressLabel({ taskCount: 2, started: true, rows: open("FAILED") }), "AI assessment failed");
+  assert.equal(
+    writingProgressLabel({ taskCount: 2, started: true, rows: [sub("PENDING", null, { assessmentAsTask1: { task1Band: 6, status: "DONE" } }), sub("PENDING", null, { assessmentAsTask2: { task2Band: 6.5, status: "DONE" } })] }),
+    "Graded",
+    "assessed by the AI: both tasks have a band"
+  );
   assert.equal(writingProgressLabel({ taskCount: 2, started: true, rows: [sub("REVIEWED", 6), sub("REVIEWED", 7)] }), "Graded");
 });
 

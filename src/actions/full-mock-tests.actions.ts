@@ -125,14 +125,21 @@ export async function deleteFullMockSpeakingTaskAction(id: string, sectionId: st
   }
 }
 
-export async function publishFullMockTestAction(id: string): Promise<ActionResult> {
+/** Phase O - publishing archives the other active Full Mock(s): the first call says which (`needsConfirm`), the second (`archiveOthers: true`) does it. */
+export type PublishFullMockResult =
+  | { success: true; archived?: string[] }
+  | { success: false; error: string; needsConfirm?: fullMockTests.ActiveFullMock[] };
+
+export async function publishFullMockTestAction(id: string, options: { archiveOthers?: boolean } = {}): Promise<PublishFullMockResult> {
   try {
     const { profile } = await requireTeacherProfile();
-    await fullMockTests.publishFullMockTest(id, profile.id);
+    const outcome = await fullMockTests.publishFullMockTest(id, profile.id, { archiveOthers: options.archiveOthers === true });
     revalidatePath(`/teacher/tests/full-mock/${id}`);
     revalidatePath("/teacher/tests");
-    return { success: true };
+    revalidatePath("/student/tests/mock");
+    return { success: true, archived: outcome.archived };
   } catch (error) {
+    if (error instanceof fullMockTests.OtherActiveMockError) return { success: false, error: error.message, needsConfirm: error.others };
     return { success: false, error: errorMessage(error, "Could not publish the full mock test.") };
   }
 }
@@ -151,10 +158,11 @@ export async function unpublishFullMockTestAction(id: string): Promise<ActionRes
 
 export type DeleteFullMockResult = { success: true; warning?: string } | { success: false; error: string };
 
-export async function deleteFullMockTestAction(id: string, options: { deleteAttempts?: boolean } = {}): Promise<DeleteFullMockResult> {
+export async function deleteFullMockTestAction(id: string): Promise<DeleteFullMockResult> {
   try {
     const { profile } = await requireTeacherProfile();
-    const outcome = await fullMockTests.deleteFullMockTest(id, profile.id, { deleteAttempts: options.deleteAttempts === true });
+    // Phase O - a Full Mock that students have sat is never deleted from the screen (its attempts and scores stay): it is archived instead. The library keeps the option for maintenance scripts.
+    const outcome = await fullMockTests.deleteFullMockTest(id, profile.id);
     revalidatePath("/teacher/tests");
     revalidatePath("/teacher/mock-results");
     revalidatePath("/teacher/tests/import");

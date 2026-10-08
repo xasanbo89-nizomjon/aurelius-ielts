@@ -25,7 +25,7 @@ export function ExportReportButtons({ kind, label }: { kind: ExportReportKind; l
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Button variant="outline" size="sm" onClick={() => handleExport("csv")} disabled={pending != null}>
         {pending === "csv" ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
         {label} (CSV)

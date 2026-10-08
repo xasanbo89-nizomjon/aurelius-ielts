@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import type { QuestionType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { resultShownToStudentWhere } from "@/lib/exam/result-visibility";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
 import { formatAnswerForDisplay } from "@/lib/exam/format-answer";
 import { generateExplanation } from "@/lib/ai/services/explain-more";
@@ -109,8 +110,9 @@ export async function requestExplanation(
   studentId: string,
   questionId: string
 ): Promise<ExplainMoreResult> {
+  // Phase O - an attempt whose results are hidden from the student (or a Full Mock section) is "not found": no explanation, hence no hint of which answers were wrong.
   const result = await prisma.result.findFirst({
-    where: { id: resultId, studentId, completedAt: { not: null } },
+    where: { id: resultId, studentId, completedAt: { not: null }, ...resultShownToStudentWhere },
     select: {
       mockTest: { select: { type: true } },
       student: { select: { teacherId: true } },

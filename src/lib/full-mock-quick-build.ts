@@ -180,7 +180,8 @@ async function ensureImported(importedTestId: string, teacherId: string, title: 
   if (!row) throw new Error("That import wasn't found.");
   if (row.status === "IMPORTED" && row.resultMockTestId) return { mockTestId: row.resultMockTestId, unmatched: 0, created: false };
 
-  const result = await confirmImport(importedTestId, teacherId, { title, category: category === "CAMBRIDGE" ? "CAMBRIDGE" : "GENERAL", durationMinutes });
+  // Phase O - a section built for a Full Mock package is only ever sat inside the mock, and a Full Mock's results are never shown to students: "hidden" is recorded for it.
+  const result = await confirmImport(importedTestId, teacherId, { title, category: category === "CAMBRIDGE" ? "CAMBRIDGE" : "GENERAL", durationMinutes, showResultsToStudent: false });
   return { mockTestId: result.mockTestId, unmatched: result.warnings.reduce((n, w) => n + w.questionNumbers.length, 0), created: true };
 }
 

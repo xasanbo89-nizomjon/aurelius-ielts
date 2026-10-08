@@ -87,7 +87,8 @@ export type TestIssue = {
     | "AUDIO_DURATION"
     | "AUDIO_START_TIMES"
     | "EVIDENCE_MISSING"
-    | "PARITY";
+    | "PARITY"
+    | "RESULTS_VISIBILITY";
   severity: IssueSeverity;
   message: string;
   target: IssueTarget;

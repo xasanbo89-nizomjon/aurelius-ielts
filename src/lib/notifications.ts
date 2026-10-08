@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { writingShownToStudentWhere } from "@/lib/exam/result-visibility";
 import { getSubscriptionSummary } from "@/lib/subscription";
 import { getPremiumPlan } from "@/lib/premium-plans";
 
@@ -46,7 +47,8 @@ export async function getNotificationInbox(studentId: string, teacherId: string 
         })
       : Promise.resolve([]),
     prisma.writingSubmission.findMany({
-      where: { studentId, status: "REVIEWED", reviewedAt: { not: null } },
+      // Phase O - no "your essay was marked" note (and so no band) for a task whose results are hidden from the student.
+      where: { studentId, status: "REVIEWED", reviewedAt: { not: null }, ...writingShownToStudentWhere },
       orderBy: { reviewedAt: "desc" },
       take: PER_CATEGORY_LIMIT,
       select: { id: true, taskType: true, bandScore: true, reviewedAt: true },

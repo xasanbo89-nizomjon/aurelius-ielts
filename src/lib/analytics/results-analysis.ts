@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma, type SkillType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { RESULT_SHOWN_SQL, WRITING_SHOWN_SQL, resultShownToStudentWhere } from "@/lib/exam/result-visibility";
 import { partTimesOf } from "@/lib/exam/part-times";
 import { allowedSecondsFor, timeUsedSeconds } from "@/lib/exam/timing";
 import {
@@ -42,6 +43,8 @@ export type AttemptFilter = {
   /** Finished on or after / before this moment. */
   from?: Date;
   to?: Date;
+  /** Phase O - a STUDENT looking at themselves: only attempts whose results they may see (not hidden by the teacher, not a Full Mock section). A teacher's screens leave it out and see every attempt. */
+  shownToStudent?: boolean;
 };
 
 /** The conditions every query shares, on `results r`, `student_profiles s` and `mock_tests t`. */
@@ -58,6 +61,7 @@ function counted(filter: AttemptFilter): Prisma.Sql {
   if (filter.skill) conditions.push(Prisma.sql`r."skill" = ${filter.skill}::"SkillType"`);
   if (filter.from) conditions.push(Prisma.sql`r."completedAt" >= ${filter.from}`);
   if (filter.to) conditions.push(Prisma.sql`r."completedAt" < ${filter.to}`);
+  if (filter.shownToStudent) conditions.push(RESULT_SHOWN_SQL);
   return Prisma.join(conditions, " AND ");
 }
 
@@ -249,7 +253,8 @@ export type StudentBandSeries = {
 };
 
 export async function getStudentBandSeries(studentId: string): Promise<StudentBandSeries> {
-  const filter: AttemptFilter = { studentId };
+  // Phase O - this is the student's own progress chart: only attempts and essays whose results they may see.
+  const filter: AttemptFilter = { studentId, shownToStudent: true };
   const [attempts, writing] = await Promise.all([
     prisma.$queryRaw<{ at: Date; band: number | null; skill: SkillType; testTitle: string }[]>(Prisma.sql`
       SELECT r."completedAt" AS "at", r."bandScore"::float8 AS "band", r."skill", t."title" AS "testTitle" ${FROM_ATTEMPTS} WHERE ${counted(filter)} AND r."bandScore" IS NOT NULL ORDER BY r."completedAt" ASC`),
@@ -257,7 +262,7 @@ export async function getStudentBandSeries(studentId: string): Promise<StudentBa
       SELECT COALESCE(ws."reviewedAt", ws."submittedAt", ws."createdAt") AS "at", ws."bandScore"::float8 AS "marked", wa."estimatedBand"::float8 AS "estimate", ws."taskType"
       FROM "writing_submissions" ws
       LEFT JOIN "writing_analyses" wa ON wa."submissionId" = ws."id"
-      WHERE ws."studentId" = ${studentId} AND ws."status" <> 'DRAFT'::"SubmissionStatus"
+      WHERE ws."studentId" = ${studentId} AND ws."status" <> 'DRAFT'::"SubmissionStatus" AND ${WRITING_SHOWN_SQL}
         AND NOT EXISTS (SELECT 1 FROM "full_mock_section_results" fsr JOIN "full_mock_attempts" fa ON fa."id" = fsr."attemptId" WHERE fsr."writingSubmissionId" = ws."id" AND fa."status" <> 'COMPLETED'::"FullMockAttemptStatus")
       ORDER BY COALESCE(ws."reviewedAt", ws."submittedAt", ws."createdAt") ASC`),
   ]);
@@ -280,7 +285,7 @@ export type StudentPartTimes = {
 /** Average time per part, only over the attempts that have it (see lib/exam/part-times) - never extended to attempts that do not. */
 export async function getStudentPartTimes(studentId: string): Promise<{ READING: StudentPartTimes | null; LISTENING: StudentPartTimes | null }> {
   const results = await prisma.result.findMany({
-    where: { studentId, completedAt: { not: null }, skill: { in: ["READING", "LISTENING"] }, partEvents: { some: {} } },
+    where: { studentId, completedAt: { not: null }, skill: { in: ["READING", "LISTENING"] }, partEvents: { some: {} }, ...resultShownToStudentWhere },
     select: {
       skill: true,
       startedAt: true,

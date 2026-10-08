@@ -13,6 +13,8 @@ import { FullMockWritingWorkspace, type FullMockWritingWorkspaceTask } from "@/c
 import { OfficialWritingFullMock } from "@/components/student/official-writing-fullmock";
 
 export const metadata: Metadata = { title: "Writing" };
+// Phase O - the AI assessment of the handed-in Writing paper runs AFTER the response (see lib/writing-assessment/queue): this is the time that background work may take.
+export const maxDuration = 120;
 
 /**
  * Phase E — the Writing section of a Full Mock: Task 1 and Task 2 together in

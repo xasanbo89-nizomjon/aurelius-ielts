@@ -143,7 +143,8 @@ async function insertTest({ teacherId, name, type = "READING", layout = readingL
   }
   mutate?.({ passages, groups, questions });
   withRanges(groups, questions);
-  await db.mockTest.create({ data: { id: testId, title: `${TAG} ${name}`, type, durationMinutes: type === "LISTENING" ? 30 : 60, createdById: teacherId } });
+  // Phase O - a test is published only after the teacher has answered "Show results to students?": the fixture has (Yes).
+  await db.mockTest.create({ data: { id: testId, title: `${TAG} ${name}`, type, durationMinutes: type === "LISTENING" ? 30 : 60, createdById: teacherId, showResultsToStudent: true } });
   await db.passage.createMany({ data: passages });
   await db.questionGroup.createMany({ data: groups });
   await db.question.createMany({ data: questions });
@@ -708,7 +709,7 @@ async function sectionChooseTwo() {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
 
 async function sectionWritingBank() {
-  const input = (title, extra = {}) => ({ title: `${TAG} ${title}`, trainingType: "ACADEMIC", taskNumber: "TASK_2", category: "OPINION", prompt: "Some people think museums should be free. Do you agree or disagree?", assignedStudentIds: [], ...extra });
+  const input = (title, extra = {}) => ({ title: `${TAG} ${title}`, trainingType: "ACADEMIC", taskNumber: "TASK_2", category: "OPINION", prompt: "Some people think museums should be free. Do you agree or disagree?", assignedStudentIds: [], showResultsToStudent: true, ...extra });
   const own = await newStudent("writing-own");
   await db.studentProfile.update({ where: { id: own }, data: { teacherId: ctx.A } });
   const [taskA, taskB] = await Promise.all([writingTasks.createWritingTask(ctx.A, input("task of A")), writingTasks.createWritingTask(ctx.B, input("task of B"))]);
@@ -779,7 +780,7 @@ async function sectionWritingBundleSitting() {
   const everyone = [s1, s2, s3, s4, s5, solo];
   await db.studentProfile.updateMany({ where: { id: { in: everyone } }, data: { teacherId: ctx.A } });
   const make = (title, taskNumber, studentIds, extras = {}) =>
-    writingTasks.createWritingTask(ctx.A, { title: `${TAG} ${title}`, trainingType: "ACADEMIC", taskNumber, category: taskNumber === "TASK_1" ? "GRAPH" : "OPINION", prompt: "The chart shows how many people visited the museum. Summarise the information.", assignedStudentIds: studentIds }, extras);
+    writingTasks.createWritingTask(ctx.A, { title: `${TAG} ${title}`, trainingType: "ACADEMIC", taskNumber, category: taskNumber === "TASK_1" ? "GRAPH" : "OPINION", prompt: "The chart shows how many people visited the museum. Summarise the information.", assignedStudentIds: studentIds, showResultsToStudent: true }, extras);
   // Task 1 is assigned to everyone, Task 2 to everyone except `solo` (who therefore sits Task 1 on its own, as before)
   const [t1, t2, plain] = await Promise.all([make("Writing test - Task 1", "TASK_1", everyone, { bundleId }), make("Writing test - Task 2", "TASK_2", everyone.filter((id) => id !== solo), { bundleId }), make("a single task", "TASK_2", [s1])]);
   await Promise.all([t1, t2, plain].map((t) => writingTasks.setWritingTaskStatus(t.id, ctx.A, "PUBLISHED")));

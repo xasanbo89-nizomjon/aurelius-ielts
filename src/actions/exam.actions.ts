@@ -8,6 +8,7 @@ import * as attempts from "@/lib/exam/attempts";
 import * as annotations from "@/lib/exam/annotations";
 import { hasActiveAccess, hasActiveAccessForTest, hasActiveAccessForResult } from "@/lib/subscription";
 import { prisma } from "@/lib/prisma";
+import { finishedAttemptHref, resultShownToStudentWhere } from "@/lib/exam/result-visibility";
 import { findInProgressFullMockLinkForResult, markListeningAudioEnded } from "@/lib/full-mock-attempts";
 import { generateWrongAnswerExplanation } from "@/lib/ai/services/explain-wrong-answer";
 import type { ExplainWrongAnswerResponse } from "@/lib/ai/prompts/explain-wrong-answer";
@@ -59,8 +60,9 @@ export async function explainWrongAnswerAction(resultId: string, questionId: str
       return { success: false, error: "AI Explain More is a Premium feature. Upgrade to unlock it." };
     }
 
+    // Phase O - a result the teacher chose to hide (or a Full Mock section) is "not found" here: no explanation, hence no hint of which answers were wrong.
     const result = await prisma.result.findFirst({
-      where: { id: resultId, studentId: profile.id, completedAt: { not: null } },
+      where: { id: resultId, studentId: profile.id, completedAt: { not: null }, ...resultShownToStudentWhere },
       select: { id: true },
     });
     if (!result) return { success: false, error: "Attempt not found." };
@@ -228,7 +230,8 @@ export async function submitAttemptAction(resultId: string) {
   const fullMockAttemptId = await findInProgressFullMockLinkForResult(resultId);
   if (fullMockAttemptId) redirect(`/student/full-mock/attempt/${fullMockAttemptId}/transition`);
   // Phase M2 - straight to the review, which opens with the results dialog (band, raw score, every answer); the older results page stays reachable from the history.
-  redirect(`/student/exam/attempt/${resultId}/review?results=1`);
+  // Phase O - unless the teacher chose to hide this test's results: then only "Your test has been submitted."
+  redirect(await finishedAttemptHref(resultId, profile.id));
 }
 
 /**

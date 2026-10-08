@@ -7,6 +7,7 @@ import * as writingTasks from "@/lib/writing-tasks";
 import { uploadContentCoverImage } from "@/lib/uploads/image-storage";
 import { friendlyErrorMessage } from "@/lib/validation-error";
 import { createWritingTaskSchema, writingTaskStatusSchema, type CreateWritingTaskInput } from "@/lib/validations/writing";
+import { SHOW_RESULTS_REQUIRED_MESSAGE } from "@/lib/exam/result-visibility-rules";
 
 export type ActionResult = { success: true } | { success: false; error: string };
 
@@ -50,6 +51,8 @@ export async function createWritingTaskAction(input: CreateWritingTaskInput): Pr
   try {
     const { profile } = await requireTeacherProfile();
     const parsed = createWritingTaskSchema.parse(input);
+    // Phase O - "Show results to students?" must be answered when a task is made in the task bank.
+    if (parsed.showResultsToStudent === undefined) throw new Error(SHOW_RESULTS_REQUIRED_MESSAGE);
     await writingTasks.createWritingTask(profile.id, parsed);
     revalidatePath("/teacher/writing");
     return { success: true };
@@ -62,7 +65,8 @@ export async function updateWritingTaskAction(taskId: string, input: CreateWriti
   try {
     const { profile } = await requireTeacherProfile();
     const parsed = createWritingTaskSchema.parse(input);
-    await writingTasks.updateWritingTask(taskId, profile.id, parsed);
+    // Phase O - ... and when it is edited, unless it belongs to a Full Mock (which has no such choice).
+    await writingTasks.updateWritingTask(taskId, profile.id, parsed, { requireShowResults: true });
     revalidatePath("/teacher/writing");
     return { success: true };
   } catch (error) {

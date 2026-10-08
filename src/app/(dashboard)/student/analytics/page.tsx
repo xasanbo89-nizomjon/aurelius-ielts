@@ -66,7 +66,7 @@ export default async function StudentAnalyticsPage() {
     getWritingMistakes(profile.id),
     getSpeakingReviews(profile.id),
     // Phase M - from the marks each attempt was stored with; a student sees only themselves.
-    getTypeAccuracy({ studentId: profile.id }),
+    getTypeAccuracy({ studentId: profile.id, shownToStudent: true }),
     getStudentBandSeries(profile.id),
     getStudentPartTimes(profile.id),
   ]);

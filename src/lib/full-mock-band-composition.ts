@@ -1,6 +1,7 @@
 import "server-only";
 
 import { roundToIeltsBand } from "@/lib/analytics/band-rounding";
+import { effectiveTaskBand } from "@/lib/writing-assessment/bands";
 
 /**
  * Phase 47 — the one real band-composition helper, replacing what had
@@ -18,24 +19,41 @@ import { roundToIeltsBand } from "@/lib/analytics/band-rounding";
  * handed in has a band; one still waiting to be marked means "not yet", never a
  * half-finished average.
  *
- * Phase K — a task's band is the TEACHER'S mark and nothing else. Until it is
- * marked the Writing section reads "Awaiting teacher review" and there is no
- * combined figure: the AI marker's estimate (Phase E) no longer stands in for
- * it, in a student's results or in a teacher's table. (A blank task is handed in
- * with the band 0 the exam gives "no response", so it never holds a sitting up.)
+ * Phase K — a task's band was the TEACHER'S mark and nothing else.
+ *
+ * Phase O — the AI assesses Writing (no teacher review needed): a task's band is the
+ * teacher's mark when there is one (a teacher is the authority; a blank task is handed in
+ * with the band 0 the exam gives "no response"), otherwise the band of the sitting's AI
+ * assessment (see lib/writing-assessment). The Writing band is still (Task 1 + 2 x Task 2) / 3
+ * and exists only when BOTH tasks have a band; while the assessment is waiting or running the
+ * section reads "Processing". Full Mock bands are for TEACHERS only - no student page uses this.
  */
 export type FullMockSectionResultBand = {
   section: string;
   result: { bandScore: number | null } | null;
-  writingSubmission: { bandScore: number | null; taskType?: string | null; analysis?: { estimatedBand: number } | null } | null;
+  writingSubmission: {
+    bandScore: number | null;
+    taskType?: string | null;
+    analysis?: { estimatedBand: number } | null;
+    assessmentAsTask1?: { task1Band: number | null; status: string } | null;
+    assessmentAsTask2?: { task2Band: number | null; status: string } | null;
+  } | null;
   speakingSubmission: { bandScore: number | null } | null;
 };
+
+/** What a Writing submission contributes to a band calculation: the teacher's mark and the AI assessment's band for its task. */
+export const WRITING_BAND_SELECT = {
+  bandScore: true,
+  taskType: true,
+  assessmentAsTask1: { select: { task1Band: true, status: true } },
+  assessmentAsTask2: { select: { task2Band: true, status: true } },
+} as const;
 
 /** The columns every Full Mock band calculation reads — one definition, so every dashboard and result page composes bands from identical data. */
 export const FULL_MOCK_SECTION_BAND_SELECT = {
   section: true,
   result: { select: { bandScore: true } },
-  writingSubmission: { select: { bandScore: true, taskType: true, analysis: { select: { estimatedBand: true } } } },
+  writingSubmission: { select: WRITING_BAND_SELECT },
   speakingSubmission: { select: { bandScore: true } },
 } as const;
 
@@ -63,9 +81,10 @@ function average(values: number[]): number | null {
 
 type WritingSubmissionBand = NonNullable<FullMockSectionResultBand["writingSubmission"]>;
 
-/** One Writing task's band: the teacher's mark. Null while it is not marked (the AI marker's estimate is feedback, never a band). */
+/** One Writing task's band: the teacher's mark, else the band of the AI assessment of its task. Null while neither exists (the AI assessment is still to come). */
 export function writingTaskBand(submission: WritingSubmissionBand): number | null {
-  return submission.bandScore ?? null;
+  const ai = submission.assessmentAsTask1?.task1Band ?? submission.assessmentAsTask2?.task2Band ?? null;
+  return effectiveTaskBand(submission.bandScore, ai);
 }
 
 function writingBand(rows: FullMockSectionResultBand[]): number | null {
@@ -83,20 +102,33 @@ function writingBand(rows: FullMockSectionResultBand[]): number | null {
 /**
  * Where a mock's Writing leg stands, in the words teachers see on every
  * results table: "Not started", "In progress" (the 60-minute session is
- * running), "1 of 2 tasks submitted", "Submitted — awaiting teacher review" or
- * "Graded". null when the mock has no Writing section.
+ * running), "1 of 2 tasks submitted", "Processing" (handed in, the AI assessment is
+ * waiting or running), "AI assessment failed" or "Graded". null when the mock has no
+ * Writing section.
  */
 export function writingProgressLabel(args: {
   taskCount: number;
   started: boolean;
-  rows: { section: string; writingSubmission: { status: string; bandScore: number | null; analysis?: { estimatedBand: number } | null } | null }[];
+  rows: {
+    section: string;
+    writingSubmission: {
+      status: string;
+      bandScore: number | null;
+      analysis?: { estimatedBand: number } | null;
+      assessmentAsTask1?: { task1Band: number | null; status: string } | null;
+      assessmentAsTask2?: { task2Band: number | null; status: string } | null;
+    } | null;
+  }[];
 }): string | null {
   if (args.taskCount <= 0) return null;
   const submitted = args.rows.filter((r) => r.section === "WRITING" && r.writingSubmission && r.writingSubmission.status !== "DRAFT");
   if (submitted.length === 0) return args.started ? "In progress" : "Not started";
   if (submitted.length < args.taskCount) return `${submitted.length} of ${args.taskCount} tasks submitted`;
-  if (submitted.every((r) => r.writingSubmission!.bandScore != null)) return "Graded";
-  return "Submitted — awaiting teacher review";
+  if (submitted.every((r) => writingTaskBand(r.writingSubmission!) != null)) return "Graded";
+  const states = submitted.map((r) => r.writingSubmission!.assessmentAsTask1?.status ?? r.writingSubmission!.assessmentAsTask2?.status ?? null);
+  if (states.some((state) => state === "FAILED")) return "AI assessment failed";
+  if (states.every((state) => state == null)) return "Submitted — not yet assessed";
+  return "Processing";
 }
 
 export function bandForSection(rows: FullMockSectionResultBand[], section: (typeof SECTIONS)[number]): number | null {

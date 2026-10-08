@@ -8,6 +8,10 @@ import { getDailyLimit } from "@/lib/speaking-audio/practice";
 import { getUsageReport, monthValue, parseMonth, shiftMonth } from "@/lib/speaking-audio/usage";
 import { formatUsd } from "@/lib/speaking-audio/cost";
 import { speakingModels } from "@/lib/ai/services/speaking-audio-assessment";
+import { writingModel } from "@/lib/ai/services/writing-assessment";
+import { getWritingDailyLimit } from "@/lib/writing-assessment/queue";
+import { getWritingUsageReport } from "@/lib/writing-assessment/usage";
+import { WritingUsageSection } from "@/components/teacher/writing-assessment/usage-section";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DailyLimitForm } from "@/components/teacher/speaking-audio/daily-limit-form";
 
-export const metadata: Metadata = { title: "Speaking AI usage" };
+export const metadata: Metadata = { title: "AI usage" };
 
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const KIND_LABEL: Record<string, string> = { TRANSCRIBE: "Transcription", ASSESS: "Assessment (listens to audio)", ASSESS_RETRY: "Assessment, second try", ASSESS_TEXT: "Assessment from transcript" };
@@ -29,7 +33,7 @@ export default async function SpeakingUsagePage({ searchParams }: { searchParams
 
   const { month: monthParam } = await searchParams;
   const month = parseMonth(monthParam);
-  const [report, limit] = await Promise.all([getUsageReport(month), getDailyLimit()]);
+  const [report, limit, writingReport, writingLimit] = await Promise.all([getUsageReport(month), getDailyLimit(), getWritingUsageReport(month), getWritingDailyLimit()]);
   const models = speakingModels();
   const previous = shiftMonth(month, -1);
   const next = shiftMonth(month, 1);
@@ -37,8 +41,8 @@ export default async function SpeakingUsagePage({ searchParams }: { searchParams
   return (
     <div className="space-y-6" data-testid="usage-page">
       <PageHeader
-        title="Speaking AI usage and cost"
-        description="What the recorded Speaking practices have used of the AI service, from the usage log. Costs are estimates."
+        title="AI usage and cost"
+        description="What the recorded Speaking practices and the AI assessment of Writing have used of the AI service, from their usage logs. Costs are estimates."
         actions={
           <Button asChild variant="outline" size="sm">
             <Link href="/teacher/speaking-recordings">
@@ -66,6 +70,8 @@ export default async function SpeakingUsagePage({ searchParams }: { searchParams
         </div>
         <p className="text-muted-foreground text-xs">Months and days are counted in Tashkent time (UTC+5).</p>
       </div>
+
+      <h2 className="font-display text-2xl font-medium tracking-tight">Speaking AI usage and cost</h2>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="usage-stats">
         <StatCard label="Cost this month (estimate)" value={formatUsd(report.totals.costUsd)} icon={Coins} caption={`${number(report.totals.calls)} AI calls, ${report.totals.failedCalls} failed`} />
@@ -198,6 +204,8 @@ export default async function SpeakingUsagePage({ searchParams }: { searchParams
         How the cost is estimated: each AI call reports its tokens (and the audio part of them) or its audio minutes; they are multiplied by the list prices kept in the code (override them with the SPEAKING_PRICES_JSON setting
         when a price changes). Your OpenAI billing page has the exact amount.
       </p>
+
+      <WritingUsageSection report={writingReport} limit={writingLimit} model={writingModel()} />
     </div>
   );
 }

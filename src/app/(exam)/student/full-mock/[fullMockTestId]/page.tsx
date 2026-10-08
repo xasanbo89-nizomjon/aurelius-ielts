@@ -28,7 +28,7 @@ export default async function FullMockStartPage({
   const { fullMockTestId } = await params;
   const { user, profile } = await requireStudentProfile();
 
-  const test = await getPublishedFullMockTestDetail(fullMockTestId);
+  const test = await getPublishedFullMockTestDetail(fullMockTestId, profile.id);
   // Phase K - a draft mock never reaches a student (getPublishedFullMockTestDetail only returns PUBLISHED). A temporary ("_...") mock is kept out of every list
   // (getStudentFullMockDashboard) but stays reachable by its address: the access code is what lets a student in, and a teacher rehearsing a mock uses that address.
   if (!test) notFound();

@@ -42,7 +42,8 @@ export function OfficialWritingStandalone({
     async (drafts: HandInDraft[]): Promise<HandInOutcome> => {
       const mine = drafts.find((draft) => draft.taskId === part.taskId);
       const result = await submitWritingSittingAction({ submissionId, content: mine?.content, baseUpdatedAt: mine?.baseUpdatedAt });
-      if (result.success) return { ok: true, redirectTo: `/student/writing/${result.submissionId}` };
+      // Phase O - the server says where the student goes: the AI report, or "Your test has been submitted." when this task's results are hidden.
+      if (result.success) return { ok: true, redirectTo: result.nextHref || `/student/writing/${result.submissionId}` };
       return { ok: false, error: result.error, behindTaskId: result.conflict ? part.taskId : undefined };
     },
     [submissionId, part.taskId]

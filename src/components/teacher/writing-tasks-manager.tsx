@@ -23,6 +23,7 @@ import {
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { WritingTaskEditorDialog, type ExistingWritingTask } from "@/components/teacher/writing-task-editor-dialog";
 import { FallbackImage } from "@/components/ui/fallback-image";
+import { ResultsVisibilityControl } from "@/components/teacher/results-visibility-control";
 
 export type WritingTaskRow = ExistingWritingTask & {
   /** Phase L2 - set when Task 1 and Task 2 were made together as a Writing test. */
@@ -96,6 +97,7 @@ export function WritingTasksManager({ tasks, students }: { tasks: WritingTaskRow
               <TableHead>Assigned</TableHead>
               <TableHead>Due</TableHead>
               <TableHead>Submissions</TableHead>
+              <TableHead>Show results?</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="sr-only">Actions</TableHead>
             </TableRow>
@@ -136,6 +138,13 @@ export function WritingTasksManager({ tasks, students }: { tasks: WritingTaskRow
                 </TableCell>
                 <TableCell className="text-muted-foreground">{task.dueDate ? task.dueDate.toLocaleDateString() : "—"}</TableCell>
                 <TableCell className="text-muted-foreground">{task.submissionCount}</TableCell>
+                <TableCell>
+                  {task.inFullMock ? (
+                    <span className="text-muted-foreground text-xs" title="A task of a Full Mock: its results are never shown to students">Never (Full Mock)</span>
+                  ) : (
+                    <ResultsVisibilityControl kind="writing" id={task.id} value={task.showResultsToStudent} compact bare />
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge variant={WRITING_TASK_STATUS_VARIANTS[task.status]}>{WRITING_TASK_STATUS_LABELS[task.status]}</Badge>
                 </TableCell>

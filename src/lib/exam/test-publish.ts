@@ -89,6 +89,18 @@ export async function validateTestForPublish(testId: string): Promise<TestValida
 
   const validation = validateTestStructure(input);
 
+  // Phase O - a test goes live only when the teacher has answered "Show results to students?" (a section built for a Full Mock package is exempt: its results are never shown to students).
+  const visibility = await prisma.mockTest.findUnique({ where: { id: testId }, select: { showResultsToStudent: true, packageFullMockTestId: true } });
+  if (visibility && visibility.showResultsToStudent == null && !visibility.packageFullMockTestId) {
+    validation.issues.push({
+      code: "RESULTS_VISIBILITY",
+      severity: "error",
+      message: "Choose whether students see their results: set \"Show results to students?\" to Yes or No at the top of the test.",
+      target: { kind: "test" },
+    });
+    validation.ok = false;
+  }
+
   // The student's path: question rows in test order, numbered with the blank keys of their answers - what getAttemptDetail hands the exam screen.
   const studentRows = numberQuestions(
     [...input.questions].sort((a, b) => a.order - b.order).map((q) => ({ type: q.type, options: q.options, blankKeys: q.type === "SUMMARY_COMPLETION" ? answerKeysOf(q.correctAnswer) : null }))

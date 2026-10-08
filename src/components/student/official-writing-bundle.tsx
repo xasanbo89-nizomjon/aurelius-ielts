@@ -43,7 +43,8 @@ export function OfficialWritingBundle({
   const handIn = useCallback(
     async (drafts: HandInDraft[]): Promise<HandInOutcome> => {
       const result = await submitWritingBundleSittingAction({ submissionId: firstSubmissionId, drafts });
-      if (result.success) return { ok: true, redirectTo: doneHref };
+      // Phase O - the server says where the student goes: the combined AI report, or "Your test has been submitted." when this test's results are hidden.
+      if (result.success) return { ok: true, redirectTo: result.nextHref || doneHref };
       return { ok: false, error: result.error, behindTaskId: result.conflicts?.[0] };
     },
     [firstSubmissionId, doneHref]

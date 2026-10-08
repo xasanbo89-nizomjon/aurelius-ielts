@@ -3,6 +3,8 @@ import type { WritingTaskCategory, WritingTaskNumber, WritingTaskStatus, Writing
 
 import { prisma } from "@/lib/prisma";
 import { authorScope, getTestActor } from "@/lib/exam/test-access";
+import { isShownToStudent } from "@/lib/exam/result-visibility-rules";
+import { setWritingResultsVisibility } from "@/lib/exam/result-visibility";
 import { recordMediaUsage, removeMediaUsage, uploadMediaFile } from "@/lib/media-library";
 import { WRITING_TASK_IMAGE_MAX_BYTES, validateWritingTaskImageFile } from "@/lib/uploads/image-constraints";
 import { inspectImage } from "@/lib/uploads/image-processing";
@@ -113,6 +115,7 @@ export async function createWritingTask(teacherId: string, input: CreateWritingT
       dueDate: input.dueDate ?? null,
       createdById: teacherId,
       bundleId: extras.bundleId ?? null,
+      showResultsToStudent: input.showResultsToStudent ?? null,
       visualPdfUrl: extras.visualPdfUrl ?? null,
       visualPdfPage: extras.visualPdfPage ?? null,
       assignments: { create: input.assignedStudentIds.map((studentId) => ({ studentId })) },
@@ -125,13 +128,15 @@ export async function createWritingTask(teacherId: string, input: CreateWritingT
 }
 
 /** Updates the task's own fields, then syncs its assignment rows to exactly match the new student list (adds the newly-assigned, removes the unassigned) — never a wholesale delete-and-recreate, so a student's real submissions against this task are never disturbed. */
-export async function updateWritingTask(taskId: string, teacherId: string, input: CreateWritingTaskInput): Promise<void> {
+export async function updateWritingTask(taskId: string, teacherId: string, input: CreateWritingTaskInput, options: { requireShowResults?: boolean } = {}): Promise<void> {
   await assertOwnStudents(teacherId, input.assignedStudentIds);
   const task = await prisma.writingTask.findFirst({
     where: { id: taskId, ...(await authorScope(teacherId)) },
-    select: { id: true, imageMediaFileId: true, assignments: { select: { studentId: true } } },
+    select: { id: true, imageMediaFileId: true, fullMockUse: { select: { id: true } }, assignments: { select: { studentId: true } } },
   });
   if (!task) throw new Error("Writing task not found.");
+  // Phase O - a task made or edited in the task bank must have an answer to "Show results to students?" (a task of a Full Mock has none).
+  if (options.requireShowResults && !task.fullMockUse && input.showResultsToStudent === undefined) throw new Error("Choose whether students see their results (Yes or No).");
   // Phase L3 - a Root Teacher saving another teacher's task keeps its picture as it is (it sits in that teacher's library, not the Root Teacher's);
   // only a different picture is looked up, and that one must be in the signed-in teacher's own library.
   const keepsPicture = input.taskNumber === "TASK_1" && !!input.imageMediaFileId && input.imageMediaFileId === task.imageMediaFileId;
@@ -172,6 +177,10 @@ export async function updateWritingTask(taskId: string, teacherId: string, input
     await removeMediaUsage("WRITING_TASK_VISUAL", taskId);
     if (image.imageMediaFileId) await recordMediaUsage(image.imageMediaFileId, "WRITING_TASK_VISUAL", taskId);
   }
+
+  // Phase O - "Show results to students?" is a setting of the whole Writing test (both tasks of a pair carry the same answer) and of a task in the bank; a task written for a
+  // Full Mock has none (its results are never shown to students).
+  if (input.showResultsToStudent !== undefined && !task.fullMockUse) await setWritingResultsVisibility(taskId, teacherId, input.showResultsToStudent);
 }
 
 const VALID_STATUS_TRANSITIONS: Record<WritingTaskStatus, WritingTaskStatus[]> = {
@@ -182,10 +191,14 @@ const VALID_STATUS_TRANSITIONS: Record<WritingTaskStatus, WritingTaskStatus[]> =
 
 /** Publish / Archive. Only the transitions a Root Teacher can actually take from the current status are allowed — never an arbitrary status jump. */
 export async function setWritingTaskStatus(taskId: string, teacherId: string, nextStatus: WritingTaskStatusValue): Promise<void> {
-  const task = await prisma.writingTask.findFirst({ where: { id: taskId, ...(await authorScope(teacherId)) }, select: { status: true } });
+  const task = await prisma.writingTask.findFirst({ where: { id: taskId, ...(await authorScope(teacherId)) }, select: { status: true, showResultsToStudent: true, fullMockUse: { select: { id: true } } } });
   if (!task) throw new Error("Writing task not found.");
   if (!VALID_STATUS_TRANSITIONS[task.status].includes(nextStatus)) {
     throw new Error(`Can't move a task from ${task.status} to ${nextStatus}.`);
+  }
+  // Phase O - a task goes live only when the teacher has answered "Show results to students?" (a task written for a Full Mock has no such choice: its results are never shown).
+  if (nextStatus === "PUBLISHED" && task.showResultsToStudent == null && !task.fullMockUse) {
+    throw new Error("Choose Yes or No for \"Show results to students?\" (Edit the task) before publishing it.");
   }
   await prisma.writingTask.update({ where: { id: taskId }, data: { status: nextStatus } });
 }
@@ -212,6 +225,7 @@ export async function listWritingTasksForTeacher(teacherId: string) {
     orderBy: { createdAt: "desc" },
     include: {
       createdBy: { select: { id: true, user: { select: { name: true, email: true } } } },
+      fullMockUse: { select: { id: true } },
       _count: { select: { submissions: true } },
       assignments: { select: { studentId: true, student: { select: { user: { select: { name: true, email: true } } } } } },
       imageMediaFile: { select: { id: true, path: true, mimeType: true, width: true, height: true, size: true, fileName: true } },
@@ -309,6 +323,8 @@ export type StudentTaskWithProgress = {
   dueDate: Date | null;
   /** Phase L3 - set when this task is one of a Writing test (Task 1 + Task 2): the two are sat together, in one sitting. */
   bundleId: string | null;
+  /** Phase O - the teacher chose to hide this task's results from the student: its attempts carry no band at all (the server removes them, the screen only labels the row "Submitted"). */
+  resultsHidden: boolean;
   /** The single attempt to act on next — the open draft if one exists, otherwise the most recent submitted attempt, otherwise "not started". */
   latest: StudentTaskAttempt | null;
   /** Every past attempt at this task, most recent first — Writing History's "previous versions". */
@@ -338,6 +354,7 @@ export async function listWritingTasksForStudentWithProgress(studentId: string):
       targetBand: true,
       dueDate: true,
       bundleId: true,
+      showResultsToStudent: true,
     },
   });
   if (tasks.length === 0) return [];
@@ -371,7 +388,9 @@ export async function listWritingTasksForStudentWithProgress(studentId: string):
   }
 
   return tasks.map((task) => {
-    const attempts = attemptsByTask.get(task.id) ?? [];
+    const resultsHidden = !isShownToStudent({ showResultsToStudent: task.showResultsToStudent, inFullMock: false });
+    // Phase O - for a hidden task the bands are taken out HERE, on the server, so no page that draws these rows can show one.
+    const attempts = (attemptsByTask.get(task.id) ?? []).map((attempt) => (resultsHidden ? { ...attempt, estimatedBand: null, bandScore: null } : attempt));
     const openDraft = attempts.find((a) => a.status === "DRAFT");
     const mostRecentSubmitted = attempts.find((a) => a.status === "SUBMITTED");
     const latest = openDraft ?? mostRecentSubmitted ?? null;
@@ -387,6 +406,7 @@ export async function listWritingTasksForStudentWithProgress(studentId: string):
       targetBand: task.targetBand,
       dueDate: task.dueDate,
       bundleId: task.bundleId,
+      resultsHidden,
       latest,
       attempts,
     };

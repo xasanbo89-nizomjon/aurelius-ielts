@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { showResultsSchema } from "@/lib/validations/show-results";
+
 export const createImportedTestSchema = z.object({
   type: z.enum(["READING", "LISTENING"]),
   sourceFileName: z.string().trim().min(1).max(255),
@@ -55,5 +57,7 @@ export const confirmImportSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   category: z.enum(["CAMBRIDGE", "GENERAL"]).optional(),
   durationMinutes: z.number().int().positive().max(300).optional(),
+  /** Phase O - "Show results to students?" - the teacher's required Yes / No. */
+  showResultsToStudent: showResultsSchema,
 });
 export type ConfirmImportInput = z.infer<typeof confirmImportSchema>;

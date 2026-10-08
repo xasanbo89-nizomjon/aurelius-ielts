@@ -4,7 +4,6 @@ import type { MockTestCategory, MockTestDifficulty } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hasActiveAccess } from "@/lib/subscription";
 import { withoutInternalTests } from "@/lib/test-visibility";
-import { overallBandFromSections, requiredSectionsFor } from "@/lib/full-mock-band-composition";
 import {
   FULL_MOCK_LISTENING_MINUTES,
   FULL_MOCK_LISTENING_TRANSFER_MINUTES,
@@ -26,19 +25,18 @@ export type FullMockCardData = {
   sections: { listening: boolean; reading: boolean; writing: boolean; speaking: boolean };
   locked: boolean;
   latestAttemptId: string | null;
-  latestOverallBand: number | null;
   latestCompletedAt: Date | null;
 };
 
-export type FullMockHistoryPoint = { attemptId: string; testTitle: string; completedAt: Date; overallBand: number | null };
-
+/**
+ * Phase O - what the STUDENT's Mock Exams page is made of. A Full Mock's bands are for teachers only, so nothing here carries a band, an Overall or a trend: the student
+ * sees which mocks they can start, which are in progress and which they have handed in.
+ */
 export type FullMockDashboard = {
   available: FullMockCardData[];
   inProgress: FullMockCardData[];
   completed: FullMockCardData[];
   premiumLocked: FullMockCardData[];
-  history: FullMockHistoryPoint[];
-  bandTrend: { firstBand: number; latestBand: number; delta: number } | null;
 };
 
 /**
@@ -55,7 +53,8 @@ export type FullMockDashboard = {
 export async function getStudentFullMockDashboard(studentId: string): Promise<FullMockDashboard> {
   const [tests, hasAccess, myAttempts] = await Promise.all([
     prisma.fullMockTest.findMany({
-      where: { status: "PUBLISHED" },
+      // Phase O - a mock archived while the student is in the middle of it stays on their page until they finish (only one Full Mock is active at a time).
+      where: { OR: [{ status: "PUBLISHED" }, { status: "ARCHIVED", attempts: { some: { studentId, status: "IN_PROGRESS" } } }] },
       orderBy: { createdAt: "desc" },
       include: {
         readingSections: { include: { mockTest: { select: { durationMinutes: true } } } },
@@ -68,21 +67,7 @@ export async function getStudentFullMockDashboard(studentId: string): Promise<Fu
     prisma.fullMockAttempt.findMany({
       where: { studentId },
       orderBy: { startedAt: "desc" },
-      select: {
-        id: true,
-        fullMockTestId: true,
-        status: true,
-        completedAt: true,
-        fullMockTest: { select: { title: true, _count: { select: { writingSections: true, speakingSections: true } } } },
-        sectionResults: {
-          select: {
-            section: true,
-            result: { select: { bandScore: true } },
-            writingSubmission: { select: { bandScore: true, taskType: true, analysis: { select: { estimatedBand: true } } } },
-            speakingSubmission: { select: { bandScore: true } },
-          },
-        },
-      },
+      select: { id: true, fullMockTestId: true, status: true, completedAt: true },
     }),
   ]);
 
@@ -124,10 +109,6 @@ export async function getStudentFullMockDashboard(studentId: string): Promise<Fu
       },
       locked,
       latestAttemptId: latest?.id ?? null,
-      latestOverallBand:
-        latest?.status === "COMPLETED"
-          ? overallBandFromSections(latest.sectionResults, requiredSectionsFor({ writingSectionCount: test.writingSections.length, speakingSectionCount: test.speakingSections.length }))
-          : null,
       latestCompletedAt: latest?.status === "COMPLETED" ? latest.completedAt : null,
     };
 
@@ -137,24 +118,5 @@ export async function getStudentFullMockDashboard(studentId: string): Promise<Fu
     else available.push(card);
   }
 
-  const history: FullMockHistoryPoint[] = myAttempts
-    .filter((a) => a.status === "COMPLETED" && a.completedAt)
-    .map((a) => ({ attemptId: a.id, testTitle: a.fullMockTest.title, completedAt: a.completedAt as Date, overallBand: overallBandFromSections(
-        a.sectionResults,
-        requiredSectionsFor({ writingSectionCount: a.fullMockTest._count.writingSections, speakingSectionCount: a.fullMockTest._count.speakingSections })
-      ),
-    }))
-    .sort((a, b) => a.completedAt.getTime() - b.completedAt.getTime());
-
-  const bandedHistory = history.filter((h): h is FullMockHistoryPoint & { overallBand: number } => h.overallBand != null);
-  const bandTrend =
-    bandedHistory.length >= 2
-      ? {
-          firstBand: bandedHistory[0].overallBand,
-          latestBand: bandedHistory[bandedHistory.length - 1].overallBand,
-          delta: Math.round((bandedHistory[bandedHistory.length - 1].overallBand - bandedHistory[0].overallBand) * 10) / 10,
-        }
-      : null;
-
-  return { available, inProgress, completed, premiumLocked, history, bandTrend };
+  return { available, inProgress, completed, premiumLocked };
 }

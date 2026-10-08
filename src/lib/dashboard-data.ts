@@ -1,6 +1,7 @@
 import { SkillType, type AssignmentStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { resultsFor, type Audience } from "@/lib/exam/result-visibility";
 
 // Speaking module removed from the student/teacher experience — excluded
 // here so it never appears in progress/weakness breakdowns, even though
@@ -19,16 +20,18 @@ export type StudentOverview = {
 };
 
 /** Every value here is derived from real rows for this student — there is no placeholder data. */
-export async function getStudentOverview(studentId: string): Promise<StudentOverview> {
+export async function getStudentOverview(studentId: string, audience: Audience = "student"): Promise<StudentOverview> {
+  // Phase O - a student's own numbers count only the attempts whose results they may see; a teacher's view counts every attempt.
+  const visible = resultsFor(audience);
   const [testsCompleted, resultsBySkill, attemptedSkills, pendingWriting] = await Promise.all([
-    prisma.result.count({ where: { studentId, completedAt: { not: null }, skill: { in: ACTIVE_SKILLS } } }),
+    prisma.result.count({ where: { studentId, completedAt: { not: null }, skill: { in: ACTIVE_SKILLS }, ...visible } }),
     prisma.result.groupBy({
       by: ["skill"],
-      where: { studentId, completedAt: { not: null }, bandScore: { not: null }, skill: { in: ACTIVE_SKILLS } },
+      where: { studentId, completedAt: { not: null }, bandScore: { not: null }, skill: { in: ACTIVE_SKILLS }, ...visible },
       _avg: { bandScore: true },
     }),
     prisma.result.findMany({
-      where: { studentId, completedAt: { not: null }, skill: { in: ACTIVE_SKILLS } },
+      where: { studentId, completedAt: { not: null }, skill: { in: ACTIVE_SKILLS }, ...visible },
       distinct: ["skill"],
       select: { skill: true },
     }),
@@ -67,10 +70,10 @@ export type SkillBreakdownItem = {
 };
 
 /** Per-skill practice status for the Progress / Weakness Tracker sections — real Result rows only. */
-export async function getSkillBreakdown(studentId: string): Promise<SkillBreakdownItem[]> {
+export async function getSkillBreakdown(studentId: string, audience: Audience = "student"): Promise<SkillBreakdownItem[]> {
   const grouped = await prisma.result.groupBy({
     by: ["skill"],
-    where: { studentId, completedAt: { not: null }, skill: { in: ACTIVE_SKILLS } },
+    where: { studentId, completedAt: { not: null }, skill: { in: ACTIVE_SKILLS }, ...resultsFor(audience) },
     _count: { _all: true },
     _avg: { bandScore: true },
   });
@@ -97,10 +100,10 @@ export type ActivityItem = {
 };
 
 /** A unified, real activity feed merged from completed Results and Writing submissions. */
-export async function getRecentActivity(studentId: string, limit = 5): Promise<ActivityItem[]> {
+export async function getRecentActivity(studentId: string, limit = 5, audience: Audience = "student"): Promise<ActivityItem[]> {
   const [results, writing] = await Promise.all([
     prisma.result.findMany({
-      where: { studentId, completedAt: { not: null }, skill: { in: ACTIVE_SKILLS } },
+      where: { studentId, completedAt: { not: null }, skill: { in: ACTIVE_SKILLS }, ...resultsFor(audience) },
       orderBy: { completedAt: "desc" },
       take: limit,
       include: { mockTest: { select: { title: true } } },

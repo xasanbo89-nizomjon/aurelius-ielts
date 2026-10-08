@@ -5,7 +5,6 @@ import { z } from "zod";
 import { requireStudentProfile } from "@/lib/session";
 import {
   finalizeFullMockWriting,
-  markUnmarkedFullMockWriting,
   saveFullMockWritingDraft,
   type FinalizeFullMockWritingResult,
   type SaveFullMockDraftResult,
@@ -46,15 +45,3 @@ export async function submitFullMockWritingAction(attemptId: string, drafts: unk
   }
 }
 
-export type MarkFullMockWritingResult = { success: true; marked: number; remaining: number } | { success: false; error: string };
-
-/** The "Mark my Writing" button on the results page: asks the AI marker again for any essay that was handed in but is still without a band. */
-export async function markFullMockWritingAction(attemptId: string): Promise<MarkFullMockWritingResult> {
-  try {
-    const { profile } = await requireStudentProfile();
-    const outcome = await markUnmarkedFullMockWriting(idSchema.parse(attemptId), profile.id);
-    return { success: true, ...outcome };
-  } catch {
-    return { success: false, error: "Could not reach the marker. Please try again in a moment." };
-  }
-}

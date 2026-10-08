@@ -120,6 +120,8 @@ export default async function TeacherWritingPage() {
             dueDate: task.dueDate,
             status: task.status,
             bundleId: task.bundleId,
+            showResultsToStudent: task.showResultsToStudent,
+            inFullMock: task.fullMockUse != null,
             // a Root Teacher sees every teacher's tasks, so each one says who made it (nothing extra for a teacher, who only sees their own)
             authorName: profile.isRootTeacher ? (task.createdBy.user.name ?? task.createdBy.user.email) : null,
             submissionCount: task._count.submissions,

@@ -7,7 +7,8 @@ import { FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
 import { examDurationSeconds, remainingSeconds, timeUsedSeconds } from "@/lib/exam/timing";
 import { recordStudentActivity } from "@/lib/study-activity";
 import { getAssignedTaskForStudent, type AssignedWritingTask } from "@/lib/writing-tasks";
-import { getOrCreateOpenDraft, runAnalysis, saveDraftVersioned, submitFullMockEssay } from "@/lib/ai/writing";
+import { getOrCreateOpenDraft, saveDraftVersioned, submitFullMockEssay } from "@/lib/ai/writing";
+import { queueAfterHandIn } from "@/lib/writing-assessment/hand-in";
 import { recordLateText } from "@/lib/writing-late-text";
 import { WRITING_SAVE_GRACE_SECONDS } from "@/lib/writing/constants";
 import type { DraftSaveResult, HandInDraft } from "@/lib/writing/save-types";
@@ -23,26 +24,11 @@ import type { DraftSaveResult, HandInDraft } from "@/lib/writing/save-types";
 // after the end uses the drafts saved in time; the browser's late words are kept as late text for the teacher. No schema: the pair is the tasks' `bundleId`.
 // ---------------------------------------------------------------------------
 
-/** Upper bound on how long the hand-in waits for the AI marker before returning; an essay still unmarked is marked later (the report page has a retry). */
-const ANALYSIS_TIMEOUT_MS = 45_000;
-
 export const BUNDLE_SITTING_MINUTES = FULL_MOCK_WRITING_MINUTES;
 const allowedSeconds = (): number => examDurationSeconds(BUNDLE_SITTING_MINUTES) ?? 3600;
 
 /** True once the clock AND its small grace are over: from then on only what was saved in time counts. */
 export const bundleSittingIsLate = (startedAt: Date, now = Date.now()): boolean => now > startedAt.getTime() + (allowedSeconds() + WRITING_SAVE_GRACE_SECONDS) * 1000;
-
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), ms);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Which tasks form a sitting
@@ -182,7 +168,8 @@ export async function saveWritingBundleDraft(studentId: string, input: { submiss
 // ---------------------------------------------------------------------------
 
 export type SubmitBundleSittingResult =
-  | { success: true; /** the submissions of Task 1 and Task 2 */ submissionIds: string[]; blank: number }
+  /** `nextHref` (Phase O): where the student goes now - the combined AI report, or "Your test has been submitted." when the teacher hides this test's results. */
+  | { success: true; /** the submissions of Task 1 and Task 2 */ submissionIds: string[]; blank: number; nextHref: string }
   /** `conflicts`: the tasks whose draft was changed in another window - nothing was handed in. */
   | { success: false; error: string; conflicts?: string[] };
 
@@ -218,7 +205,9 @@ export async function submitWritingBundleSitting(
       if (id && browser !== undefined) await recordLateText(studentId, { submissionId: id, content: browser }).catch(() => undefined);
       if (id) submissionIds.push(id);
     }
-    return submissionIds.length === taskIds.length ? { success: true, submissionIds, blank: 0 } : { success: false, error: "This writing session isn't open." };
+    if (submissionIds.length !== taskIds.length) return { success: false, error: "This writing session isn't open." };
+    const again = await queueAfterHandIn({ studentId, submissionIds, taskId: taskIds[0], kick: false });
+    return { success: true, submissionIds, blank: 0, nextHref: again.nextHref };
   }
 
   const startedAt = since;
@@ -236,7 +225,6 @@ export async function submitWritingBundleSitting(
       });
   if (behind.length > 0) return { success: false, error: "Some of your writing was changed in another window.", conflicts: behind };
 
-  const toAnalyse: string[] = [];
   let blank = 0;
   for (const taskId of taskIds) {
     const draft = open.get(taskId);
@@ -256,7 +244,6 @@ export async function submitWritingBundleSitting(
     if (!submitted.success) return { success: false, error: submitted.error, conflicts: "conflict" in submitted && submitted.conflict ? [taskId] : undefined };
     submissionIds.push(submitted.submissionId);
     if (submitted.blank) blank++;
-    else toAnalyse.push(submitted.submissionId);
     // the browser's words arrived after the hour (+ grace): the saved draft was handed in; these are kept for the teacher, never in the submission
     if (late && browser?.content !== undefined) await recordLateText(studentId, { submissionId: submitted.submissionId, content: browser.content }).catch(() => undefined);
   }
@@ -277,11 +264,10 @@ export async function submitWritingBundleSitting(
     }
   }
 
-  // The hand-in is already safe; the marker only adds the reports, so a slow or unavailable marker never holds the student up for long.
-  if (!options.serverExpiry && options.analyse !== false) {
-    await withTimeout(Promise.all(toAnalyse.map((id) => runAnalysis(id, studentId).catch(() => null))), ANALYSIS_TIMEOUT_MS);
-  }
-  return { success: true, submissionIds, blank };
+  // The hand-in is already safe. Phase O: the AI assessment is queued (one combined report for the sitting) and runs in the background - the student is never kept waiting
+  // for it, and a sitting the server handed in by itself is left for the scheduled job.
+  const queued = await queueAfterHandIn({ studentId, submissionIds, taskId: taskIds[0], kick: !options.serverExpiry && options.analyse !== false });
+  return { success: true, submissionIds, blank, nextHref: queued.nextHref };
 }
 
 // ---------------------------------------------------------------------------

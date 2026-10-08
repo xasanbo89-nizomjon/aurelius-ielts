@@ -36,18 +36,24 @@ export function WritingSubmissionsTable({ submissions }: { submissions: WritingS
         {submissions.map((submission) => {
           const isDraft = submission.status === "DRAFT";
           const href = isDraft ? `/student/writing/new?draftId=${submission.id}` : `/student/writing/${submission.id}`;
+          // Phase O - an essay whose results are hidden from the student is listed (they wrote it) with no band, no teacher mark and no link to a report.
+          const hidden = submission.resultsHidden && !isDraft;
+          const title = (
+            <>
+              {submission.taskType}
+              {submission.category && <span className="text-muted-foreground font-normal"> — {WRITING_TASK_CATEGORY_LABELS[submission.category]}</span>}
+            </>
+          );
           return (
-            <TableRow key={submission.id}>
+            <TableRow key={submission.id} data-hidden-result={hidden ? "true" : undefined}>
               <TableCell className="font-medium">
-                <Link
-                  href={href}
-                  className="hover:text-accent focus-visible:text-accent underline-offset-4 outline-none focus-visible:underline"
-                >
-                  {submission.taskType}
-                  {submission.category && (
-                    <span className="text-muted-foreground font-normal"> — {WRITING_TASK_CATEGORY_LABELS[submission.category]}</span>
-                  )}
-                </Link>
+                {hidden ? (
+                  title
+                ) : (
+                  <Link href={href} className="hover:text-accent focus-visible:text-accent underline-offset-4 outline-none focus-visible:underline">
+                    {title}
+                  </Link>
+                )}
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {isDraft ? "Not submitted" : submission.createdAt.toLocaleDateString()}
@@ -56,7 +62,7 @@ export function WritingSubmissionsTable({ submissions }: { submissions: WritingS
               <TableCell>{submission.estimatedBand != null ? submission.estimatedBand.toFixed(1) : "—"}</TableCell>
               <TableCell>{submission.bandScore != null ? submission.bandScore.toFixed(1) : "—"}</TableCell>
               <TableCell>
-                <Badge variant={STATUS_VARIANT[submission.status]}>{STATUS_LABEL[submission.status]}</Badge>
+                {hidden ? <Badge variant="outline">Submitted</Badge> : <Badge variant={STATUS_VARIANT[submission.status]}>{STATUS_LABEL[submission.status]}</Badge>}
               </TableCell>
             </TableRow>
           );

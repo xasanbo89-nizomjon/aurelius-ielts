@@ -3,7 +3,7 @@ import { authorScope } from "@/lib/exam/test-access";
 import { randomInt } from "crypto";
 
 import { prisma } from "@/lib/prisma";
-import { bandForSection, overallBandFromSections, overallBandLabel, requiredSectionsFor, writingProgressLabel } from "@/lib/full-mock-band-composition";
+import { WRITING_BAND_SELECT, bandForSection, overallBandFromSections, overallBandLabel, requiredSectionsFor, writingProgressLabel } from "@/lib/full-mock-band-composition";
 import { fullMockTimeUsed, type FullMockTimeUsed } from "@/lib/exam/section-deadline";
 import { settleOverdueAttempts } from "@/lib/full-mock-attempts";
 
@@ -365,7 +365,7 @@ export async function listMockResultsForTeacher(teacherId: string, search?: stri
           result: {
             select: { bandScore: true, rawScore: true, completedAt: true, durationSeconds: true, endReason: true, mockTest: { select: { questions: { select: { points: true } } } } },
           },
-          writingSubmission: { select: { status: true, bandScore: true, taskType: true, submittedAt: true, analysis: { select: { estimatedBand: true } } } },
+          writingSubmission: { select: { ...WRITING_BAND_SELECT, status: true, submittedAt: true } },
           speakingSubmission: { select: { bandScore: true } },
         },
       },

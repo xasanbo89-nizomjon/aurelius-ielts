@@ -50,7 +50,7 @@ export default async function TeacherStudentDetailPage({
     getStudentVocabularyStats(studentId),
     getStudentVocabularyActivity(studentId),
     getStudentVocabularyTrends(studentId),
-    getProgressHistory(studentId),
+    getProgressHistory(studentId, 50, "teacher"),
     getWritingBandTrend(studentId),
     getSpeakingBandTrend(studentId),
     getWeeklyActivityBreakdown(studentId),

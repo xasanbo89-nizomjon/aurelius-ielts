@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { dropAbandoned } from "@/lib/speaking-audio/practice";
 import { processDue } from "@/lib/speaking-audio/processing";
+import { processDue as processDueWriting } from "@/lib/writing-assessment/processing";
 
 /**
  * Phase Q-B - the scheduled job that finishes recorded Speaking practices nobody is waiting for: assessments that were handed over but never started, and ones whose
@@ -32,10 +33,21 @@ export async function GET(request: Request) {
 
   const startedAt = Date.now();
   try {
-    const tally = await processDue({ max: 3, stopAfterMs: 40_000 });
+    const tally = await processDue({ max: 3, stopAfterMs: 30_000 });
     // Practices started more than a day ago whose recording never arrived are dropped with whatever they left in storage.
     const abandoned = await dropAbandoned(new Date());
-    return NextResponse.json({ ok: true, ...tally, abandoned, tookMs: Date.now() - startedAt });
+    // Phase O - the same job also finishes the AI assessments of Writing sittings that nobody is waiting for (a Full Mock the server handed in by itself, an assessment whose
+    // worker died). It starts none after 45 seconds and gives each at most what is left of the function's time, so the job is never cut off half way.
+    let writing: { looked: number; done: number; failed: number } | { error: string } = { looked: 0, done: 0, failed: 0 };
+    try {
+      if (Date.now() - startedAt < 45_000) {
+        writing = await processDueWriting({ max: 2, stopAfterMs: 45_000 - (Date.now() - startedAt), deps: { deadline: startedAt + 105_000 } });
+      }
+    } catch (error) {
+      console.error("[cron] writing assessments failed:", error);
+      writing = { error: "see the server log" };
+    }
+    return NextResponse.json({ ok: true, ...tally, abandoned, writing, tookMs: Date.now() - startedAt });
   } catch (error) {
     console.error("[cron] speaking-audio failed:", error);
     return NextResponse.json({ ok: false, error: "The run failed; see the server log." }, { status: 500 });

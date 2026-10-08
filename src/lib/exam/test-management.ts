@@ -92,6 +92,8 @@ export async function createTest(
     durationMinutes?: number;
     /** Phase Q - the kind of paper (default: Full IELTS). */
     format?: "FULL_IELTS" | "CUSTOM";
+    /** Phase O - "Show results to students?" (null / left out: not asked - a test made by a script; its results are shown). */
+    showResultsToStudent?: boolean | null;
   }
 ) {
   return prisma.mockTest.create({
@@ -102,6 +104,7 @@ export async function createTest(
       category: input.category,
       durationMinutes: input.durationMinutes,
       testFormat: input.format ?? "FULL_IELTS",
+      showResultsToStudent: input.showResultsToStudent ?? null,
       createdById: teacherId,
     },
   });

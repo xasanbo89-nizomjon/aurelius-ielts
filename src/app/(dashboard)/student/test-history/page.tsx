@@ -5,6 +5,7 @@ import type { SkillType } from "@prisma/client";
 
 import { requireStudentProfile } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { isShownToStudent } from "@/lib/exam/result-visibility-rules";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -48,7 +49,8 @@ export default async function TestHistoryPage({
       orderBy: { completedAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: { mockTest: { select: { title: true, type: true } } },
+      // Phase O - a test whose results are hidden from the student is still listed (they did take it) but with no score, band, time or link.
+      include: { mockTest: { select: { title: true, type: true, showResultsToStudent: true } }, fullMockSectionResult: { select: { id: true } } },
     }),
     prisma.result.count({ where }),
   ]);
@@ -73,7 +75,7 @@ export default async function TestHistoryPage({
     <>
       <PageHeader
         title="Test History"
-        description="Every test you've completed, with your score and estimated band."
+        description="Every test you've completed, with your score and estimated band when your teacher shows results."
         actions={
           <SearchInput
             name="q"
@@ -118,33 +120,50 @@ export default async function TestHistoryPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {results.map((result) => (
-                <TableRow key={result.id}>
-                  <TableCell className="font-medium">
-                    <Link
-                      href={`/student/exam/attempt/${result.id}/results`}
-                      className="hover:text-accent focus-visible:text-accent underline-offset-4 outline-none focus-visible:underline"
-                    >
-                      {result.mockTest.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground capitalize">{result.mockTest.type.toLowerCase()}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {result.completedAt?.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                  </TableCell>
-                  <TableCell>{result.rawScore ?? 0}</TableCell>
-                  <TableCell>
-                    {result.bandScore != null ? (
-                      <Badge variant="accent">{result.bandScore.toFixed(1)}</Badge>
+              {results.map((result) => {
+                const shown = isShownToStudent({ showResultsToStudent: result.mockTest.showResultsToStudent, inFullMock: result.fullMockSectionResult != null });
+                return (
+                  <TableRow key={result.id}>
+                    <TableCell className="font-medium">
+                      {shown ? (
+                        <Link
+                          href={`/student/exam/attempt/${result.id}/results`}
+                          className="hover:text-accent focus-visible:text-accent underline-offset-4 outline-none focus-visible:underline"
+                        >
+                          {result.mockTest.title}
+                        </Link>
+                      ) : (
+                        result.mockTest.title
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground capitalize">{result.mockTest.type.toLowerCase()}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {result.completedAt?.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                    </TableCell>
+                    {shown ? (
+                      <>
+                        <TableCell>{result.rawScore ?? 0}</TableCell>
+                        <TableCell>
+                          {result.bandScore != null ? (
+                            <Badge variant="accent">{result.bandScore.toFixed(1)}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {result.durationSeconds != null ? `${Math.round(result.durationSeconds / 60)} min` : "—"}
+                        </TableCell>
+                      </>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <TableCell colSpan={3}>
+                        <Badge variant="outline" data-testid="history-submitted">
+                          Submitted
+                        </Badge>
+                      </TableCell>
                     )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {result.durationSeconds != null ? `${Math.round(result.durationSeconds / 60)} min` : "—"}
-                  </TableCell>
-                </TableRow>
-              ))}
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           <Pagination page={page} totalPages={totalPages} buildHref={buildHref} />

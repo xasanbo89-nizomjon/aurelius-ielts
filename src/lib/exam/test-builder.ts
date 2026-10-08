@@ -108,7 +108,7 @@ export async function getBuilderState(testId: string, teacherId: string): Promis
 /** The wizard's "by hand": the test with its empty parts (3 passages / 4 parts) in place, so the editor can open on it. */
 export async function createTestWithParts(
   teacherId: string,
-  input: { type: Skill; title: string; description?: string; durationMinutes?: number | null; category?: MockTestCategory; format?: TestFormatValue; partCount?: number }
+  input: { type: Skill; title: string; description?: string; durationMinutes?: number | null; category?: MockTestCategory; format?: TestFormatValue; partCount?: number; showResultsToStudent?: boolean | null }
 ) {
   const testId = newRowId();
   const format: TestFormatValue = input.format === "CUSTOM" ? "CUSTOM" : "FULL_IELTS";
@@ -116,7 +116,7 @@ export async function createTestWithParts(
   const count = format === "CUSTOM" ? Math.min(CUSTOM_MAX_PARTS, Math.max(1, Math.floor(input.partCount ?? PART_COUNT[input.type]))) : PART_COUNT[input.type];
   await prisma.$transaction([
     prisma.mockTest.create({
-      data: { id: testId, title: input.title, description: input.description || null, type: input.type, testFormat: format, category: input.category ?? "GENERAL", durationMinutes: input.durationMinutes ?? (input.type === "LISTENING" ? 30 : 60), createdById: teacherId },
+      data: { id: testId, title: input.title, description: input.description || null, type: input.type, testFormat: format, category: input.category ?? "GENERAL", durationMinutes: input.durationMinutes ?? (input.type === "LISTENING" ? 30 : 60), showResultsToStudent: input.showResultsToStudent ?? null, createdById: teacherId },
     }),
     prisma.passage.createMany({
       data: Array.from({ length: count }, (_, index) => ({ id: newRowId(), mockTestId: testId, title: input.type === "LISTENING" ? `Part ${index + 1}` : `Passage ${index + 1}`, content: "", orderIndex: index })),

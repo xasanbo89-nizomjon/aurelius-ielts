@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { createTestSchema, type CreateTestInput } from "@/lib/validations/test-management";
 import { createBuilderTestAction } from "@/actions/test-builder.actions";
+import { ShowResultsField } from "@/components/teacher/show-results-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,7 @@ export function CreateTestForm({ defaultType = "READING" }: { defaultType?: "REA
   const type = watch("type");
   const category = watch("category");
   const format = watch("format") ?? "FULL_IELTS";
+  const showResults = watch("showResultsToStudent");
 
   async function onSubmit(values: CreateTestInput) {
     setSubmitting(true);
@@ -46,6 +48,8 @@ export function CreateTestForm({ defaultType = "READING" }: { defaultType?: "REA
       category: values.category,
       format: values.format ?? "FULL_IELTS",
       partCount: values.format === "CUSTOM" ? (values.partCount ?? (values.type === "LISTENING" ? 4 : 3)) : undefined,
+      // Phase O - "Show results to students?" Yes / No, required.
+      showResultsToStudent: values.showResultsToStudent,
     });
     setSubmitting(false);
 
@@ -140,6 +144,12 @@ export function CreateTestForm({ defaultType = "READING" }: { defaultType?: "REA
           onCheckedChange={(checked) => setValue("category", checked ? "CAMBRIDGE" : "GENERAL")}
         />
       </div>
+
+      <ShowResultsField
+        value={showResults}
+        onChange={(next) => setValue("showResultsToStudent", next, { shouldValidate: true })}
+        error={errors.showResultsToStudent?.message}
+      />
 
       <Button type="submit" disabled={submitting}>
         {submitting && <Loader2 className="size-4 animate-spin" />}

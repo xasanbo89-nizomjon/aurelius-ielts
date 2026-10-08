@@ -7,7 +7,8 @@ import { CheckCircle2, CircleDashed, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { publishFullMockTestAction } from "@/actions/full-mock-tests.actions";
-import type { FullMockCompleteness } from "@/lib/full-mock-tests";
+import type { ActiveFullMock, FullMockCompleteness } from "@/lib/full-mock-tests";
+import { ArchiveOthersDialog } from "@/components/teacher/full-mock/archive-others-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -37,17 +38,24 @@ export function ReviewStep({
 }) {
   const router = useRouter();
   const [publishing, setPublishing] = useState(false);
+  // Phase O - the other Full Mock(s) that are active and would be archived: asked about first.
+  const [others, setOthers] = useState<ActiveFullMock[] | null>(null);
 
-  async function handlePublish() {
+  async function handlePublish(archiveOthers = false) {
     setPublishing(true);
-    const result = await publishFullMockTestAction(fullMockTestId);
+    const result = await publishFullMockTestAction(fullMockTestId, { archiveOthers });
     setPublishing(false);
 
     if (!result.success) {
+      if (result.needsConfirm) {
+        setOthers(result.needsConfirm);
+        return;
+      }
       toast.error(result.error);
       return;
     }
-    toast.success("Full mock test published.");
+    setOthers(null);
+    toast.success(result.archived && result.archived.length > 0 ? "Full mock test published. The previous Full Mock was archived." : "Full mock test published.");
     router.push("/teacher/tests");
   }
 
@@ -97,11 +105,12 @@ export function ReviewStep({
         <Button variant="outline" onClick={handleSaveDraft}>
           Save Draft
         </Button>
-        <Button onClick={handlePublish} disabled={!completeness.isComplete || publishing}>
+        <Button onClick={() => void handlePublish()} disabled={!completeness.isComplete || publishing}>
           {publishing && <Loader2 className="size-4 animate-spin" />}
           {status === "PUBLISHED" ? "Republish" : "Publish"}
         </Button>
       </div>
+      <ArchiveOthersDialog open={others != null} others={others ?? []} busy={publishing} onConfirm={() => void handlePublish(true)} onCancel={() => setOthers(null)} />
       {!completeness.isComplete && (
         <p className="text-muted-foreground text-xs">Complete every item above before publishing.</p>
       )}

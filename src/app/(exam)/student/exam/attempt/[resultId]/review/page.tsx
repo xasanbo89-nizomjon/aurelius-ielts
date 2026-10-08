@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getAttemptSummary } from "@/lib/exam/attempts";
+import { getResultVisibility, hiddenAttemptHref } from "@/lib/exam/result-visibility";
 import { findInProgressFullMockLinkForResult } from "@/lib/full-mock-attempts";
 import { officialBandForScore } from "@/lib/analytics/band-conversion";
 import { isCustomFormat } from "@/lib/exam/test-format";
@@ -32,6 +33,11 @@ export default async function ExamReviewPage({
   const { resultId } = await params;
   const { results } = await searchParams;
   const { user, profile } = await requireStudentProfile();
+
+  // Phase O - the outcome is checked on the server before anything is read: a hidden result (or a Full Mock section) sends the student on, never to a page with a score.
+  const visibility = await getResultVisibility(resultId, profile.id);
+  if (!visibility.found) notFound();
+  if (visibility.completed && !visibility.shown) redirect(hiddenAttemptHref(resultId, visibility));
 
   const attempt = await getAttemptSummary(resultId, profile.id);
   if (!attempt) notFound();

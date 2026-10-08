@@ -391,7 +391,7 @@ export type ConfirmImportWarning = { questionNumbers: number[]; passageTitle: st
 export async function confirmImport(
   importedTestId: string,
   teacherId: string,
-  input: { title: string; description?: string; category?: MockTestCategory; durationMinutes?: number }
+  input: { title: string; description?: string; category?: MockTestCategory; durationMinutes?: number; /** Phase O - "Show results to students?" */ showResultsToStudent: boolean }
 ): Promise<{ mockTestId: string; warnings: ConfirmImportWarning[] }> {
   const row = await prisma.importedTest.findFirst({
     where: { id: importedTestId, teacherId },
@@ -419,6 +419,7 @@ export async function confirmImport(
     durationMinutes: input.durationMinutes,
     // Phase Q - the kind of paper chosen in the review is the kind of test that is made.
     format: row.testFormat === "CUSTOM" ? "CUSTOM" : "FULL_IELTS",
+    showResultsToStudent: input.showResultsToStudent,
   });
 
   const answersByNumber = new Map(row.answers.map((a) => [a.questionNumber, a.answerText]));

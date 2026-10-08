@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { examDurationSeconds, remainingSeconds, timeUsedSeconds } from "@/lib/exam/timing";
 import { recordStudentActivity } from "@/lib/study-activity";
 import { getAssignedTaskForStudent, type AssignedWritingTask } from "@/lib/writing-tasks";
-import { getOrCreateOpenDraft, runAnalysis, saveDraftVersioned, submitFullMockEssay } from "@/lib/ai/writing";
+import { getOrCreateOpenDraft, saveDraftVersioned, submitFullMockEssay } from "@/lib/ai/writing";
+import { queueAfterHandIn } from "@/lib/writing-assessment/hand-in";
 import { recordLateText } from "@/lib/writing-late-text";
 import { getAssignedBundleForStudent } from "@/lib/writing-bundle-sitting";
 import { WRITING_PART_MINUTES, WRITING_SAVE_GRACE_SECONDS, type WritingTaskKey } from "@/lib/writing/constants";
@@ -25,9 +26,6 @@ import type { DraftSaveResult } from "@/lib/writing/save-types";
 // no clock here either - the header says "Untimed" and nothing is handed in by itself.
 // ---------------------------------------------------------------------------
 
-/** Upper bound on how long the hand-in waits for the AI marker before returning; an essay still unmarked is marked later (the report page has a retry). */
-const ANALYSIS_TIMEOUT_MS = 45_000;
-
 /** Seconds the sitting may run, or null when no start was ever recorded (an older draft: no clock). */
 export function sittingAllowedSeconds(startedAt: Date | null, taskNumber: WritingTaskKey): number | null {
   return startedAt ? examDurationSeconds(WRITING_PART_MINUTES[taskNumber]) : null;
@@ -38,18 +36,6 @@ function isLate(startedAt: Date | null, taskNumber: WritingTaskKey, now = Date.n
   const allowed = sittingAllowedSeconds(startedAt, taskNumber);
   if (!startedAt || allowed == null) return false;
   return now > startedAt.getTime() + (allowed + WRITING_SAVE_GRACE_SECONDS) * 1000;
-}
-
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), ms);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 }
 
 export type StartWritingSittingResult = { success: true; submissionId: string; resumed: boolean } | { success: false; error: string };
@@ -119,7 +105,8 @@ export async function saveWritingSittingDraft(studentId: string, input: { submis
 }
 
 export type SubmitWritingSittingResult =
-  | { success: true; submissionId: string; blank: boolean }
+  /** `nextHref` (Phase O): the AI report of this essay, or "Your test has been submitted." when the teacher hides this task's results. */
+  | { success: true; submissionId: string; blank: boolean; nextHref: string }
   | { success: false; error: string; conflict?: { content: string; updatedAt: string } };
 
 /**
@@ -141,7 +128,8 @@ export async function submitWritingSitting(
   if (draft.status !== "DRAFT") {
     // Already handed in (by the server's expiry while this window was offline, or by another window): words this window still holds are kept as late text (Phase K).
     if (input.content !== undefined) await recordLateText(studentId, { submissionId: draft.id, content: input.content }).catch(() => undefined);
-    return { success: true, submissionId: draft.id, blank: draft.content.trim().length === 0 };
+    const again = await queueAfterHandIn({ studentId, submissionIds: [draft.id], taskId: draft.taskId, kick: false, fallbackSubmissionId: draft.id });
+    return { success: true, submissionId: draft.id, blank: draft.content.trim().length === 0, nextHref: again.nextHref };
   }
 
   const useBrowser = input.content !== undefined && !isLate(draft.startedAt, draft.task.taskNumber);
@@ -179,9 +167,10 @@ export async function submitWritingSitting(
     }
   }
 
-  // The hand-in is already safe; the marker only adds the report, so a slow or unavailable marker never holds the student up for long.
-  if (!submitted.blank && !options.serverExpiry) await withTimeout(runAnalysis(submitted.submissionId, studentId).catch(() => null), ANALYSIS_TIMEOUT_MS);
-  return { success: true, submissionId: submitted.submissionId, blank: submitted.blank };
+  // The hand-in is already safe. Phase O: the AI assessment is queued and runs in the background - the student is never kept waiting for it, and a sitting the server
+  // handed in by itself is left for the scheduled job.
+  const queued = await queueAfterHandIn({ studentId, submissionIds: [submitted.submissionId], taskId: draft.taskId, kick: !options.serverExpiry, fallbackSubmissionId: submitted.submissionId });
+  return { success: true, submissionId: submitted.submissionId, blank: submitted.blank, nextHref: queued.nextHref };
 }
 
 /**

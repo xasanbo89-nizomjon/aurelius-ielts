@@ -9,6 +9,7 @@ import { allowedSecondsFor, timeUsedSeconds } from "@/lib/exam/timing";
 import { EXPIRY_GRACE_SECONDS, deadlineFrom, isPastDeadline, sectionAllowedSeconds } from "@/lib/exam/section-deadline";
 import { ensureRecordingLengths } from "@/lib/exam/recording-length";
 import { newRowId } from "@/lib/exam/row-ids";
+import { resultShownToStudentWhere } from "@/lib/exam/result-visibility";
 import type { SectionEndReason } from "@prisma/client";
 
 /** Types of tests the Phase 3 exam engine can actually run. */
@@ -90,7 +91,8 @@ export async function getAttemptDetail(resultId: string, studentId: string) {
  */
 export async function getAttemptSummary(resultId: string, studentId: string) {
   return prisma.result.findFirst({
-    where: { id: resultId, studentId },
+    // Phase O - a student's review is only ever read for an attempt whose outcome they may see (the pages redirect a hidden one to the "submitted" note first; this is the second lock).
+    where: { id: resultId, studentId, ...resultShownToStudentWhere },
     include: {
       mockTest: {
         select: {

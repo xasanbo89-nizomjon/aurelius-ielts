@@ -3,7 +3,7 @@ import "server-only";
 import type { Prisma, SkillType, SubmissionStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { bandForSection, overallBandFromSections, requiredSectionsFor, writingProgressLabel } from "@/lib/full-mock-band-composition";
+import { WRITING_BAND_SELECT, bandForSection, overallBandFromSections, requiredSectionsFor, writingProgressLabel } from "@/lib/full-mock-band-composition";
 import { fullMockTimeUsed } from "@/lib/exam/section-deadline";
 
 /**
@@ -248,7 +248,7 @@ async function loadFullMockRows({ studentWhere, search, take }: LoaderArgs): Pro
         select: {
           section: true,
           result: { select: { rawScore: true, bandScore: true, completedAt: true, durationSeconds: true, mockTestId: true } },
-          writingSubmission: { select: { status: true, bandScore: true, taskType: true, submittedAt: true, analysis: { select: { estimatedBand: true } } } },
+          writingSubmission: { select: { ...WRITING_BAND_SELECT, status: true, submittedAt: true } },
           speakingSubmission: { select: { bandScore: true } },
         },
       },

@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { WritingTaskImageField } from "@/components/teacher/writing-task-image-field";
+import { ShowResultsField } from "@/components/teacher/show-results-field";
 import { FallbackImage } from "@/components/ui/fallback-image";
 
 type TaskNumberValue = "TASK_1" | "TASK_2";
@@ -44,6 +45,10 @@ export type ExistingWritingTask = {
   targetBand: number | null;
   dueDate: Date | null;
   assignedStudentIds: string[];
+  /** Phase O - "Show results to students?" (null = a task made before Phase O: its results are shown). */
+  showResultsToStudent: boolean | null;
+  /** Phase O - the task belongs to a Full Mock: its results are never shown to students, so there is no choice to make. */
+  inFullMock?: boolean;
 };
 
 /** yyyy-mm-dd for an <input type="date"> value — local calendar date, not UTC-shifted. */
@@ -79,6 +84,8 @@ export function WritingTaskEditorDialog({
   const [targetBand, setTargetBand] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [assignedStudentIds, setAssignedStudentIds] = useState<string[]>([]);
+  // Phase O - "Show results to students?": not chosen until the teacher picks Yes or No (an older task starts unanswered too).
+  const [showResults, setShowResults] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const categoryOptions = taskNumber === "TASK_1" ? TASK_1_CATEGORIES : TASK_2_CATEGORIES;
@@ -96,6 +103,7 @@ export function WritingTaskEditorDialog({
     setTargetBand(existingTask?.targetBand != null ? String(existingTask.targetBand) : "");
     setDueDate(toDateInputValue(existingTask?.dueDate ?? null));
     setAssignedStudentIds(existingTask?.assignedStudentIds ?? []);
+    setShowResults(existingTask?.showResultsToStudent ?? null);
   }, [open, existingTask]);
 
   async function handleCoverFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -148,6 +156,8 @@ export function WritingTaskEditorDialog({
       targetBand: targetBand.trim() ? Number(targetBand) : undefined,
       dueDate: dueDate.trim() ? new Date(`${dueDate}T00:00:00`) : undefined,
       assignedStudentIds,
+      // a task of a Full Mock has no such choice
+      showResultsToStudent: existingTask?.inFullMock ? undefined : (showResults ?? undefined),
     };
     const result = existingTask
       ? await updateWritingTaskAction(existingTask.id, input)
@@ -169,7 +179,7 @@ export function WritingTaskEditorDialog({
   // an unpublished DRAFT that's invisible to everyone regardless, exactly
   // like an assignment with nobody picked yet. Students can be added later
   // via Edit once the roster has someone.
-  const canSave = Boolean(title.trim() && prompt.trim());
+  const canSave = Boolean(title.trim() && prompt.trim() && (existingTask?.inFullMock || showResults !== null));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -359,6 +369,7 @@ export function WritingTaskEditorDialog({
               </p>
             )}
           </div>
+          {!existingTask?.inFullMock && <ShowResultsField value={showResults} onChange={setShowResults} />}
         </div>
 
         <DialogFooter>

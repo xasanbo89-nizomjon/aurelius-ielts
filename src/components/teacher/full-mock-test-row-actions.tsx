@@ -13,6 +13,8 @@ import {
   unarchiveFullMockTestAction,
   unpublishFullMockTestAction,
 } from "@/actions/full-mock-tests.actions";
+import type { ActiveFullMock } from "@/lib/full-mock-tests";
+import { ArchiveOthersDialog } from "@/components/teacher/full-mock/archive-others-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -50,7 +52,25 @@ export function FullMockTestRowActions({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [understandsAttemptsGoToo, setUnderstandsAttemptsGoToo] = useState(false);
+  // Phase O - the other Full Mock(s) that are active and would be archived by publishing this one: asked about first.
+  const [others, setOthers] = useState<ActiveFullMock[] | null>(null);
+
+  function publish(archiveOthers = false) {
+    startTransition(async () => {
+      const result = await publishFullMockTestAction(fullMockTestId, { archiveOthers });
+      if (!result.success) {
+        if (result.needsConfirm) {
+          setOthers(result.needsConfirm);
+          return;
+        }
+        toast.error(result.error);
+        return;
+      }
+      setOthers(null);
+      toast.success(result.archived && result.archived.length > 0 ? "Published. The previous Full Mock was archived." : "Published.");
+      router.refresh();
+    });
+  }
 
   function run(action: () => Promise<ActionResult>) {
     startTransition(async () => {
@@ -83,7 +103,7 @@ export function FullMockTestRowActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {status !== "ARCHIVED" && (
-            <DropdownMenuItem onSelect={() => run(() => (status === "PUBLISHED" ? unpublishFullMockTestAction(fullMockTestId) : publishFullMockTestAction(fullMockTestId)))}>
+            <DropdownMenuItem onSelect={() => (status === "PUBLISHED" ? run(() => unpublishFullMockTestAction(fullMockTestId)) : publish())}>
               {status === "PUBLISHED" ? "Unpublish" : "Publish"}
             </DropdownMenuItem>
           )}
@@ -106,13 +126,9 @@ export function FullMockTestRowActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog
-        open={confirmDeleteOpen}
-        onOpenChange={(next) => {
-          setConfirmDeleteOpen(next);
-          if (!next) setUnderstandsAttemptsGoToo(false);
-        }}
-      >
+      <ArchiveOthersDialog open={others != null} others={others ?? []} busy={pending} onConfirm={() => publish(true)} onCancel={() => setOthers(null)} />
+
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete this full mock test?</DialogTitle>
@@ -124,15 +140,12 @@ export function FullMockTestRowActions({
           </DialogHeader>
 
           {attemptCount > 0 && (
-            <label className="border-destructive/30 bg-destructive/5 flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-sm">
-              <input type="checkbox" className="mt-0.5 size-4 shrink-0" checked={understandsAttemptsGoToo} onChange={(event) => setUnderstandsAttemptsGoToo(event.target.checked)} />
-              <span>
-                <strong>
-                  {attemptCount} student attempt{attemptCount === 1 ? "" : "s"}
-                </strong>{" "}
-                on this mock — with their scores and Writing / Speaking submissions — will be permanently deleted too. Archive the mock instead if you want to keep that history.
-              </span>
-            </label>
+            <div className="border-destructive/30 bg-destructive/5 rounded-xl border p-3 text-sm" data-testid="delete-blocked">
+              <strong>
+                {attemptCount} student attempt{attemptCount === 1 ? "" : "s"}
+              </strong>{" "}
+              on this mock — with their scores and Writing submissions — are kept: a Full Mock that students have sat is never deleted. Archive it instead (Archive in the menu): it leaves the students&apos; list and nothing is lost.
+            </div>
           )}
 
           <DialogFooter>
@@ -141,13 +154,13 @@ export function FullMockTestRowActions({
             </DialogClose>
             <Button
               variant="destructive"
-              disabled={pending || (attemptCount > 0 && !understandsAttemptsGoToo)}
+              disabled={pending || attemptCount > 0}
               onClick={() => {
                 setConfirmDeleteOpen(false);
-                run(() => deleteFullMockTestAction(fullMockTestId, { deleteAttempts: attemptCount > 0 }));
+                run(() => deleteFullMockTestAction(fullMockTestId));
               }}
             >
-              {attemptCount > 0 ? "Delete mock and attempts" : "Delete"}
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>

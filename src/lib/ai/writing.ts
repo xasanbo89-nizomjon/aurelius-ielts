@@ -12,6 +12,9 @@ import { AIServiceUnavailableError } from "@/lib/ai/errors";
 import { getOpenAIModel } from "@/lib/ai/openai";
 import { WRITING_TASK_CATEGORY_LABELS } from "@/lib/labels";
 import { taskImageFromRow, type WritingTaskImage } from "@/lib/writing-task-image";
+import { writingFor, writingShownToStudentWhere, type Audience } from "@/lib/exam/result-visibility";
+import { isShownToStudent } from "@/lib/exam/result-visibility-rules";
+import { queueAfterHandIn } from "@/lib/writing-assessment/hand-in";
 // Phase J - the one word counter, shared with the exam screen: the count stored here is the count the student saw.
 import { countWords } from "@/lib/writing/word-count";
 import { WRITING_DRAFT_MAX_CHARS } from "@/lib/writing/constants";
@@ -76,6 +79,8 @@ export type WritingSubmissionSummary = {
   bandScore: number | null;
   estimatedBand: number | null;
   createdAt: Date;
+  /** Phase O - the results of this essay are hidden from the student (the teacher's choice, or part of a Full Mock): the bands above are removed on the server. */
+  resultsHidden: boolean;
 };
 
 export type WritingSubmissionReport = {
@@ -391,8 +396,9 @@ export async function submitEssay(studentId: string, input: SubmitEssayInput): P
     submissionId = created.id;
   }
 
-  const analysisResult = await runAnalysis(submissionId, studentId);
-  return { success: true, submissionId, analysisWarning: analysisResult.success ? undefined : analysisResult.error };
+  // Phase O - the AI assessment of this essay is queued and runs in the background (the report page shows it when it is ready); the hand-in never waits for it.
+  await queueAfterHandIn({ studentId, submissionIds: [submissionId], taskId: task.id, kick: true, fallbackSubmissionId: submissionId });
+  return { success: true, submissionId };
 }
 
 export type SubmitFullMockEssayResult =
@@ -544,7 +550,7 @@ export async function requestRewrite(
   targetBand: RewriteTargetBand
 ): Promise<RequestRewriteResult> {
   const submission = await prisma.writingSubmission.findFirst({
-    where: { id: submissionId, studentId },
+    where: { id: submissionId, studentId, ...writingShownToStudentWhere },
     include: {
       analysis: { select: { id: true } },
       rewrites: { where: { targetBand } },
@@ -604,7 +610,7 @@ export async function requestSentenceImprovement(
 ): Promise<RequestSentenceImprovementResult> {
   const trimmed = sentence.trim();
   const submission = await prisma.writingSubmission.findFirst({
-    where: { id: submissionId, studentId },
+    where: { id: submissionId, studentId, ...writingShownToStudentWhere },
     include: { student: { select: { teacherId: true } } },
   });
   if (!submission) return { success: false, code: "NOT_FOUND", error: "Submission not found." };
@@ -690,19 +696,28 @@ export async function getStudentSubmissions(studentId: string): Promise<WritingS
     // Phase K - the unfinished drafts of a Full Mock's Writing paper are not the student's own writing tasks and never show in their lists.
     where: { studentId, NOT: { status: "DRAFT", task: { is: { fullMockUse: { isNot: null } } } } },
     orderBy: { createdAt: "desc" },
-    include: { analysis: { select: { estimatedBand: true } } },
+    include: {
+      analysis: { select: { estimatedBand: true } },
+      fullMockSectionResult: { select: { id: true } },
+      task: { select: { showResultsToStudent: true, fullMockUse: { select: { id: true } } } },
+    },
   });
 
-  return submissions.map((submission) => ({
-    id: submission.id,
-    taskType: submission.taskType,
-    category: submission.category,
-    wordCount: submission.wordCount,
-    status: submission.status,
-    bandScore: submission.bandScore,
-    estimatedBand: submission.analysis?.estimatedBand ?? null,
-    createdAt: submission.createdAt,
-  }));
+  return submissions.map((submission) => {
+    // Phase O - an essay whose results are hidden from the student is still listed (they wrote it) but carries no band: removed here, on the server.
+    const resultsHidden = !isShownToStudent({ showResultsToStudent: submission.task?.showResultsToStudent, inFullMock: submission.fullMockSectionResult != null || submission.task?.fullMockUse != null });
+    return {
+      id: submission.id,
+      taskType: submission.taskType,
+      category: submission.category,
+      wordCount: submission.wordCount,
+      status: submission.status,
+      bandScore: resultsHidden ? null : submission.bandScore,
+      estimatedBand: resultsHidden ? null : (submission.analysis?.estimatedBand ?? null),
+      createdAt: submission.createdAt,
+      resultsHidden,
+    };
+  });
 }
 
 function toReport(submission: {
@@ -766,7 +781,8 @@ const REPORT_INCLUDE = {
 
 export async function getSubmissionReportForStudent(submissionId: string, studentId: string): Promise<WritingSubmissionReport | null> {
   const submission = await prisma.writingSubmission.findFirst({
-    where: { id: submissionId, studentId },
+    // Phase O - a student's report is only ever read for an essay whose results they may see (the page sends a hidden one to the "submitted" note first; this is the second lock).
+    where: { id: submissionId, studentId, ...writingShownToStudentWhere },
     include: REPORT_INCLUDE,
   });
   return submission ? toReport(submission) : null;
@@ -805,10 +821,12 @@ const CRITERION_LABELS = {
 } as const;
 
 /** Every number here is a real query against WritingSubmission/WritingAnalysis — no placeholder data. Drafts never count as "submitted". */
-export async function getWritingAnalytics(studentId: string): Promise<WritingAnalytics> {
+export async function getWritingAnalytics(studentId: string, audience: Audience = "student"): Promise<WritingAnalytics> {
+  // Phase O - a student's own Writing statistics count only the essays whose results they may see; a teacher's view counts every essay.
+  const visible = writingFor(audience);
   const [analyzed, essaysSubmitted] = await Promise.all([
     prisma.writingSubmission.findMany({
-      where: { studentId, status: { not: "DRAFT" }, analysis: { isNot: null } },
+      where: { studentId, status: { not: "DRAFT" }, analysis: { isNot: null }, ...visible },
       orderBy: { createdAt: "asc" },
       select: {
         analysis: {
@@ -816,7 +834,7 @@ export async function getWritingAnalytics(studentId: string): Promise<WritingAna
         },
       },
     }),
-    prisma.writingSubmission.count({ where: { studentId, status: { not: "DRAFT" } } }),
+    prisma.writingSubmission.count({ where: { studentId, status: { not: "DRAFT" }, ...visible } }),
   ]);
 
   const bands = analyzed.map((s) => s.analysis!.estimatedBand);
@@ -873,7 +891,7 @@ export type RecommendationResult =
  */
 export async function getOrGenerateRecommendation(studentId: string, teacherId: string | null): Promise<RecommendationResult> {
   const recentAnalyzed = await prisma.writingSubmission.findMany({
-    where: { studentId, status: { not: "DRAFT" }, analysis: { isNot: null } },
+    where: { studentId, status: { not: "DRAFT" }, analysis: { isNot: null }, ...writingShownToStudentWhere },
     orderBy: { createdAt: "desc" },
     take: RECOMMENDATION_HISTORY_LIMIT,
     select: {
@@ -893,7 +911,7 @@ export async function getOrGenerateRecommendation(studentId: string, teacherId: 
   }
 
   const totalAnalyzedNow = await prisma.writingSubmission.count({
-    where: { studentId, status: { not: "DRAFT" }, analysis: { isNot: null } },
+    where: { studentId, status: { not: "DRAFT" }, analysis: { isNot: null }, ...writingShownToStudentWhere },
   });
 
   const existing = await prisma.writingFeedback.findUnique({ where: { studentId } });

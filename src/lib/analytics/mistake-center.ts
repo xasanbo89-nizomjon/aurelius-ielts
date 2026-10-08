@@ -2,6 +2,7 @@ import "server-only";
 import type { GrammarIssue } from "@/lib/ai/writing";
 
 import { prisma } from "@/lib/prisma";
+import { resultShownToStudentWhere, writingShownToStudentWhere } from "@/lib/exam/result-visibility";
 
 export type ReadingListeningMistake = {
   resultId: string;
@@ -17,7 +18,8 @@ export type ReadingListeningMistake = {
 /** Every wrong Reading/Listening answer this student has, across every completed attempt — the raw material for the Mistake Center's Reading/Listening groups. */
 export async function getReadingListeningMistakes(studentId: string, limit = 100): Promise<ReadingListeningMistake[]> {
   const answers = await prisma.answer.findMany({
-    where: { isCorrect: false, result: { studentId, completedAt: { not: null }, skill: { in: ["READING", "LISTENING"] } } },
+    // Phase O - the student's own Mistake Center lists only attempts whose results they may see (a hidden test reveals no wrong answer).
+    where: { isCorrect: false, result: { studentId, completedAt: { not: null }, skill: { in: ["READING", "LISTENING"] }, ...resultShownToStudentWhere } },
     orderBy: { result: { completedAt: "desc" } },
     take: limit,
     select: {
@@ -54,7 +56,7 @@ export type WritingMistake = {
 /** Real grammar issues the AI Writing Checker already found — no re-analysis, just surfacing what's already stored. */
 export async function getWritingMistakes(studentId: string, limit = 50): Promise<WritingMistake[]> {
   const analyses = await prisma.writingAnalysis.findMany({
-    where: { submission: { studentId, status: { not: "DRAFT" } } },
+    where: { submission: { studentId, status: { not: "DRAFT" }, ...writingShownToStudentWhere } },
     orderBy: { createdAt: "desc" },
     take: limit,
     select: { createdAt: true, grammarIssues: true, submission: { select: { id: true, taskType: true } } },

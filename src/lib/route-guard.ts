@@ -47,6 +47,8 @@ const TEACHER_RULES: Rule<TeacherWho>[] = [
   { pattern: /^\/teacher\/articles\/(?!new$)([^/]+)(?:\/analytics)?$/, exists: async ([id], who) => has(await prisma.article.findFirst({ where: { id, createdById: who.id }, select: { id: true } })) },
   // students/[studentId] - getStudentForTeacher: { id, ...(Root Teacher ? {} : { teacherId }) }
   { pattern: /^\/teacher\/students\/([^/]+)$/, exists: async ([id], who) => has(await prisma.studentProfile.findFirst({ where: { id, ...(who.isRootTeacher ? {} : { teacherId: who.id }) }, select: { id: true } })) },
+  // scores/[studentId] - Students' Scores (Phase O): { id, ...(Root Teacher ? {} : { teacherId }) }, the same student scope as the roster
+  { pattern: /^\/teacher\/scores\/([^/]+)$/, exists: async ([id], who) => has(await prisma.studentProfile.findFirst({ where: { id, ...(who.isRootTeacher ? {} : { teacherId: who.id }) }, select: { id: true } })) },
   // writing-reviews/[submissionId] - getSubmissionReportForTeacher: { id, status not DRAFT, student of this teacher }
   { pattern: /^\/teacher\/writing-reviews\/([^/]+)$/, exists: async ([id], who) => has(await prisma.writingSubmission.findFirst({ where: { id, status: { not: "DRAFT" }, student: { teacherId: who.id } }, select: { id: true } })) },
   // speaking-recordings/[practiceId] - getPractice for a teacher: a practice of one of their own students; a Root Teacher's every practice (/usage is a page of its own)
@@ -54,14 +56,16 @@ const TEACHER_RULES: Rule<TeacherWho>[] = [
 ];
 
 const STUDENT_RULES: Rule<StudentWho>[] = [
-  // exam/attempt/[resultId], /results, /review - getAttemptDetail / getAttemptSummary: { id, studentId }
-  { pattern: /^\/student\/exam\/attempt\/([^/]+)(?:\/(?:results|review))?$/, exists: async ([id], who) => has(await prisma.result.findFirst({ where: { id, studentId: who.id }, select: { id: true } })) },
+  // exam/attempt/[resultId], /results, /review, /submitted - getAttemptDetail / getAttemptSummary: { id, studentId } (Phase O: a hidden result is still "yours": the page sends it to /submitted)
+  { pattern: /^\/student\/exam\/attempt\/([^/]+)(?:\/(?:results|review|submitted))?$/, exists: async ([id], who) => has(await prisma.result.findFirst({ where: { id, studentId: who.id }, select: { id: true } })) },
   // full-mock/[fullMockTestId] - getPublishedFullMockTestDetail: { id, status PUBLISHED }
-  { pattern: /^\/student\/full-mock\/(?!attempt$)([^/]+)$/, exists: async ([id]) => has(await prisma.fullMockTest.findFirst({ where: { id, status: "PUBLISHED" }, select: { id: true } })) },
+  { pattern: /^\/student\/full-mock\/(?!attempt$)([^/]+)$/, exists: async ([id], who) => has(await prisma.fullMockTest.findFirst({ where: { id, OR: [{ status: "PUBLISHED" }, { status: "ARCHIVED", attempts: { some: { studentId: who.id, status: "IN_PROGRESS" } } }] }, select: { id: true } })) },
   // full-mock/attempt/[attemptId] and everything under it - { id, studentId }
   { pattern: /^\/student\/full-mock\/attempt\/([^/]+)(?:\/.*)?$/, exists: async ([id], who) => has(await prisma.fullMockAttempt.findFirst({ where: { id, studentId: who.id }, select: { id: true } })) },
   // writing/[submissionId] - getSubmissionReportForStudent: { id, studentId }
   { pattern: /^\/student\/writing\/(?!new$|history$|tasks$)([^/]+)$/, exists: async ([id], who) => has(await prisma.writingSubmission.findFirst({ where: { id, studentId: who.id }, select: { id: true } })) },
+  // writing/assessment/[assessmentId] - getAssessment for a student: { id, studentId } (Phase O: a hidden one is still "yours": the page sends it to the "submitted" note)
+  { pattern: /^\/student\/writing\/assessment\/([^/]+)$/, exists: async ([id], who) => has(await prisma.writingAssessment.findFirst({ where: { id, studentId: who.id }, select: { id: true } })) },
   // speaking/[submissionId] - getSpeakingResultDetail: { id, studentId }; the page shows a lock screen (not a 404) without access, so so does the guard
   { pattern: /^\/student\/speaking\/([^/]+)$/, exists: async ([id], who) => !(await hasActiveAccess(who.id)) || has(await prisma.speakingSubmission.findFirst({ where: { id, studentId: who.id }, select: { id: true } })) },
   // speaking-practice/record/[practiceId] - getPractice for a student: { id, studentId } (reading one's own feedback is not a Premium feature, so there is no lock screen here)

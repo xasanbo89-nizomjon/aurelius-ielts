@@ -72,6 +72,8 @@ export const createWritingTaskSchema = z
     // as an unpublished DRAFT with no students able to see it either way.
     // Students can be assigned later via Edit once the roster has someone.
     assignedStudentIds: z.array(z.string().trim().min(1)),
+    /** Phase O - "Show results to students?". Required when a task is made or edited in the task bank (the action checks it); left out for the tasks of a Full Mock, which are never shown to students. */
+    showResultsToStudent: z.boolean().optional(),
   })
   .refine((data) => categoryMatchesTaskNumber(data.taskNumber, data.category), {
     message: "That category doesn't belong to the selected task number.",

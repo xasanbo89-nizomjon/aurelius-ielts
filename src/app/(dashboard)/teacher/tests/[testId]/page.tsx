@@ -23,6 +23,7 @@ import { ContentCoverImageUploader } from "@/components/teacher/content-cover-im
 import { TestLockNotice } from "@/components/teacher/test-lock-notice";
 import { TestVersionsPanel } from "@/components/teacher/test-versions-panel";
 import { TestBuilder } from "@/components/teacher/test-builder/test-builder";
+import { ResultsVisibilityControl } from "@/components/teacher/results-visibility-control";
 
 export const metadata: Metadata = { title: "Edit Test" };
 
@@ -45,6 +46,7 @@ export default async function TestEditorPage({
       isArchived: true,
       durationMinutes: true,
       coverImagePath: true,
+      showResultsToStudent: true,
       _count: { select: { results: true } },
       fullMockReadingUses: { select: { fullMockTest: { select: { title: true } } } },
       fullMockListeningUses: { select: { fullMockTest: { select: { title: true } } } },
@@ -125,6 +127,14 @@ export default async function TestEditorPage({
       />
 
       <span id="test-top" />
+
+      {/* Phase O - "Show results to students?" can be changed at any time, also on a test students have taken. A section of a Full Mock package is never shown to students. */}
+      <ResultsVisibilityControl
+        kind="test"
+        id={test.id}
+        value={test.showResultsToStudent}
+        note={test.packageFullMockTest ? `Part of the Full Mock "${test.packageFullMockTest.title}": a Full Mock's results are for teachers only, so students never see this test's results.` : null}
+      />
 
       {!editState.editable && editState.reason && <TestLockNotice testId={test.id} reason={editState.reason} />}
       <TestVersionsPanel info={versionInfo} />

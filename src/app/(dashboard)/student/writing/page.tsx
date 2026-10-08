@@ -55,7 +55,7 @@ export default async function WritingCenterPage() {
         title="Writing Center"
         description="Practice IELTS Task 1 and Task 2, get instant AI feedback, and track your progress."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="outline" size="sm">
               <Link href="/student/writing/tasks">
                 <ListChecks className="size-4" /> Assignments

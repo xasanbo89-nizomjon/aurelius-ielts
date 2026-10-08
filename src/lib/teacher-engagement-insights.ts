@@ -83,7 +83,7 @@ export async function getTeacherEngagementInsights(teacherId: string): Promise<T
   const studentsWithGoal = students.filter((s) => s.targetBandScore != null);
   let studentsAtOrAboveTarget = 0;
   if (studentsWithGoal.length > 0) {
-    const overviews = await Promise.all(studentsWithGoal.map((s) => getStudentOverview(s.id)));
+    const overviews = await Promise.all(studentsWithGoal.map((s) => getStudentOverview(s.id, "teacher")));
     studentsAtOrAboveTarget = overviews.filter(
       (overview, index) => overview.bandScore != null && overview.bandScore >= studentsWithGoal[index].targetBandScore!
     ).length;

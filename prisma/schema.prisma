@@ -320,6 +320,8 @@ model StudentProfile {
   mockAccessCodeRedemptions MockAccessCodeRedemption[] @relation("MockAccessCodeRedemptions")
   /// Phase Q-B - recorded Speaking practices with an AI assessment.
   speakingAudioPractices    SpeakingAudioPractice[]
+  /// Phase O - AI assessments of this student's Writing sittings.
+  writingAssessments        WritingAssessment[]
 
   // Phase M - every teacher screen is scoped by "my students" (a Root Teacher sees all).
   @@index([teacherId])
@@ -412,6 +414,10 @@ model MockTest {
   difficulty      MockTestDifficulty?
   /// Phase Q - null = FULL_IELTS (every test made before this phase). See the TestFormat enum.
   testFormat      TestFormat?
+  /// Phase O - "Show results to students?", the teacher's answer when the test is made. true = the student sees the band / score and the review; false = the student
+  /// sees only "Your test has been submitted." (teachers always see everything). null = a test made before Phase O: its results are shown, as they always were.
+  /// A test taken inside a Full Mock is hidden from the student whatever this says.
+  showResultsToStudent Boolean?
   /// Phase 47 — Skill Media Library's "Content thumbnails" for Reading/Listening tests. Null until a teacher uploads one.
   coverImagePath  String?
   /// Phase L - set on a copy made with "Create new version": the test it replaces. SetNull so deleting the old test never touches the new one.
@@ -966,6 +972,9 @@ model WritingSubmission {
   /// Phase 34 — set only when this submission was made as the Writing
   /// section of a Full Mock Test attempt.
   fullMockSectionResult FullMockSectionResult?
+  /// Phase O - the AI assessment this essay was marked in, as Task 1 or as Task 2 of its Writing sitting (a sitting has ONE combined assessment).
+  assessmentAsTask1     WritingAssessment? @relation("AssessmentTask1")
+  assessmentAsTask2     WritingAssessment? @relation("AssessmentTask2")
 
   @@map("writing_submissions")
 }
@@ -1148,6 +1157,8 @@ model WritingTask {
   /// Phase L - a Task 1 visual that was uploaded as a PDF: the original file is kept here, the chosen page was turned into the PNG held in imageUrl.
   visualPdfUrl      String?
   visualPdfPage     Int?
+  /// Phase O - the same setting as MockTest.showResultsToStudent, for a Writing task / Writing test (both tasks of a bundle carry the same value). null = made before Phase O: shown.
+  showResultsToStudent Boolean?
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -1689,6 +1700,8 @@ model FullMockAttempt {
   writingEndReason SectionEndReason?
 
   sectionResults FullMockSectionResult[]
+  /// Phase O - the AI assessment of this sitting's Writing paper (null when the mock has no Writing or it was not handed in yet).
+  writingAssessment WritingAssessment?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3227,7 +3240,88 @@ model SpeakingAudioComment {
   @@map("speaking_audio_comments")
 }
 
-/// Platform-wide settings the Root Teacher can change (a key and a text value). First use: "speaking.dailyPracticeLimit".
+// ---------------------------------------------------------------------------
+// Phase O - AI assessment of Writing, and who may see results.
+//
+// ADDITIVE: two new tables, one new enum, and two nullable columns (MockTest.showResultsToStudent, WritingTask.showResultsToStudent). No existing column changes meaning.
+// An assessment is ONE report for one Writing sitting (Task 1 + Task 2, or a single task), made by the AI; it is an estimate, never an official IELTS score.
+// ---------------------------------------------------------------------------
+
+enum WritingAssessmentStatus {
+  /// The essays are handed in; the assessment waits for a worker.
+  PENDING
+  /// An assessment is running. It holds a lease: a worker that dies is replaced when the lease runs out.
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model WritingAssessment {
+  id        String         @id @default(cuid())
+  studentId String
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  /// The Full Mock sitting this Writing paper belongs to. Null for a Writing test taken on its own.
+  fullMockAttemptId String?          @unique
+  fullMockAttempt   FullMockAttempt? @relation(fields: [fullMockAttemptId], references: [id], onDelete: Cascade)
+
+  /// The essays assessed together. A Writing test / Full Mock has both; a single task taken on its own has one of them.
+  task1SubmissionId String?            @unique
+  task1Submission   WritingSubmission? @relation("AssessmentTask1", fields: [task1SubmissionId], references: [id], onDelete: Cascade)
+  task2SubmissionId String?            @unique
+  task2Submission   WritingSubmission? @relation("AssessmentTask2", fields: [task2SubmissionId], references: [id], onDelete: Cascade)
+
+  status WritingAssessmentStatus @default(PENDING)
+
+  /// Each task's band: the mean of its four criteria, to the nearest half band. The Writing band is (Task 1 + 2 x Task 2) / 3 to the nearest half band, set only when both tasks have one.
+  task1Band   Float?
+  task2Band   Float?
+  writingBand Float?
+  /// { version, task1?, task2? } - per task: word count, the four criteria (band + comment), mistakes with the student's own words quoted, vocabulary suggestions, strengths, improvements.
+  report      Json?
+  /// The model that wrote the report.
+  model       String?
+
+  /// How many times a worker has taken this assessment (a retry starts again from 0).
+  attempts            Int       @default(0)
+  failureCode         String?
+  failureMessage      String?
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  runs WritingAssessmentRun[]
+
+  @@index([studentId, createdAt])
+  @@index([status, updatedAt])
+  @@map("writing_assessments")
+}
+
+/// One AI call made for an assessment (the usage log: tokens, an estimated cost). A failed call is logged too.
+model WritingAssessmentRun {
+  id           String            @id @default(cuid())
+  assessmentId String
+  assessment   WritingAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  /// "TASK_1", "TASK_2", or the same with "_RETRY" for the second try after an unusable reply.
+  kind             String
+  model            String
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  /// An estimate in millionths of a dollar (whole numbers, so sums are exact).
+  costMicroUsd     Int      @default(0)
+  ok               Boolean
+  error            String?
+  durationMs       Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  @@index([assessmentId])
+  @@index([createdAt])
+  @@map("writing_assessment_runs")
+}
+
+/// Platform-wide settings the Root Teacher can change (a key and a text value). Used by: "speaking.dailyPracticeLimit", "writing.dailyAssessmentLimit".
 model PlatformSetting {
   key         String   @id
   value       String

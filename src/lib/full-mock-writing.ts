@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { FULL_MOCK_WRITING_MINUTES } from "@/lib/full-mock-constants";
 import { getAssignedTaskForStudent, type AssignedWritingTask } from "@/lib/writing-tasks";
 import { ensureWritingAssignment } from "@/lib/full-mock-assignments";
-import { getOrCreateOpenDraft, runAnalysis, saveDraftVersioned, submitFullMockEssay } from "@/lib/ai/writing";
+import { getOrCreateOpenDraft, saveDraftVersioned, submitFullMockEssay } from "@/lib/ai/writing";
+import { queueAfterHandIn } from "@/lib/writing-assessment/hand-in";
 import { WRITING_SAVE_GRACE_SECONDS } from "@/lib/writing/constants";
 import { recordLateText } from "@/lib/writing-late-text";
 import type { DraftSaveResult, HandInDraft } from "@/lib/writing/save-types";
@@ -23,9 +24,6 @@ import type { DraftSaveResult, HandInDraft } from "@/lib/writing/save-types";
 
 /** Late keystrokes / the auto-submit request may arrive a moment after the clock hits zero (network, a tab that was asleep); this much is tolerated, nothing more. */
 const SUBMIT_GRACE_SECONDS = WRITING_SAVE_GRACE_SECONDS;
-/** Upper bound on how long the hand-in waits for the AI marker before returning; an essay still unmarked is simply marked later. */
-const ANALYSIS_TIMEOUT_MS = 45_000;
-
 export type FullMockWritingTask = {
   task: AssignedWritingTask;
   /** The student's saved draft for this task in THIS sitting, if any. */
@@ -168,18 +166,6 @@ export type FinalizeFullMockWritingResult =
   /** `conflicts` (Phase J): tasks whose draft was changed in another window - nothing was handed in. */
   | { success: false; error: string; conflicts?: string[] };
 
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), ms);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 /**
  * Hands in every Writing task of the sitting at once — the student pressing
  * Submit, or the clock reaching zero. `drafts` carries the text the browser
@@ -198,7 +184,7 @@ export async function finalizeFullMockWriting(
     endedAt?: Date;
     /** Why it ended. Default: TIME_EXPIRED when it ended at or after the deadline, SUBMITTED otherwise. */
     reason?: SectionEndReason;
-    /** Run the AI marker for the essays with text (the student's own hand-in does; the scheduled job does not - it must stay light). */
+    /** Start the AI assessment in the background right away (the student's own hand-in does; the scheduled job does not - it assesses what is due itself). Phase O: the assessment is queued either way. */
     analyse?: boolean;
   } = {}
 ): Promise<FinalizeFullMockWritingResult> {
@@ -212,7 +198,6 @@ export async function finalizeFullMockWriting(
 
   const late = Date.now() > deadline.getTime() + SUBMIT_GRACE_SECONDS * 1000;
   const alreadyHandedIn = await submittedTaskIds(context, studentId);
-  const toAnalyse: string[] = [];
   let handedIn = 0;
 
   // Phase J - look at every task BEFORE handing anything in. A window that names the version it is handing in (`baseUpdatedAt`)
@@ -249,7 +234,6 @@ export async function finalizeFullMockWriting(
     const submitted = await submitFullMockEssay(studentId, { taskId, content, submissionId: draft?.id ?? null, baseUpdatedAt: useBrowser ? (browser?.baseUpdatedAt ?? null) : null });
     if (!submitted.success) return { success: false, error: submitted.error, conflicts: submitted.conflict ? [taskId] : undefined };
     handedIn++;
-    if (!submitted.blank) toAnalyse.push(submitted.submissionId);
     // Phase K - the browser's words arrived after the hour (+ grace): the saved draft was handed in; these are kept for the teacher, never in the submission.
     if (late && fromBrowser !== undefined) await recordLateText(studentId, { submissionId: submitted.submissionId, content: fromBrowser }).catch(() => undefined);
 
@@ -262,42 +246,12 @@ export async function finalizeFullMockWriting(
   const reason: SectionEndReason = options.reason ?? (endedAt.getTime() >= deadline.getTime() - 1000 ? "TIME_EXPIRED" : "SUBMITTED");
   await prisma.fullMockAttempt.updateMany({ where: { id: attemptId, writingEndedAt: null }, data: { writingEndedAt: endedAt, writingEndReason: reason } });
 
-  // The AI marker runs for every essay that has text, in parallel and with a ceiling: handing in is already done and safe by this point.
-  if (options.analyse === false) return { success: true, handedIn, analysed: 0 };
-  const outcomes = await Promise.all(toAnalyse.map((submissionId) => withTimeout(analyseWithRetry(submissionId, studentId), ANALYSIS_TIMEOUT_MS)));
-  return { success: true, handedIn, analysed: outcomes.filter((o) => o && o.success).length };
+  // Phase O - handing in is done and safe. The sitting's Writing paper is queued for ONE combined AI assessment (idempotent: a second call finds the same one) that runs in
+  // the background; the student never sees it (a Full Mock's results are for teachers only).
+  const linked = await prisma.fullMockSectionResult.findMany({ where: { attemptId, section: "WRITING", writingSubmissionId: { not: null } }, select: { writingSubmissionId: true } });
+  const submissionIds = linked.map((row) => row.writingSubmissionId).filter((id): id is string => id != null);
+  if (submissionIds.length > 0) await queueAfterHandIn({ studentId, submissionIds, fullMockAttemptId: attemptId, taskId: null, kick: options.analyse !== false });
+  return { success: true, handedIn, analysed: 0 };
 }
 
-/** Marks one essay, trying a second time when the AI marker was only momentarily unavailable (an answer it cannot give twice — rate limit, missing essay — is not retried). */
-async function analyseWithRetry(submissionId: string, studentId: string) {
-  const first = await runAnalysis(submissionId, studentId).catch(() => null);
-  if (first && (first.success || first.code !== "UNAVAILABLE")) return first;
-  return runAnalysis(submissionId, studentId).catch(() => null);
-}
 
-/**
- * Marks every essay of this sitting that was handed in but still has no band —
- * the AI marker was down or slow when the hour ended. Blank essays already carry
- * their band 0, essays a teacher has marked or the marker has analysed are left
- * alone, so this is safe to press as often as needed. It is what lets a finished
- * sitting always reach its Overall Band without waiting for a teacher.
- */
-export async function markUnmarkedFullMockWriting(attemptId: string, studentId: string): Promise<{ marked: number; remaining: number }> {
-  const attempt = await prisma.fullMockAttempt.findFirst({
-    where: { id: attemptId, studentId },
-    select: {
-      sectionResults: {
-        where: { section: "WRITING" },
-        select: { writingSubmission: { select: { id: true, status: true, content: true, bandScore: true, analysis: { select: { id: true } } } } },
-      },
-    },
-  });
-  if (!attempt) return { marked: 0, remaining: 0 };
-
-  const pending = attempt.sectionResults
-    .map((row) => row.writingSubmission)
-    .filter((sub): sub is NonNullable<typeof sub> => sub != null && sub.status !== "DRAFT" && sub.bandScore == null && sub.analysis == null && sub.content.trim().length > 0);
-  const outcomes = await Promise.all(pending.map((sub) => withTimeout(analyseWithRetry(sub.id, studentId), ANALYSIS_TIMEOUT_MS)));
-  const marked = outcomes.filter((outcome) => outcome && outcome.success).length;
-  return { marked, remaining: pending.length - marked };
-}

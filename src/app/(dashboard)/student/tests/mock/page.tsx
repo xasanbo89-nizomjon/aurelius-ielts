@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import { ClipboardCheck, TrendingUp } from "lucide-react";
+import { ClipboardCheck } from "lucide-react";
 
 import { requireStudentProfile } from "@/lib/session";
 import { getStudentFullMockDashboard } from "@/lib/full-mock-dashboard";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FullMockExamCard, type FullMockCardStatus } from "@/components/student/full-mock-exam-card";
 import { MockAccessCodeGate } from "@/components/student/mock-access-code-gate";
@@ -62,27 +61,6 @@ export default async function MockExamCenterPage() {
           <MockAccessCodeGate />
         </CardContent>
       </Card>
-
-      {dashboard.bandTrend && (
-        <Card className="border-accent/20 bg-accent/[0.04] py-4">
-          <CardContent className="flex items-center gap-3">
-            <span className="bg-accent/15 text-accent flex size-9 shrink-0 items-center justify-center rounded-xl">
-              <TrendingUp className="size-4.5" strokeWidth={1.5} />
-            </span>
-            <p className="text-sm">
-              Your Overall Band has moved from <span className="font-medium">{dashboard.bandTrend.firstBand.toFixed(1)}</span> to{" "}
-              <span className="font-medium">{dashboard.bandTrend.latestBand.toFixed(1)}</span> across your completed mock exams
-              {dashboard.bandTrend.delta !== 0 && (
-                <Badge variant={dashboard.bandTrend.delta > 0 ? "success" : "destructive"} className="ml-2">
-                  {dashboard.bandTrend.delta > 0 ? "+" : ""}
-                  {dashboard.bandTrend.delta.toFixed(1)}
-                </Badge>
-              )}
-              .
-            </p>
-          </CardContent>
-        </Card>
-      )}
 
       <Tabs defaultValue="available">
         <TabsList>

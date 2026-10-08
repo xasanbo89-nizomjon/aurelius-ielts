@@ -44,13 +44,15 @@ export async function findInProgressFullMockAttempt(studentId: string, fullMockT
 
 /** Phase 51 — `accessCodeId` is only ever written on a brand-new attempt (the `existing` branch below is untouched), so a legacy in-progress attempt started before the access-code gate existed keeps its `accessCodeId: null` unchanged. */
 export async function getOrCreateFullMockAttempt(studentId: string, fullMockTestId: string, accessCodeId?: string) {
-  const test = await prisma.fullMockTest.findFirst({ where: { id: fullMockTestId, status: "PUBLISHED" } });
-  if (!test) return null;
-
   const find = (db: Pick<typeof prisma, "fullMockAttempt">) =>
     db.fullMockAttempt.findFirst({ where: { studentId, fullMockTestId, status: "IN_PROGRESS" }, orderBy: { startedAt: "desc" } });
+  // Phase O - a sitting that is under way can be resumed even if the mock was archived meanwhile (only one Full Mock is active at a time; a student in the middle of the old one finishes it).
   const existing = await find(prisma);
   if (existing) return existing;
+
+  // A NEW sitting needs the mock to be published.
+  const test = await prisma.fullMockTest.findFirst({ where: { id: fullMockTestId, status: "PUBLISHED" } });
+  if (!test) return null;
 
   // Phase K - one active attempt per student per mock (so per access code), even when "Start" is pressed twice or in two tabs at the same moment:
   // the second request waits for the first one's transaction and then finds its attempt instead of creating another.

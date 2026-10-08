@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { showResultsSchema } from "@/lib/validations/show-results";
+
 export const createTestSchema = z.object({
   title: z.string().trim().min(3, "Title must be at least 3 characters").max(160),
   description: z.string().trim().max(2000).optional(),
@@ -13,6 +15,8 @@ export const createTestSchema = z.object({
   /** Phase Q - the kind of paper (default: a full IELTS test of 40 questions) and, for a custom test, how many parts it starts with. */
   format: z.enum(["FULL_IELTS", "CUSTOM"]).optional(),
   partCount: z.number().int().min(1).max(12).optional(),
+  /** Phase O - "Show results to students?" - the teacher's required Yes / No. */
+  showResultsToStudent: showResultsSchema,
 });
 export type CreateTestInput = z.infer<typeof createTestSchema>;
 

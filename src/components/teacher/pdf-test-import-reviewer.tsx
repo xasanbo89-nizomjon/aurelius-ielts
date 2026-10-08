@@ -23,6 +23,8 @@ import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
 import { chooseChunks, importedQuestionGroupJsonSchema } from "@/lib/exam/pdf-import-conversion";
 import { chooseWord } from "@/lib/exam/choose-many";
 import { formatNumberRanges, type GroupStats, type ImportValidation } from "@/lib/exam/pdf-import-validation";
+import { SHOW_RESULTS_REQUIRED_MESSAGE } from "@/lib/exam/result-visibility-rules";
+import { ShowResultsField } from "@/components/teacher/show-results-field";
 import type { ImportedTestForReview } from "@/lib/pdf-test-import";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
@@ -668,6 +670,9 @@ function ConfirmImportPanel({ importedTestId, defaultTitle, validation }: { impo
   const [title, setTitle] = useState(defaultTitle);
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<"GENERAL" | "CAMBRIDGE">("GENERAL");
+  // Phase O - "Show results to students?": not chosen until the teacher picks Yes or No.
+  const [showResults, setShowResults] = useState<boolean | null>(null);
+  const [showResultsError, setShowResultsError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const blocked = !validation.ok;
 
@@ -676,8 +681,13 @@ function ConfirmImportPanel({ importedTestId, defaultTitle, validation }: { impo
       toast.error("Title must be at least 3 characters.");
       return;
     }
+    if (showResults === null) {
+      setShowResultsError(SHOW_RESULTS_REQUIRED_MESSAGE);
+      toast.error(SHOW_RESULTS_REQUIRED_MESSAGE);
+      return;
+    }
     startTransition(async () => {
-      const result = await confirmImportAction(importedTestId, { title: title.trim(), description: description.trim() || undefined, category });
+      const result = await confirmImportAction(importedTestId, { title: title.trim(), description: description.trim() || undefined, category, showResultsToStudent: showResults });
       if (!result.success) {
         toast.error(result.error);
         router.refresh();
@@ -712,6 +722,14 @@ function ConfirmImportPanel({ importedTestId, defaultTitle, validation }: { impo
             </SelectContent>
           </Select>
         </div>
+        <ShowResultsField
+          value={showResults}
+          onChange={(next) => {
+            setShowResults(next);
+            setShowResultsError(null);
+          }}
+          error={showResultsError ?? undefined}
+        />
         <Button onClick={confirm} disabled={pending || blocked} className="w-full">
           {pending && <Loader2 className="size-4 animate-spin" />}
           Import Test

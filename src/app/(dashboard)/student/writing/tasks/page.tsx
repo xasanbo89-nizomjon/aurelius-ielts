@@ -89,27 +89,36 @@ function CompletedTaskCard({ task }: { task: StudentTaskWithProgress }) {
           <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             <span className="flex items-center gap-1">
               <CheckCircle2 className="text-success size-3.5" aria-hidden="true" />
-              Band {latest.estimatedBand != null ? latest.estimatedBand.toFixed(1) : "—"} · {latest.createdAt.toLocaleDateString()}
+              {/* Phase O - a hidden result shows no band, only that the task was handed in */}
+              {task.resultsHidden ? "Submitted" : `Band ${latest.estimatedBand != null ? latest.estimatedBand.toFixed(1) : "—"}`} · {latest.createdAt.toLocaleDateString()}
             </span>
           </div>
           {submittedAttempts.length > 1 && (
             <div className="flex flex-wrap gap-2 pt-1">
-              {submittedAttempts.map((attempt, index) => (
-                <Link
-                  key={attempt.submissionId}
-                  href={`/student/writing/${attempt.submissionId}`}
-                  className="text-accent text-xs underline-offset-4 hover:underline"
-                >
-                  Attempt {submittedAttempts.length - index}: {attempt.estimatedBand != null ? attempt.estimatedBand.toFixed(1) : "—"}
-                </Link>
-              ))}
+              {submittedAttempts.map((attempt, index) =>
+                task.resultsHidden ? (
+                  <span key={attempt.submissionId} className="text-muted-foreground text-xs">
+                    Attempt {submittedAttempts.length - index}: submitted
+                  </span>
+                ) : (
+                  <Link
+                    key={attempt.submissionId}
+                    href={`/student/writing/${attempt.submissionId}`}
+                    className="text-accent text-xs underline-offset-4 hover:underline"
+                  >
+                    Attempt {submittedAttempts.length - index}: {attempt.estimatedBand != null ? attempt.estimatedBand.toFixed(1) : "—"}
+                  </Link>
+                )
+              )}
             </div>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button asChild size="sm" variant="outline">
-            <Link href={`/student/writing/${latest.submissionId}`}>View report</Link>
-          </Button>
+          {!task.resultsHidden && (
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/student/writing/${latest.submissionId}`}>View report</Link>
+            </Button>
+          )}
           {!hasOpenDraft && (
             <Button asChild size="sm">
               <Link href={`/student/writing/new?taskId=${task.id}`}>

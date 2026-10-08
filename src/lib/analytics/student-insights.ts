@@ -2,6 +2,7 @@ import type { QuestionType, SkillType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { QUESTION_TYPE_META } from "@/lib/exam/question-types";
+import { resultsFor, writingFor, type Audience } from "@/lib/exam/result-visibility";
 import { SKILL_LABELS } from "@/lib/labels";
 
 const MIN_SAMPLE_SIZE = 3;
@@ -30,9 +31,10 @@ export type PerformanceOverview = {
 };
 
 /** One query, every completed attempt as a display-ready card, newest first — the shared building block behind getPerformanceOverview and anything else (e.g. the AI Study Coach) that needs the raw per-attempt list rather than just the aggregates, so both never query twice on the same page. */
-export async function getResultCards(studentId: string): Promise<ResultSummaryCard[]> {
+export async function getResultCards(studentId: string, audience: Audience = "student"): Promise<ResultSummaryCard[]> {
   const completed = await prisma.result.findMany({
-    where: { studentId, completedAt: { not: null } },
+    // Phase O - a student's own statistics count only the attempts whose results they may see (a teacher sees every attempt).
+    where: { studentId, completedAt: { not: null }, ...resultsFor(audience) },
     orderBy: { completedAt: "desc" },
     select: {
       id: true,
@@ -103,8 +105,8 @@ export function summarizeResultCards(cards: ResultSummaryCard[]): PerformanceOve
   };
 }
 
-export async function getPerformanceOverview(studentId: string): Promise<PerformanceOverview> {
-  const cards = await getResultCards(studentId);
+export async function getPerformanceOverview(studentId: string, audience: Audience = "student"): Promise<PerformanceOverview> {
+  const cards = await getResultCards(studentId, audience);
   return summarizeResultCards(cards);
 }
 
@@ -115,11 +117,11 @@ export type SkillPerformance = {
   avgBand: number | null;
 };
 
-export async function getSkillPerformance(studentId: string): Promise<SkillPerformance[]> {
+export async function getSkillPerformance(studentId: string, audience: Audience = "student"): Promise<SkillPerformance[]> {
   const skills: Extract<SkillType, "READING" | "LISTENING">[] = ["READING", "LISTENING"];
 
   const results = await prisma.result.findMany({
-    where: { studentId, completedAt: { not: null }, skill: { in: skills } },
+    where: { studentId, completedAt: { not: null }, skill: { in: skills }, ...resultsFor(audience) },
     select: {
       skill: true,
       rawScore: true,
@@ -156,9 +158,9 @@ export type AccuracyInsight = { key: string; label: string; accuracy: number; sa
  * no N+1, aggregation happens in memory since it spans two relations
  * Prisma's groupBy can't join across.
  */
-async function getAccuracyInsights(studentId: string): Promise<AccuracyInsight[]> {
+async function getAccuracyInsights(studentId: string, audience: Audience): Promise<AccuracyInsight[]> {
   const answers = await prisma.answer.findMany({
-    where: { isCorrect: { not: null }, result: { studentId, completedAt: { not: null } } },
+    where: { isCorrect: { not: null }, result: { studentId, completedAt: { not: null }, ...resultsFor(audience) } },
     select: {
       isCorrect: true,
       question: { select: { type: true, passage: { select: { orderIndex: true } } } },
@@ -219,9 +221,9 @@ export type SkillAccuracyInsight = { key: string; skill: "READING" | "LISTENING"
  * skill. Kept as its own function rather than changing getAccuracyInsights,
  * so nothing already on the Analytics page shifts.
  */
-async function getAccuracyInsightsBySkill(studentId: string): Promise<SkillAccuracyInsight[]> {
+async function getAccuracyInsightsBySkill(studentId: string, audience: Audience): Promise<SkillAccuracyInsight[]> {
   const answers = await prisma.answer.findMany({
-    where: { isCorrect: { not: null }, result: { studentId, completedAt: { not: null } } },
+    where: { isCorrect: { not: null }, result: { studentId, completedAt: { not: null }, ...resultsFor(audience) } },
     select: {
       isCorrect: true,
       question: { select: { type: true } },
@@ -251,16 +253,16 @@ async function getAccuracyInsightsBySkill(studentId: string): Promise<SkillAccur
     }));
 }
 
-export async function getWeaknesses(studentId: string): Promise<AccuracyInsight[]> {
-  const insights = await getAccuracyInsights(studentId);
+export async function getWeaknesses(studentId: string, audience: Audience = "student"): Promise<AccuracyInsight[]> {
+  const insights = await getAccuracyInsights(studentId, audience);
   return insights
     .filter((insight) => insight.accuracy < WEAK_THRESHOLD)
     .sort((a, b) => a.accuracy - b.accuracy)
     .slice(0, 5);
 }
 
-export async function getStrengths(studentId: string): Promise<AccuracyInsight[]> {
-  const insights = await getAccuracyInsights(studentId);
+export async function getStrengths(studentId: string, audience: Audience = "student"): Promise<AccuracyInsight[]> {
+  const insights = await getAccuracyInsights(studentId, audience);
   return insights
     .filter((insight) => insight.accuracy >= STRONG_THRESHOLD)
     .sort((a, b) => b.accuracy - a.accuracy)
@@ -276,9 +278,9 @@ export type ProgressPoint = {
   completedAt: Date;
 };
 
-export async function getProgressHistory(studentId: string, limit = 50): Promise<ProgressPoint[]> {
+export async function getProgressHistory(studentId: string, limit = 50, audience: Audience = "student"): Promise<ProgressPoint[]> {
   const results = await prisma.result.findMany({
-    where: { studentId, completedAt: { not: null } },
+    where: { studentId, completedAt: { not: null }, ...resultsFor(audience) },
     orderBy: { completedAt: "asc" },
     take: limit,
     select: {
@@ -304,12 +306,12 @@ export async function getProgressHistory(studentId: string, limit = 50): Promise
 export type WeeklyActivityPoint = { weekStart: Date; count: number };
 
 /** Real completions per week for the last `weeks` weeks (including empty weeks). */
-export async function getWeeklyActivity(studentId: string, weeks = 8): Promise<WeeklyActivityPoint[]> {
+export async function getWeeklyActivity(studentId: string, weeks = 8, audience: Audience = "student"): Promise<WeeklyActivityPoint[]> {
   const since = new Date();
   since.setDate(since.getDate() - weeks * 7);
 
   const results = await prisma.result.findMany({
-    where: { studentId, completedAt: { gte: since } },
+    where: { studentId, completedAt: { gte: since }, ...resultsFor(audience) },
     select: { completedAt: true },
   });
 
@@ -380,9 +382,9 @@ function averageBy(values: (number | null)[]): { avg: number; count: number } | 
   return { avg: Math.round((real.reduce((a, b) => a + b, 0) / real.length) * 10) / 10, count: real.length };
 }
 
-export async function getWritingCriterionInsights(studentId: string): Promise<CriterionInsight[]> {
+export async function getWritingCriterionInsights(studentId: string, audience: Audience = "student"): Promise<CriterionInsight[]> {
   const analyses = await prisma.writingAnalysis.findMany({
-    where: { submission: { studentId, status: { not: "DRAFT" } } },
+    where: { submission: { studentId, status: { not: "DRAFT" }, ...writingFor(audience) } },
     select: { grammarBand: true, vocabularyBand: true, coherenceBand: true, taskResponseBand: true },
   });
 
@@ -437,10 +439,10 @@ export type CombinedSkillInsight = {
  * is generated or guessed; every entry traces back to a real accuracy or
  * band-score aggregate.
  */
-export async function getAllSkillInsights(studentId: string): Promise<CombinedSkillInsight[]> {
+export async function getAllSkillInsights(studentId: string, audience: Audience = "student"): Promise<CombinedSkillInsight[]> {
   const [accuracyInsights, writingInsights, speakingInsights] = await Promise.all([
-    getAccuracyInsightsBySkill(studentId),
-    getWritingCriterionInsights(studentId),
+    getAccuracyInsightsBySkill(studentId, audience),
+    getWritingCriterionInsights(studentId, audience),
     getSpeakingCriterionInsights(studentId),
   ]);
 

@@ -98,7 +98,8 @@ export async function getTeacherReportAction(studentId: string, forceRegenerate 
       if (cached) return { success: true, content: cached.content, generatedAt: cached.generatedAt, cached: true };
     }
 
-    const [insights, overview] = await Promise.all([getAllSkillInsights(studentId), getPerformanceOverview(studentId)]);
+    // Phase O - a teacher's report is about everything the student did, including the tests whose results are hidden from the student.
+    const [insights, overview] = await Promise.all([getAllSkillInsights(studentId, "teacher"), getPerformanceOverview(studentId, "teacher")]);
     if (insights.length === 0) return { success: false, error: NOT_ENOUGH_DATA_ERROR };
 
     const overviewLine = `${overview.testsCompleted} tests completed, average band ${overview.avgBand ?? "N/A"}.`;

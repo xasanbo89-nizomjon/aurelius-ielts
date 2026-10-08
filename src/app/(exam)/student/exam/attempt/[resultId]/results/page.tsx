@@ -5,6 +5,7 @@ import { CheckCircle2, Clock, Gauge, Lightbulb, ListChecks, SkipForward, Target,
 
 import { requireStudentProfile } from "@/lib/session";
 import { getAttemptSummary } from "@/lib/exam/attempts";
+import { getResultVisibility, hiddenAttemptHref } from "@/lib/exam/result-visibility";
 import { isResponseAnswered } from "@/lib/exam/grading";
 import { formatNumberRange, summarizeAttemptSlots } from "@/lib/exam/question-numbering";
 import { getResultInsights } from "@/lib/exam/result-insights";
@@ -26,6 +27,11 @@ export default async function ExamResultsPage({
 }) {
   const { resultId } = await params;
   const { profile } = await requireStudentProfile();
+
+  // Phase O - the outcome is checked on the server before anything is read: a hidden result sends the student to the "submitted" note, never to a page with a score.
+  const visibility = await getResultVisibility(resultId, profile.id);
+  if (!visibility.found) notFound();
+  if (visibility.completed && !visibility.shown) redirect(hiddenAttemptHref(resultId, visibility));
 
   const attempt = await getAttemptSummary(resultId, profile.id);
   if (!attempt) notFound();

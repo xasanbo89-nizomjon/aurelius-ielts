@@ -100,6 +100,7 @@ export default async function TeacherTestsPage({
             category: true,
             difficulty: true,
             testFormat: true,
+            showResultsToStudent: true,
             isPublished: true,
             isArchived: true,
             coverImagePath: true,
@@ -284,6 +285,12 @@ export default async function TeacherTestsPage({
                           </Badge>
                         )}
                         {isInternalTestTitle(test.title) && <Badge variant="outline">Temporary</Badge>}
+                        {/* Phase O - "Show results to students?": only the hidden ones are flagged (the usual case, results shown, needs no note) */}
+                        {test.showResultsToStudent === false && (
+                          <Badge variant="outline" data-testid="results-hidden-badge" title="Students see only 'Your test has been submitted.'">
+                            Results hidden
+                          </Badge>
+                        )}
                       </span>
                     </TableCell>
                     <TableCell>

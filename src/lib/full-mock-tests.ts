@@ -126,9 +126,7 @@ export async function deleteFullMockTest(id: string, teacherId: string, options:
   const impact = await getFullMockDeletionImpact(id, teacherId);
 
   if (impact.attempts > 0 && !options.deleteAttempts) {
-    throw new Error(
-      `This full mock has ${impact.attempts} student attempt${impact.attempts === 1 ? "" : "s"}. Confirm that you want to delete them too, or archive the mock instead.`
-    );
+    throw new Error(`This full mock has ${impact.attempts} student attempt${impact.attempts === 1 ? "" : "s"} and cannot be deleted. Archive it instead: its attempts and scores stay.`);
   }
 
   const ownedTestIds = impact.ownedTests.map((test) => test.id);
@@ -517,7 +515,34 @@ function computeCompleteness(test: {
   };
 }
 
-export async function publishFullMockTest(id: string, teacherId: string): Promise<void> {
+/** The other Full Mocks that are active right now (published) and that this teacher manages: what publishing another one would archive. */
+export type ActiveFullMock = { id: string; title: string; attempts: number; inProgress: number };
+
+/**
+ * Phase O - "Only one Full Mock is active at a time; old ones are archived". Publishing a Full Mock archives the other published Full Mock(s) of the teacher (a Root Teacher:
+ * of everybody - the one platform-wide Full Mock). It is asked about first: this error carries the list so the screen can say which mock(s) go and how many students are in
+ * the middle of them (they can finish: an archived mock still lets a sitting that is under way continue). The attempts of an archived mock are never touched.
+ */
+export class OtherActiveMockError extends Error {
+  constructor(readonly others: ActiveFullMock[]) {
+    super(`Only one Full Mock is active at a time. Publishing this one will archive: ${others.map((other) => `"${other.title}"`).join(", ")}.`);
+    this.name = "OtherActiveMockError";
+  }
+}
+
+export async function listOtherActiveFullMocks(id: string, teacherId: string): Promise<ActiveFullMock[]> {
+  const others = await prisma.fullMockTest.findMany({
+    where: { status: "PUBLISHED", id: { not: id }, ...(await authorScope(teacherId)) },
+    select: { id: true, title: true, _count: { select: { attempts: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  if (others.length === 0) return [];
+  const inProgress = await prisma.fullMockAttempt.groupBy({ by: ["fullMockTestId"], where: { fullMockTestId: { in: others.map((other) => other.id) }, status: "IN_PROGRESS" }, _count: { _all: true } });
+  const open = new Map(inProgress.map((row) => [row.fullMockTestId, row._count._all]));
+  return others.map((other) => ({ id: other.id, title: other.title, attempts: other._count.attempts, inProgress: open.get(other.id) ?? 0 }));
+}
+
+export async function publishFullMockTest(id: string, teacherId: string, options: { archiveOthers?: boolean } = {}): Promise<{ archived: string[] }> {
   const test = await getFullMockTestForEdit(id, teacherId);
   if (!test) throw new Error("Full mock test not found.");
 
@@ -544,7 +569,14 @@ export async function publishFullMockTest(id: string, teacherId: string): Promis
       .map((s) => setSpeakingTaskStatus(s.speakingTaskId, teacherId, "PUBLISHED")),
   ]);
 
-  await prisma.fullMockTest.update({ where: { id }, data: { status: "PUBLISHED" } });
+  const others = await listOtherActiveFullMocks(id, teacherId);
+  if (others.length > 0 && !options.archiveOthers) throw new OtherActiveMockError(others);
+
+  await prisma.$transaction([
+    ...(others.length > 0 ? [prisma.fullMockTest.updateMany({ where: { id: { in: others.map((other) => other.id) }, status: "PUBLISHED" }, data: { status: "ARCHIVED" } })] : []),
+    prisma.fullMockTest.update({ where: { id }, data: { status: "PUBLISHED" } }),
+  ]);
+  return { archived: others.map((other) => other.id) };
 }
 
 export async function unpublishFullMockTest(id: string, teacherId: string): Promise<void> {
@@ -636,10 +668,13 @@ export async function listFullMockTestsForTeacher(teacherId: string) {
   }));
 }
 
-/** A single published Full Mock Test's detail, for the student's pre-start confirmation page. */
-export async function getPublishedFullMockTestDetail(id: string) {
+/**
+ * A single published Full Mock Test's detail, for the student's pre-start confirmation page. Phase O: a Full Mock that was archived since the student began their sitting is
+ * still returned to THAT student (their sitting under way can be finished); to nobody else.
+ */
+export async function getPublishedFullMockTestDetail(id: string, studentId?: string) {
   const test = await prisma.fullMockTest.findFirst({
-    where: { id, status: "PUBLISHED" },
+    where: { id, OR: [{ status: "PUBLISHED" }, ...(studentId ? [{ status: "ARCHIVED" as const, attempts: { some: { studentId, status: "IN_PROGRESS" as const } } }] : [])] },
     include: {
       readingSections: { include: { mockTest: { select: { id: true, title: true, durationMinutes: true } } } },
       listeningSections: { include: { mockTest: { select: { id: true, title: true, durationMinutes: true } } } },
