@@ -33,6 +33,8 @@
     "check:q": "node --import ./scripts/register-ts.mjs scripts/check-q.mjs",
     "check:o": "node --import ./scripts/register-ts.mjs scripts/check-o.mjs",
     "check:r": "node --import ./scripts/register-ts.mjs scripts/check-r.mjs",
+    "check:m3": "node --import ./scripts/register-ts.mjs scripts/check-m3.mjs",
+    "reviews:backfill": "node --env-file=.env --import ./scripts/register-ts.mjs scripts/review-content.mjs",
     "check:speaking": "node --import ./scripts/register-ts.mjs scripts/check-speaking.mjs",
     "check:sw": "node --import ./scripts/register-ts.mjs scripts/check-sw.mjs"
   },

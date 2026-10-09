@@ -37,7 +37,7 @@ export type ExplanationAiState = { enabled: boolean; dailyLimit: number; usedTod
 export async function getExplanationAiState(teacherId: string): Promise<ExplanationAiState> {
   const [settings, usedToday] = await Promise.all([
     prisma.aiSettings.findUnique({ where: { teacherId }, select: { explanationsEnabled: true, dailyExplanationAiLimit: true } }),
-    prisma.explanationGenerationLog.count({ where: { teacherId, createdAt: { gte: startOfToday() } } }),
+    prisma.explanationGenerationLog.count({ where: { teacherId, kind: "MANUAL", createdAt: { gte: startOfToday() } } }),
   ]);
   return { enabled: settings?.explanationsEnabled === true, dailyLimit: settings?.dailyExplanationAiLimit ?? DEFAULT_DAILY_EXPLANATION_GENERATIONS, usedToday, model: getExplanationModel() ?? getOpenAIModel() };
 }
@@ -50,17 +50,26 @@ export type ExplanationUsage = {
   today: { requests: number; promptTokens: number; completionTokens: number };
   last30Days: { requests: number; promptTokens: number; completionTokens: number };
   allTime: { requests: number; promptTokens: number; completionTokens: number };
+  /** Phase M3 - the part of the figures above that was the automatic background job (publish / backfill), not a teacher pressing a button. */
+  automaticLast30Days: { requests: number; promptTokens: number; completionTokens: number };
+  automaticAllTime: { requests: number; promptTokens: number; completionTokens: number };
 };
 
 /** The token usage of the explanation writer, for the Root Teacher: every teacher's requests, from the log. */
 export async function getExplanationUsage(): Promise<ExplanationUsage> {
   const since = (days: number) => new Date(Date.now() - days * 24 * 3600_000);
-  const sum = async (where: { createdAt?: { gte: Date } }) => {
+  const sum = async (where: { createdAt?: { gte: Date }; kind?: string }) => {
     const total = await prisma.explanationGenerationLog.aggregate({ where, _count: { _all: true }, _sum: { promptTokens: true, completionTokens: true } });
     return { requests: total._count._all, promptTokens: total._sum.promptTokens ?? 0, completionTokens: total._sum.completionTokens ?? 0 };
   };
-  const [today, last30Days, allTime] = await Promise.all([sum({ createdAt: { gte: startOfToday() } }), sum({ createdAt: { gte: since(30) } }), sum({})]);
-  return { today, last30Days, allTime };
+  const [today, last30Days, allTime, automaticLast30Days, automaticAllTime] = await Promise.all([
+    sum({ createdAt: { gte: startOfToday() } }),
+    sum({ createdAt: { gte: since(30) } }),
+    sum({}),
+    sum({ kind: "AUTO", createdAt: { gte: since(30) } }),
+    sum({ kind: "AUTO" }),
+  ]);
+  return { today, last30Days, allTime, automaticLast30Days, automaticAllTime };
 }
 
 export type GenerateExplanationResult =

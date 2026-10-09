@@ -299,7 +299,7 @@ try {
 
   await check("a test starts with no explanations: every question 'not written', nothing for a student", async () => {
     const data = await getExplanationEditorData(T.testId, ctx.A);
-    assert.deepEqual(data.counts, { total: 3, none: 3, draft: 0, approved: 0, outdated: 0 });
+    assert.deepEqual(data.counts, { total: 3, none: 3, draft: 0, approved: 0, auto: 0, outdated: 0 });
     assert.equal((await getApprovedExplanations(await db.question.findMany({ where: { mockTestId: T.testId } }))).size, 0);
   });
 

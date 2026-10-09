@@ -424,6 +424,8 @@ model MockTest {
   versionOfId          String?
   versionOf            MockTest?           @relation("MockTestVersions", fields: [versionOfId], references: [id], onDelete: SetNull)
   versions             MockTest[]          @relation("MockTestVersions")
+  /// Phase M3 - the background job that writes this test's evidence and explanations.
+  reviewContentJob     ReviewContentJob?
 
   createdById String
   createdBy   TeacherProfile @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -2322,6 +2324,9 @@ model EvidenceSuggestionLog {
 }
 
 enum ExplanationStatus {
+  /// Phase M3 - written automatically when the test was published (or by the backfill): students see it at once, while it still matches its question. A teacher can
+  /// edit it, approve it, or take it back (a draft); a teacher's own text always wins over it.
+  AUTO
   /// Written (by the AI or a teacher) but not approved: no student sees it.
   DRAFT
   /// A teacher approved it: students see it in their review (while it still matches the question - see sourceHash).
@@ -2368,10 +2373,46 @@ model ExplanationGenerationLog {
   model            String?
   promptTokens     Int?
   completionTokens Int?
+  /// Phase M3 - "MANUAL" = a teacher pressed Generate / Regenerate (counts against their daily limit); "AUTO" = the background job that fills a test when it is published
+  /// (attributed to the teacher who published it, never counted against their limit, shown separately on the Root usage page).
+  kind             String         @default("MANUAL")
   createdAt        DateTime       @default(now())
 
   @@index([teacherId, createdAt])
   @@map("explanation_generation_logs")
+}
+
+enum ReviewJobStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+/// Phase M3 - the background job that writes, once per question, the answer evidence + "Explain more" + "What's the trap?" of a published Reading / Listening test.
+/// One row per test (publishing again or the backfill reuses it). It is resumable: a question that already has its text is skipped, so a job that is cut off (or a
+/// worker that dies - its lease runs out) simply continues where it stopped.
+model ReviewContentJob {
+  id              String          @id @default(cuid())
+  mockTestId      String          @unique
+  mockTest        MockTest        @relation(fields: [mockTestId], references: [id], onDelete: Cascade)
+  /// The teacher who published the test (a plain id: used to attribute the AI cost in the usage log).
+  requestedById   String
+  status          ReviewJobStatus @default(PENDING)
+  totalQuestions  Int             @default(0)
+  doneQuestions   Int             @default(0)
+  failedQuestions Int             @default(0)
+  attempts        Int             @default(0)
+  lastError       String?
+  /// While PROCESSING: until when this worker owns the job.
+  leaseUntil      DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([status, updatedAt])
+  @@map("review_content_jobs")
 }
 
 // ---------------------------------------------------------------------------

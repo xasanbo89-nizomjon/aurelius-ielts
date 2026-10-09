@@ -11,6 +11,7 @@ import { isCustomFormat } from "@/lib/exam/test-format";
 import { reanchorHighlight } from "@/lib/exam/text-highlight";
 import { confirmedEvidenceRanges } from "@/lib/exam/review-model";
 import { getApprovedExplanations } from "@/lib/exam/question-explanations-server";
+import { hasActiveAccess } from "@/lib/subscription";
 import { resolvePassageAudioSrc } from "@/lib/uploads/audio-constraints";
 import { examPreferencesCookieName, parseExamPreferences } from "@/lib/exam/ui-preferences";
 import { OfficialReview, type ReviewPassageHighlight, type ReviewScreenQuestion } from "@/components/exam/official/official-review";
@@ -23,6 +24,13 @@ export const metadata: Metadata = { title: "Review Answers" };
  * notes, and the explanations a teacher approved. Everything shown is what was stored when the attempt was handed in - nothing here is marked again, and
  * nothing here calls the AI (a student never triggers a call: see question-explanations.ts).
  */
+/** The stored explanation as the review gets it: the text for a student who may read it, otherwise only which pills exist. */
+function reviewExplanation(parts: { explain: string | null; trap: string | null; fix: string | null } | null, canExplain: boolean): ReviewScreenQuestion["explanation"] {
+  if (!parts) return null;
+  if (canExplain) return parts;
+  return { explain: null, trap: null, fix: null, locked: true, has: { explain: !!parts.explain, trap: !!(parts.trap || parts.fix) } };
+}
+
 export default async function ExamReviewPage({
   params,
   searchParams,
@@ -46,7 +54,7 @@ export default async function ExamReviewPage({
   const fullMockAttemptId = await findInProgressFullMockLinkForResult(resultId);
   if (fullMockAttemptId) redirect(`/student/full-mock/attempt/${fullMockAttemptId}`);
 
-  const [cookieStore, explanations] = await Promise.all([cookies(), getApprovedExplanations(attempt.mockTest.questions)]);
+  const [cookieStore, explanations, canExplain] = await Promise.all([cookies(), getApprovedExplanations(attempt.mockTest.questions), hasActiveAccess(profile.id)]);
 
   const totalPoints = attempt.mockTest.questions.reduce((sum, question) => sum + question.points, 0);
   // Phase Q - a Custom test has no band: the review shows its score and percentage instead.
@@ -75,7 +83,8 @@ export default async function ExamReviewPage({
       highlights: attempt.questionHighlights
         .filter((highlight) => highlight.questionId === question.id)
         .map((highlight) => ({ id: highlight.id, questionId: highlight.questionId, region: highlight.region, text: highlight.text, startOffset: highlight.startOffset, endOffset: highlight.endOffset, note: highlight.note })),
-      explanation: explanations.get(question.id) ?? null,
+      // Phase M3 - a student whose plan does not include "AI Explain More" gets NO text, only the fact that there is one (the pills then open the Premium prompt).
+      explanation: reviewExplanation(explanations.get(question.id) ?? null, canExplain),
     };
   });
 

@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
-const STATE_LABEL: Record<ExplanationState, string> = { NONE: "Not written", DRAFT: "Draft", APPROVED: "Approved", OUTDATED: "Outdated" };
+const STATE_LABEL: Record<ExplanationState, string> = { NONE: "Not written", DRAFT: "Draft", AUTO: "Auto", APPROVED: "Approved", OUTDATED: "Outdated" };
 
 const fmt = (n: number) => n.toLocaleString();
 
@@ -47,6 +47,7 @@ export function ExplanationsEditor({ data, ai: initialAi, usage }: { data: Expla
       none: rows.filter((row) => row.state === "NONE").length,
       draft: rows.filter((row) => row.state === "DRAFT").length,
       approved: rows.filter((row) => row.state === "APPROVED").length,
+      auto: rows.filter((row) => row.state === "AUTO").length,
       outdated: rows.filter((row) => row.state === "OUTDATED").length,
     }),
     [rows]
@@ -204,7 +205,7 @@ export function ExplanationsEditor({ data, ai: initialAi, usage }: { data: Expla
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
             <p className="text-sm font-medium" data-testid="ex-counts">
-              {counts.approved} of {counts.total} question{counts.total === 1 ? "" : "s"} have an approved explanation
+              {counts.approved + counts.auto} of {counts.total} question{counts.total === 1 ? "" : "s"} have an explanation students can see{counts.auto > 0 && <span> ({counts.auto} written automatically)</span>}
               {counts.draft > 0 && <span className="text-amber-600 dark:text-amber-400"> · {counts.draft} draft{counts.draft === 1 ? "" : "s"} to review</span>}
               {counts.outdated > 0 && <span className="text-destructive"> · {counts.outdated} outdated</span>}
             </p>
@@ -276,7 +277,7 @@ export function ExplanationsEditor({ data, ai: initialAi, usage }: { data: Expla
                 </p>
                 <div className="flex items-center gap-2">
                   {row.hasEvidence && <span className="text-muted-foreground text-xs">evidence set</span>}
-                  <Badge variant={row.state === "APPROVED" ? "success" : "outline"} className={cn(row.state === "OUTDATED" && "border-destructive/60 text-destructive", row.state === "DRAFT" && "border-amber-500/60 text-amber-700 dark:text-amber-300")} data-testid={`ex-state-${row.startNumber}`}>
+                  <Badge variant={row.state === "APPROVED" ? "success" : row.state === "AUTO" ? "accent" : "outline"} className={cn(row.state === "OUTDATED" && "border-destructive/60 text-destructive", row.state === "DRAFT" && "border-amber-500/60 text-amber-700 dark:text-amber-300")} data-testid={`ex-state-${row.startNumber}`}>
                     {STATE_LABEL[row.state]}
                   </Badge>
                 </div>
@@ -364,14 +365,14 @@ export function ExplanationsEditor({ data, ai: initialAi, usage }: { data: Expla
                         {working ? <Loader2 className="size-3.5 animate-spin" /> : row.state === "NONE" ? <Sparkles className="size-3.5" /> : <RefreshCw className="size-3.5" />} {row.state === "NONE" ? "Generate" : "Regenerate"}
                       </Button>
                     )}
-                    {row.state === "DRAFT" && (
+                    {(row.state === "DRAFT" || row.state === "AUTO") && (
                       <Button type="button" size="sm" disabled={locked} onClick={() => approve(row)} data-testid={`ex-approve-${row.startNumber}`}>
                         <CheckCircle2 className="size-3.5" /> Approve
                       </Button>
                     )}
-                    {row.state === "APPROVED" && (
+                    {(row.state === "APPROVED" || row.state === "AUTO") && (
                       <Button type="button" size="sm" variant="ghost" disabled={locked} onClick={() => unapprove(row)} data-testid={`ex-unapprove-${row.startNumber}`}>
-                        <Undo2 className="size-3.5" /> Take back
+                        <Undo2 className="size-3.5" /> {row.state === "AUTO" ? "Hide from students" : "Take back"}
                       </Button>
                     )}
                     {row.state !== "NONE" && (

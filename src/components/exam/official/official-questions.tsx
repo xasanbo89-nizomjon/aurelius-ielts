@@ -16,7 +16,7 @@ import { chooseCountOf } from "@/lib/exam/choose-many";
 import type { ExamQuestion } from "@/components/exam/exam-runner";
 import { OfficialQuestionText } from "@/components/exam/official/official-text";
 import { NO_ANSWER, OfficialBlank, OfficialDrop, OfficialWordBank, ignoreClickThatEndsASelection } from "@/components/exam/official/official-answer-controls";
-import { NumberBox, RowExplainBar, RowNumberMark, useReviewRow } from "@/components/exam/official/official-review-context";
+import { NumberBox, RowExplainBar, RowNumberMark, RowReviewHead, useReviewRow } from "@/components/exam/official/official-review-context";
 
 export type OfficialRow = NumberedQuestion<ExamQuestion>;
 type OnAnswer = (questionId: string, value: unknown) => void;
@@ -102,12 +102,13 @@ const ShortAnswerRow = memo(function ShortAnswerRow({ row, value, onAnswer }: Ro
   const review = useReviewRow(row.id);
   return (
     <RowShell row={row}>
+      {/* Phase M3 - in a review the line "number, tick, Answer: ..., Explain more, What's the trap?" comes first, then the question text. */}
+      {review && <RowReviewHead rowId={row.id} number={row.startNumber} />}
       <p className="ex-item-text">
-        <NumberBox rowId={row.id} number={row.startNumber} />
+        {!review && <NumberBox rowId={row.id} number={row.startNumber} />}
         <OfficialQuestionText questionId={row.id} part="prompt" text={row.prompt} />
       </p>
       <OfficialBlank id={row.id} value={asText(value)} onValueChange={(next) => onAnswer(row.id, next)} number={row.startNumber} label={`Answer for question ${row.startNumber}`} ownLine readOnly={!!review} outcome={review?.numbers[0]?.outcome} />
-      {review && <RowNumberMark rowId={row.id} number={row.startNumber} />}
     </RowShell>
   );
 });
@@ -134,8 +135,9 @@ const TrueFalseRow = memo(function TrueFalseRow({ row, value, onAnswer, yesNo }:
   const rightValue = typeof review?.correctRaw === "string" ? review.correctRaw.trim().toUpperCase() : null;
   return (
     <RowShell row={row}>
+      {review && <RowReviewHead rowId={row.id} number={row.startNumber} />}
       <p className="ex-item-text">
-        <NumberBox rowId={row.id} number={row.startNumber} />
+        {!review && <NumberBox rowId={row.id} number={row.startNumber} />}
         <OfficialQuestionText questionId={row.id} part="prompt" text={row.prompt} />
       </p>
       <ul className="ex-options" role="radiogroup" aria-label={`Answer for question ${row.startNumber}`}>
@@ -154,7 +156,6 @@ const TrueFalseRow = memo(function TrueFalseRow({ row, value, onAnswer, yesNo }:
           );
         })}
       </ul>
-      {review && <RowNumberMark rowId={row.id} number={row.startNumber} />}
     </RowShell>
   );
 });
@@ -168,12 +169,9 @@ const ChoiceRow = memo(function ChoiceRow({ row, value, onAnswer, choices, allow
   const rightIds = Array.isArray(review?.correctRaw) ? (review.correctRaw as unknown[]).filter((v): v is string => typeof v === "string") : [];
   return (
     <RowShell row={row}>
+      {review && row.slotKeys.map((_, index) => <RowReviewHead key={index} rowId={row.id} number={row.startNumber + index} />)}
       <p className="ex-item-text">
-        {review ? (
-          row.slotKeys.map((_, index) => <NumberBox key={index} rowId={row.id} number={row.startNumber + index} />)
-        ) : (
-          <span className="ex-number">{formatNumberRange(row.startNumber, row.endNumber)}</span>
-        )}
+        {!review && <span className="ex-number">{formatNumberRange(row.startNumber, row.endNumber)}</span>}
         <OfficialQuestionText questionId={row.id} part="prompt" text={row.prompt} />
       </p>
       <ul className="ex-options" role={allowMultiple ? "group" : "radiogroup"} aria-label={limit ? `Answer for questions ${row.startNumber} to ${row.endNumber}` : `Answer for question ${row.startNumber}`} data-choose-count={limit ?? undefined}>
@@ -201,16 +199,6 @@ const ChoiceRow = memo(function ChoiceRow({ row, value, onAnswer, choices, allow
           );
         })}
       </ul>
-      {review && (
-        <div className="ex-rv-list">
-          {row.slotKeys.map((_, index) => (
-            <p key={index} className="ex-rv-line">
-              {row.slotKeys.length > 1 && <NumberBox rowId={row.id} number={row.startNumber + index} />}
-              <RowNumberMark rowId={row.id} number={row.startNumber + index} />
-            </p>
-          ))}
-        </div>
-      )}
     </RowShell>
   );
 });

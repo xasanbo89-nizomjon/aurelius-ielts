@@ -51,14 +51,14 @@ export function questionContentKey(question: { type: string; prompt: string; opt
   return stable({ type: question.type, prompt: question.prompt.trim(), options: question.options ?? null, correctAnswer: question.correctAnswer ?? null });
 }
 
-export type ExplanationState = "NONE" | "DRAFT" | "APPROVED" | "OUTDATED";
+export type ExplanationState = "NONE" | "DRAFT" | "AUTO" | "APPROVED" | "OUTDATED";
 
 /** NONE: nothing written. OUTDATED: written for an earlier version of the question (never shown, to be written again). Otherwise its own status. */
-export function explanationState(row: { status: "DRAFT" | "APPROVED"; sourceHash: string } | null | undefined, currentHash: string): ExplanationState {
+export function explanationState(row: { status: "DRAFT" | "APPROVED" | "AUTO"; sourceHash: string } | null | undefined, currentHash: string): ExplanationState {
   if (!row) return "NONE";
   if (row.sourceHash !== currentHash) return "OUTDATED";
   return row.status;
 }
 
-/** Whether a student may see it. */
-export const isShownToStudents = (state: ExplanationState): boolean => state === "APPROVED";
+/** Whether a student may see it: a teacher approved it, or it was written automatically (Phase M3) and no teacher has taken it back. */
+export const isShownToStudents = (state: ExplanationState): boolean => state === "APPROVED" || state === "AUTO";

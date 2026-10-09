@@ -172,3 +172,37 @@ All taken in real Chrome on the hand-calculated fixture (`docs/screenshots/phase
 | `npm run check:m2` | no database first: the review model (stored verdicts, Yes / No wording, "Choose TWO" number by number, filters); then the real database with its own fixtures: the explanation lifecycle (draft / approved / outdated), who may write them, what a student gets, copy with a version, the AI rules **without calling the model**, token usage, and that no stored score moved |
 | `npm run check:results` | no database: evidence (stored, found again after an edit, copied, confirmed-only, the warning), the review's per-number answers and card, part times, and the statistics maths on a hand-calculated example |
 | `npm run check:m` | the real database, its own tagged fixtures (removed at the end): the same hand-calculated example through the SQL, evidence end to end, teacher vs Root scope, part events, empty states, and that no stored score moved |
+
+## Automatic review content (Phase M3)
+
+When a Reading or Listening test is **published**, one background job writes, for every question, the **answer evidence** (the exact words of the passage / transcript, per
+question number) and the **Explain more** and **What's the trap?** texts - so the review shows them at once, with no teacher step. Students never trigger any of it.
+
+- **The job.** `review_content_jobs` (one row per test; PENDING / PROCESSING / DONE / FAILED, progress counts, a lease). Publishing queues it
+  (`setPublished` -> `queueReviewContent`, then a worker starts after the response is sent); the scheduled job (`/api/cron/speaking-audio`) continues anything cut off by a
+  time limit, never started, or whose worker died (lease ran out). It is **resumable**: it only does what is still missing (`needsContent`), four questions at a time, one AI
+  request per question, one retry; one question failing never stops the others. A teacher can also press **Write the missing ones now** on the test's Explanations page
+  (it shows the job's state). Full Mock package sections are left out (a student never reviews them).
+- **One request per question** (`src/lib/ai/prompts/review-content.ts`, strict JSON schema, low temperature, `OPENAI_EXPLANATION_MODEL` else `OPENAI_MODEL`): evidence per
+  number + explanation + trap + fix. The model only names the words; the server finds them in the text itself (`locateQuote`), so a quote that is not in the text is not
+  stored. **Not Given:** the most related sentence if there is one, otherwise no evidence (the explanation says why the text does not answer it).
+- **Stored once, shown at once.** Evidence is stored `CONFIRMED` with source `AUTO`; the explanation with status `AUTO` (hash-checked like an approved one: if the question
+  or its answer changes, it shows as Outdated and is written again). **A teacher's edit always wins**: the job never replaces a teacher's text, an approved one that still
+  matches, or a number that already has evidence. On the Explanations page a teacher can **Edit**, **Approve**, **Regenerate**, **Hide from students** (an automatic text becomes
+  a draft) or **Remove**; on the Evidence page setting evidence by hand replaces the automatic item.
+- **Cost.** Every request is logged in `explanation_generation_logs` with `kind = AUTO` under the teacher who published the test; the automatic calls do **not** count against
+  that teacher's daily limit (only `kind = MANUAL` does). The Root usage page ("OpenAI Usage") shows the automatic part separately.
+- **Backfill.** `npm run reviews:backfill` is a dry run (lists tests, questions to write, a rough cost; writes nothing, calls no AI); `-- --apply` does it, `--test=<id>` /
+  `--title=<text>` narrow it. Safe to run again.
+
+### The review screen (Phase M3 changes)
+
+- **Passage:** the evidence of every number is light green for right, wrong and unanswered answers; a boxed **[n]** closes each green span (badge at the END); pressing it
+  goes to the question, pressing a question goes to its evidence. The student's own highlights stay yellow (different colour, no underline, no badge).
+- **Question row** (single-number types - True / False / Not Given, multiple choice, short answer, Choose TWO - one line per number): `[number box] [tick/cross] Answer: ...
+  [Explain more ▸ (blue pill)] [What's the trap? 💡 (yellow pill)]`, then the question text. Gap fills, summaries, tables and matching keep the answer mark next to the box
+  inside the sentence / table, with the same pills (a row of several numbers has them once, under the row).
+- **Popovers** show the stored text with "Auto-generated - may not be fully accurate."
+- **Premium.** The pills are always shown. A student whose plan has no access (`hasActiveAccess` false) gets **no text in the page at all** - clicking opens "Available with
+  Premium" with a link to `/student/premium`. A Premium (or trial) student reads the text.
+- Checks: `npm run check:m3` (no database).

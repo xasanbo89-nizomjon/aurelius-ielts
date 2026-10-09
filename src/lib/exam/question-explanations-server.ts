@@ -34,12 +34,12 @@ export const hashQuestionContent = (question: { type: string; prompt: string; op
 // What a student gets
 // ---------------------------------------------------------------------------------------------------------------------------------------------------
 
-/** The approved explanations of these questions that still match them - the only ones a student ever sees. A question with none is simply not in the map. */
+/** The explanations of these questions a student may see - approved by a teacher, or written automatically (Phase M3) - that still match them. A question with none is simply not in the map. */
 export async function getApprovedExplanations(questions: readonly { id: string; type: string; prompt: string; options: unknown; correctAnswer: unknown }[]): Promise<Map<string, ExplanationParts>> {
   const result = new Map<string, ExplanationParts>();
   if (questions.length === 0) return result;
   const rows = await prisma.questionExplanation.findMany({
-    where: { questionId: { in: questions.map((question) => question.id) }, status: "APPROVED" },
+    where: { questionId: { in: questions.map((question) => question.id) }, status: { in: ["APPROVED", "AUTO"] } },
     select: { questionId: true, explainText: true, trapText: true, fixText: true, sourceHash: true },
   });
   const byId = new Map(questions.map((question) => [question.id, question]));
@@ -77,7 +77,7 @@ export type ExplanationEditorRow = {
   hasEvidence: boolean;
 };
 
-export type ExplanationCounts = { total: number; none: number; draft: number; approved: number; outdated: number };
+export type ExplanationCounts = { total: number; none: number; draft: number; approved: number; auto: number; outdated: number };
 
 export type ExplanationEditorData = {
   testId: string;
@@ -127,6 +127,7 @@ function countsOf(rows: readonly { state: ExplanationState }[]): ExplanationCoun
     none: rows.filter((row) => row.state === "NONE").length,
     draft: rows.filter((row) => row.state === "DRAFT").length,
     approved: rows.filter((row) => row.state === "APPROVED").length,
+    auto: rows.filter((row) => row.state === "AUTO").length,
     outdated: rows.filter((row) => row.state === "OUTDATED").length,
   };
 }
@@ -236,6 +237,19 @@ export async function removeExplanation(testId: string, teacherId: string, quest
   const test = await loadTest(testId, teacherId);
   questionOf(test, questionId);
   await prisma.questionExplanation.deleteMany({ where: { questionId } });
+}
+
+/**
+ * Phase M3 - the background job wrote the explanation of a question: stored as AUTO (students see it at once), only where the question has none, or has one written for an
+ * earlier version of the question that no teacher wrote. A teacher's text, and a draft or approved text that still matches, are never replaced. Returns whether it was stored.
+ */
+export async function storeAutoExplanation(question: { id: string; type: string; prompt: string; options: unknown; correctAnswer: unknown }, parts: ExplanationParts, model: string): Promise<boolean> {
+  const hash = hashQuestionContent(question);
+  const data = { explainText: parts.explain, trapText: parts.trap, fixText: parts.fix, status: "AUTO" as const, sourceHash: hash, source: "AUTO", model, generatedAt: new Date(), approvedAt: null, approvedById: null };
+  const existing = await prisma.questionExplanation.findUnique({ where: { questionId: question.id }, select: { sourceHash: true, source: true } });
+  if (existing && (existing.sourceHash === hash || existing.source === "TEACHER")) return false;
+  await prisma.questionExplanation.upsert({ where: { questionId: question.id }, create: { questionId: question.id, ...data }, update: data });
+  return true;
 }
 
 /** The AI wrote an explanation: stored as a DRAFT (never approved by itself), replacing any earlier one of the question. */

@@ -140,10 +140,24 @@ export async function setPublished(testId: string, teacherId: string, isPublishe
     await assertCanUnpublish(testId);
   }
 
-  return prisma.mockTest.update({
+  const updated = await prisma.mockTest.update({
     where: { id: test.id },
     data: { isPublished, isArchived: isPublished ? false : test.isArchived },
   });
+
+  // Phase M3 - a Reading / Listening test that goes live gets its review content (answer evidence + Explain more + What's the trap) written in the background, once per
+  // question. Publishing never waits for it and never fails because of it.
+  if (isPublished && !test.isPublished) {
+    try {
+      const { queueReviewContent, startReviewContentInBackground } = await import("@/lib/review-content/queue");
+      if (await queueReviewContent(test.id, teacherId)) {
+        startReviewContentInBackground(test.id, async (id) => (await import("@/lib/review-content/processing")).processReviewJob(id));
+      }
+    } catch (error) {
+      console.error("[publish] could not queue the review content:", error instanceof Error ? error.message : error);
+    }
+  }
+  return updated;
 }
 
 export async function setArchived(testId: string, teacherId: string, isArchived: boolean) {

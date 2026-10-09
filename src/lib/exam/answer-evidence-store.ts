@@ -22,7 +22,8 @@ export const EVIDENCE_VERSION = 1;
 export const MAX_EVIDENCE_LENGTH = 1200;
 
 export type EvidenceState = "CONFIRMED" | "SUGGESTED";
-export type EvidenceSource = "TEACHER" | "AI";
+/** TEACHER: a teacher marked it. AI: a suggestion a teacher confirmed. AUTO (Phase M3): found by the background job when the test was published - shown to students at once, replaced by any teacher edit. */
+export type EvidenceSource = "TEACHER" | "AI" | "AUTO";
 
 export type EvidenceItem = {
   /** Which number of the row (0 = its first number). */
@@ -55,7 +56,7 @@ export function parseEvidence(value: unknown): EvidenceItem[] {
     if (!isCount(slot) || typeof passageId !== "string" || !passageId || !isCount(start) || !isCount(end) || end <= start) continue;
     if (typeof quote !== "string" || !quote) continue;
     if (state !== "CONFIRMED" && state !== "SUGGESTED") continue;
-    if (source !== "TEACHER" && source !== "AI") continue;
+    if (source !== "TEACHER" && source !== "AI" && source !== "AUTO") continue;
     const item: EvidenceItem = { slot, passageId, start, end, quote, state, source, at: typeof at === "string" ? at : "", ...(typeof confirmedAt === "string" ? { confirmedAt } : {}) };
     const existing = bySlot.get(slot);
     if (!existing || (existing.state === "SUGGESTED" && item.state === "CONFIRMED")) bySlot.set(slot, item);

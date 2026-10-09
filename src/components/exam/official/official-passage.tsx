@@ -52,15 +52,15 @@ export const OfficialPassage = memo(function OfficialPassage({
     () => (evidence && evidence.length > 0 ? [...highlights, ...evidence.map((item) => ({ id: evidenceId(item.number), start: item.start, end: item.end }))] : highlights),
     [highlights, evidence]
   );
-  /** One badge per stretch, in front of its first word; two numbers that start in the same place share the spot. */
+  /** One badge per stretch, right AFTER its last word (Phase M3: "[1]" closes the green span); two numbers that end in the same place share the spot. */
   const badges = useMemo<ReadonlyMap<number, ReactNode> | undefined>(() => {
     if (!evidence || evidence.length === 0) return undefined;
-    const byStart = new Map<number, number[]>();
-    for (const item of evidence) byStart.set(item.start, [...(byStart.get(item.start) ?? []), item.number].sort((a, b) => a - b));
+    const byEnd = new Map<number, number[]>();
+    for (const item of evidence) byEnd.set(item.end, [...(byEnd.get(item.end) ?? []), item.number].sort((a, b) => a - b));
     return new Map(
-      [...byStart.entries()].map(([start, numbers]) => [
-        start,
-        <span key={start} className="ex-ev-badges">
+      [...byEnd.entries()].map(([end, numbers]) => [
+        end,
+        <span key={end} className="ex-ev-badges">
           {numbers.map((number) => (
             <button key={number} type="button" className="ex-ev-badge" data-n={number} data-ev-badge={number} data-testid={`ev-badge-${number}`} aria-label={`Evidence for question ${number}. Go to the question.`} onClick={() => onEvidenceBadge?.(number)} />
           ))}

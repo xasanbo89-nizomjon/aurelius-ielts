@@ -125,6 +125,8 @@ export default async function PlatformHealthPage() {
                   ["Today", explanationUsage.today],
                   ["Last 30 days", explanationUsage.last30Days],
                   ["All time", explanationUsage.allTime],
+                  ["of which automatic (publish / backfill), 30 days", explanationUsage.automaticLast30Days],
+                  ["of which automatic, all time", explanationUsage.automaticAllTime],
                 ] as const
               ).map(([label, row]) => (
                 <TableRow key={label} data-testid={`explanation-usage-${label.toLowerCase().replace(/ /g, "-")}`}>

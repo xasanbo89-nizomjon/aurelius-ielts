@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireTeacherProfile } from "@/lib/session";
-import { approveAllExplanations, approveExplanation, ExplanationInputError, removeExplanation, saveExplanation, unapproveExplanation } from "@/lib/exam/question-explanations-server";
+import { approveAllExplanations, approveExplanation, ExplanationInputError, getExplanationEditorData, removeExplanation, saveExplanation, unapproveExplanation } from "@/lib/exam/question-explanations-server";
 import { generateExplanationForQuestion, getExplanationAiState, setExplanationAiEnabled, type ExplanationAiState } from "@/lib/ai/explanation-generation";
 import { OwnershipError } from "@/lib/exam/test-management";
 import { friendlyErrorMessage } from "@/lib/validation-error";
@@ -117,5 +117,25 @@ export async function setExplanationAiEnabledAction(enabled: boolean): Promise<{
     return { success: true, state: await getExplanationAiState(profile.id) };
   } catch (error) {
     return failure(error, "Could not change the setting.");
+  }
+}
+
+/**
+ * Phase M3 - "Write the missing ones now": queues the automatic job of a test (answer evidence + Explain more + What's the trap?) again and starts it. It only writes what is
+ * missing, so it never replaces anything a teacher wrote. The teacher must manage the test.
+ */
+export async function queueReviewContentAction(testId: string): Promise<ExplanationActionResult> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    const id = idSchema.parse(testId);
+    // the same access rule as the editor itself
+    await getExplanationEditorData(id, profile.id);
+    const { queueReviewContent, startReviewContentInBackground } = await import("@/lib/review-content/queue");
+    if (!(await queueReviewContent(id, profile.id))) return { success: false, error: "Only a Reading or Listening test that students sit on its own gets review content." };
+    startReviewContentInBackground(id, async (testIdToRun) => (await import("@/lib/review-content/processing")).processReviewJob(testIdToRun));
+    touched(id);
+    return { success: true };
+  } catch (error) {
+    return failure(error, "Could not start writing the review content.");
   }
 }

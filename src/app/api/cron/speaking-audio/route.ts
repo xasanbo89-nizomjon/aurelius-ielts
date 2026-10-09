@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { dropAbandoned } from "@/lib/speaking-audio/practice";
 import { processDue } from "@/lib/speaking-audio/processing";
 import { processDue as processDueWriting } from "@/lib/writing-assessment/processing";
+import { processDue as processDueReviewContent } from "@/lib/review-content/processing";
 
 /**
  * Phase Q-B - the scheduled job that finishes recorded Speaking practices nobody is waiting for: assessments that were handed over but never started, and ones whose
@@ -47,7 +48,15 @@ export async function GET(request: Request) {
       console.error("[cron] writing assessments failed:", error);
       writing = { error: "see the server log" };
     }
-    return NextResponse.json({ ok: true, ...tally, abandoned, writing, tookMs: Date.now() - startedAt });
+    // Phase M3 - the same job also continues the review content (evidence + explanations) of tests that were published: cut off by a time limit, or never started.
+    let reviewContent: { looked: number; done: number; written: number; failed: number } | { error: string } = { looked: 0, done: 0, written: 0, failed: 0 };
+    try {
+      if (Date.now() - startedAt < 60_000) reviewContent = await processDueReviewContent({ max: 2, stopAfterMs: 100_000 - (Date.now() - startedAt) });
+    } catch (error) {
+      console.error("[cron] review content failed:", error);
+      reviewContent = { error: "see the server log" };
+    }
+    return NextResponse.json({ ok: true, ...tally, abandoned, writing, reviewContent, tookMs: Date.now() - startedAt });
   } catch (error) {
     console.error("[cron] speaking-audio failed:", error);
     return NextResponse.json({ ok: false, error: "The run failed; see the server log." }, { status: 500 });

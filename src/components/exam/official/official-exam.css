@@ -1802,22 +1802,50 @@
 .ex-rv-buttons {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.3em;
+  gap: 0.3em 0.4em;
 }
 
+/* Phase M3 - the line in front of a question's text in a review: number box, tick, "Answer: ...", then the two pills */
+.ex-rv-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3em 0.2em;
+  margin: 0 0 0.35em;
+}
+
+.ex-rv-head .ex-rv {
+  margin-left: 0.2em;
+  align-items: center;
+}
+
+/* the two pills: blue "Explain more", yellow "What's the trap?" - black ink on a light fill, readable in all three contrast settings */
 .ex-rv-button {
-  padding: 0.05em 0.6em;
+  padding: 0.1em 0.75em;
   border: 1px solid var(--ex-control);
+  border-radius: 999px;
   background: var(--ex-bg);
   color: var(--ex-fg);
   font-size: 0.9em;
   cursor: pointer;
 }
 
+.ex-rv-button[data-pill="blue"] {
+  background: #bcdcff;
+  border-color: #1f5fa8;
+  color: #000000;
+}
+
+.ex-rv-button[data-pill="yellow"] {
+  background: #ffe46b;
+  border-color: #8a6d00;
+  color: #000000;
+}
+
 .ex-rv-button:hover,
 .ex-rv-button[aria-expanded="true"] {
-  background: var(--ex-bar);
-  border-color: var(--ex-fg);
+  outline: 2px solid var(--ex-fg);
+  outline-offset: 1px;
 }
 
 .ex-rv-bar {
@@ -1906,6 +1934,7 @@
 .ex-ev-badges {
   display: inline-flex;
   gap: 0.15em;
+  margin-left: 0.2em;
   margin-right: 0.15em;
   vertical-align: 0.15em;
 }

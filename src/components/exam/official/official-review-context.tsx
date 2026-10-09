@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
@@ -11,8 +12,12 @@ import type { ReviewNumber } from "@/lib/exam/official-review";
  * review the context is null and every row draws exactly what it always drew.
  */
 
-/** An approved explanation, as a student may read it (see src/lib/exam/question-explanations.ts). Any part may be missing; a question with none shows no buttons. */
-export type ReviewExplanation = { explain: string | null; trap: string | null; fix: string | null };
+/**
+ * The stored explanation of a question, as a student may read it (see src/lib/exam/question-explanations.ts). Any part may be missing; a question with none shows no buttons.
+ * Phase M3: for a student whose plan does not include "AI Explain More" the server sends NO text at all - `locked` is set and `has` says which buttons exist, so a click
+ * shows "Available with Premium" instead of the text (the text never reaches the browser).
+ */
+export type ReviewExplanation = { explain: string | null; trap: string | null; fix: string | null; locked?: boolean; has?: { explain: boolean; trap: boolean } };
 
 export type ReviewRowView = {
   numbers: ReviewNumber[];
@@ -70,6 +75,22 @@ export function ReviewMark({ result, extra }: { result: ReviewNumber; extra?: Re
   );
 }
 
+/**
+ * Phase M3 - the line in front of a question's text, in a review: the number box, the tick or cross, "Answer: ..." and the two pills, all on one line. Null outside a review.
+ * A row of several numbers has one line per number (the pills of the whole row sit under it, see RowExplainBar).
+ */
+export function RowReviewHead({ rowId, number }: { rowId: string; number: number }) {
+  const row = useReviewRow(rowId);
+  const result = row?.numbers.find((item) => item.number === number);
+  if (!row || !result) return null;
+  return (
+    <div className="ex-rv-head" data-testid={`rv-head-${number}`}>
+      <NumberBox rowId={rowId} number={number} />
+      <ReviewMark result={result} extra={row.numbers.length === 1 ? <ExplainButtons rowId={rowId} firstNumber={result.number} /> : null} />
+    </div>
+  );
+}
+
 /** The mark of one number of a row; null outside a review. For a row of ONE number the explanation buttons sit next to it. */
 export function RowNumberMark({ rowId, number }: { rowId: string; number: number }) {
   const row = useReviewRow(rowId);
@@ -95,17 +116,24 @@ export function RowExplainBar({ rowId }: { rowId: string }) {
 }
 
 const hasExplanation = (explanation: ReviewExplanation | null | undefined): explanation is ReviewExplanation =>
-  !!explanation && (!!explanation.explain?.trim() || !!explanation.trap?.trim() || !!explanation.fix?.trim());
+  !!explanation && (explanation.locked ? !!(explanation.has?.explain || explanation.has?.trap) : !!explanation.explain?.trim() || !!explanation.trap?.trim() || !!explanation.fix?.trim());
 
-/** "Explain more" and "What's the trap?": a button for each part the question has an approved text for - none at all when it has none. */
+/** "Explain more" (blue pill) and "What's the trap?" (yellow pill): a button for each part the question has a stored text for - none at all when it has none. A student without Premium sees the same pills; they open the Premium prompt. */
 export function ExplainButtons({ rowId, firstNumber }: { rowId: string; firstNumber: number }) {
   const row = useReviewRow(rowId);
   const explanation = row?.explanation;
   if (!hasExplanation(explanation)) return null;
+  const locked = explanation.locked === true;
+  const showExplain = locked ? !!explanation.has?.explain : !!explanation.explain?.trim();
+  const showTrap = locked ? !!explanation.has?.trap : !!(explanation.trap?.trim() || explanation.fix?.trim());
   return (
     <span className="ex-rv-buttons">
-      {explanation.explain?.trim() && <PopoverButton id={`${rowId}:explain`} testId={`explain-${firstNumber}`} label="Explain more" title="Explain more" body={<ExplainBody text={explanation.explain} />} />}
-      {(explanation.trap?.trim() || explanation.fix?.trim()) && <PopoverButton id={`${rowId}:trap`} testId={`trap-${firstNumber}`} label="What's the trap?" title="What's the trap?" body={<TrapBody trap={explanation.trap} fix={explanation.fix} />} />}
+      {showExplain && (
+        <PopoverButton id={`${rowId}:explain`} testId={`explain-${firstNumber}`} label="Explain more ▸" pill="blue" title="Explain more" locked={locked} body={<ExplainBody text={explanation.explain ?? ""} />} />
+      )}
+      {showTrap && (
+        <PopoverButton id={`${rowId}:trap`} testId={`trap-${firstNumber}`} label="What's the trap? 💡" pill="yellow" title="What's the trap?" locked={locked} body={<TrapBody trap={explanation.trap} fix={explanation.fix} />} />
+      )}
     </span>
   );
 }
@@ -136,7 +164,7 @@ function TrapBody({ trap, fix }: { trap: string | null; fix: string | null }) {
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
 
 /** A small button that opens a note-like popover under itself (one at a time); closes on Escape, a click elsewhere, or its own ×. */
-function PopoverButton({ id, testId, label, title, body }: { id: string; testId: string; label: string; title: string; body: ReactNode }) {
+function PopoverButton({ id, testId, label, title, body, pill, locked }: { id: string; testId: string; label: string; title: string; body: ReactNode; pill: "blue" | "yellow"; locked: boolean }) {
   const review = useReview();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
@@ -191,7 +219,7 @@ function PopoverButton({ id, testId, label, title, body }: { id: string; testId:
   if (!review) return null;
   return (
     <>
-      <button ref={buttonRef} type="button" className="ex-rv-button" aria-haspopup="dialog" aria-expanded={open} data-testid={testId} onClick={() => setOpenPopover?.(open ? null : id)}>
+      <button ref={buttonRef} type="button" className="ex-rv-button" data-pill={pill} aria-haspopup="dialog" aria-expanded={open} data-testid={testId} onClick={() => setOpenPopover?.(open ? null : id)}>
         {label}
       </button>
       {open &&
@@ -201,9 +229,23 @@ function PopoverButton({ id, testId, label, title, body }: { id: string; testId:
             <button type="button" className="ex-pop-close" aria-label="Close" onClick={() => setOpenPopover?.(null)}>
               ×
             </button>
-            <p className="ex-pop-note">Auto-generated explanation — may not be fully accurate.</p>
-            <h3 className="ex-pop-title">{title}</h3>
-            {body}
+            {locked ? (
+              <div data-testid="premium-prompt">
+                <h3 className="ex-pop-title">Available with Premium</h3>
+                <p className="ex-pop-text">{title} is part of Aurelius Premium. Upgrade to read why each answer is right and how to avoid the trap.</p>
+                <p>
+                  <Link href="/student/premium" className="ex-button ex-button-primary" data-testid="premium-prompt-link" style={{ display: "inline-block", textDecoration: "none" }}>
+                    See Premium plans
+                  </Link>
+                </p>
+              </div>
+            ) : (
+              <>
+                <p className="ex-pop-note">Auto-generated — may not be fully accurate.</p>
+                <h3 className="ex-pop-title">{title}</h3>
+                {body}
+              </>
+            )}
           </div>,
           review.popoverRoot
         )}

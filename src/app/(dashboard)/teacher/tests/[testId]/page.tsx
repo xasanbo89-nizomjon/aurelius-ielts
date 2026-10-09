@@ -100,7 +100,7 @@ export default async function TestEditorPage({
             </Button>
             <Button asChild variant="outline" size="sm">
               <Link href={`/teacher/tests/${test.id}/explanations`} data-testid="explanations-link">
-                <MessageSquareText className="size-4" /> Explanations{explanations.total > 0 ? ` (${explanations.approved}/${explanations.total})` : ""}
+                <MessageSquareText className="size-4" /> Explanations{explanations.total > 0 ? ` (${explanations.approved + explanations.auto}/${explanations.total})` : ""}
               </Link>
             </Button>
             {!builder && (

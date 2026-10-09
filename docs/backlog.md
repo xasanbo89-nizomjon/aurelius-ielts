@@ -205,3 +205,11 @@ Phase L1 and L2 are done (`docs/test-builder.md`). Known limits and what could c
 - The teacher sidebar shows Root-only pages (Premium Plans, like Premium Requests) to every teacher; the page itself sends a normal teacher to the dashboard.
 - `/student/subscription` is a redirect in `next.config.ts` (the page file stays as a fallback); the teacher-side "Subscription Plans" page is a different feature and was not touched.
 - Checks: `npm run check:r` (no database).
+
+## Phase M3 follow-ups (automatic review content)
+
+- The access rule for the pills is the app's usual one (`hasActiveAccess`: trial or paid); the Premium page's feature table lists "AI Explain More" as Premium-only - if a trial student should be locked out too, change `canExplain` in the review page.
+- Rows that carry their number inside the sentence or table (gap fill, summary, tables, matching) keep the old position of the answer mark; only single-number choice rows put the full line above the question text.
+- The job runs in the background after a publish (needs a working host `after`) and in the scheduled job; without `CRON_SECRET` + a scheduler a cut-off job continues only when a teacher presses "Write the missing ones now".
+- A question whose evidence a teacher removed is not regenerated if its explanation was written automatically; a manual Regenerate of an explanation does not touch evidence.
+- Teacher-side attempt review (`/teacher/band-conversation/...`) still uses the Phase M components.

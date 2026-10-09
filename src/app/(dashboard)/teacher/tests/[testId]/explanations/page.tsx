@@ -10,6 +10,8 @@ import { OwnershipError } from "@/lib/exam/test-management";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { ExplanationsEditor } from "@/components/teacher/explanations/explanations-editor";
+import { ReviewJobCard } from "@/components/teacher/explanations/review-job-card";
+import { getReviewJob } from "@/lib/review-content/queue";
 
 export const metadata: Metadata = { title: "Explanations" };
 
@@ -29,7 +31,7 @@ export default async function ExplanationsPage({ params }: { params: Promise<{ t
     if (error instanceof OwnershipError) notFound();
     throw error;
   }
-  const [ai, usage] = await Promise.all([getExplanationAiState(profile.id), profile.isRootTeacher ? getExplanationUsage() : Promise.resolve(null)]);
+  const [ai, usage, job] = await Promise.all([getExplanationAiState(profile.id), profile.isRootTeacher ? getExplanationUsage() : Promise.resolve(null), getReviewJob(testId)]);
 
   return (
     <>
@@ -38,7 +40,8 @@ export default async function ExplanationsPage({ params }: { params: Promise<{ t
           <ArrowLeft className="size-4" /> Back to test
         </Link>
       </Button>
-      <PageHeader title={`${data.title} - explanations`} description="What students read when they press Explain more or What's the trap? in their review. Only the ones you approve are shown." />
+      <PageHeader title={`${data.title} - explanations`} description="What students read when they press Explain more or What's the trap? in their review. They are written automatically when the test is published; you can edit, hide or rewrite any of them." />
+      <ReviewJobCard testId={testId} job={job ? { status: job.status, totalQuestions: job.totalQuestions, doneQuestions: job.doneQuestions, failedQuestions: job.failedQuestions, lastError: job.lastError } : null} canQueue={data.testType === "READING" || data.testType === "LISTENING"} />
       <ExplanationsEditor data={data} ai={ai} usage={usage} />
     </>
   );
