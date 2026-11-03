@@ -19,20 +19,20 @@ export function WelcomeHero({
         "relative overflow-hidden rounded-2xl sm:rounded-3xl p-6 sm:p-8 backdrop-blur-xl transition-all duration-300",
         isDark
           ? "border border-amber-500/20 bg-slate-950/30 shadow-[0_12px_40px_-8px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.06)]"
-          : "border border-sky-200/70 bg-white/60 shadow-[0_12px_35px_-8px_rgba(30,64,175,0.08),inset_0_1px_0_rgba(255,255,255,0.85)] text-slate-800"
+          : "border border-slate-300/60 bg-[#f8fafc]/80 shadow-[0_10px_30px_-6px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.6)] text-slate-800"
       )}
     >
-      {/* Dynamic ambient glow */}
+      {/* Soft ambient glow */}
       <div
         className={cn(
           "pointer-events-none absolute -left-12 -top-12 size-52 rounded-full blur-3xl",
-          isDark ? "bg-purple-600/20" : "bg-sky-400/20"
+          isDark ? "bg-purple-600/20" : "bg-sky-200/25"
         )}
       />
       <div
         className={cn(
           "pointer-events-none absolute -right-12 -bottom-12 size-52 rounded-full blur-3xl",
-          isDark ? "bg-amber-500/15" : "bg-amber-400/15"
+          isDark ? "bg-amber-500/15" : "bg-amber-100/25"
         )}
       />
 

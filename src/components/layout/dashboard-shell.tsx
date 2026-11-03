@@ -1,3 +1,5 @@
+"use client";
+
 import type { ReactNode } from "react";
 
 import type { NavItem } from "@/lib/nav-config";
@@ -7,6 +9,8 @@ import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { UserMenu } from "@/components/layout/user-menu";
 import { FloatingStudentNavbar } from "@/components/layout/floating-student-navbar";
 import { DynamicBackground } from "@/components/layout/dynamic-background";
+import { useTheme } from "@/components/theme-provider";
+import { cn } from "@/lib/utils";
 
 export function DashboardShell({
   navItems,
@@ -29,18 +33,31 @@ export function DashboardShell({
   children: ReactNode;
 }) {
   const isStudent = role === "STUDENT";
+  const { isDark } = useTheme();
 
   if (isStudent) {
     return (
-      <div className="anti-gravity-space-theme relative min-h-svh w-full text-foreground selection:bg-amber-500/25 selection:text-amber-100 overflow-x-hidden transition-colors duration-500">
+      <div
+        className={cn(
+          "anti-gravity-space-theme relative min-h-svh w-full overflow-x-hidden transition-colors duration-500",
+          isDark
+            ? "dark dark-mode text-amber-100/90 selection:bg-amber-500/25 selection:text-amber-100"
+            : "light light-mode text-slate-800 selection:bg-amber-500/20 selection:text-amber-900"
+        )}
+      >
         <a
           href="#main-content"
-          className="sr-only z-50 rounded-full border border-amber-400/40 bg-card px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:outline-none"
+          className={cn(
+            "sr-only z-50 rounded-full border px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:outline-none",
+            isDark
+              ? "border-amber-400/40 bg-[#131622]/80 text-amber-100"
+              : "border-slate-300 bg-white/90 text-slate-800 shadow-sm"
+          )}
         >
           Skip to main content
         </a>
 
-        {/* Dynamic Background: Dark Deep-Space Galaxy vs Light Serene Sky with subtle clouds */}
+        {/* Dynamic Background: Dark Deep-Space Galaxy vs Light Serene Sky/Pearl Atmosphere */}
         <DynamicBackground />
 
         {/* Floating Top Navigation Bar (Navbar) */}

@@ -6,28 +6,28 @@ export function DynamicBackground() {
   const { isDark } = useTheme();
 
   if (!isDark) {
-    // Light Mode: Remove the galaxy entirely.
-    // Bright, clean, serene sky with soft, subtle white/blue clouds and a crystal-clear gentle daytime atmosphere.
+    // Light Mode: Zero eye strain, gentle cream, soft pearl, and light soothing sky tones.
+    // Replaces harsh bright white with a soft, warm gray/blue/pearl gradient and muted ambient atmosphere.
     return (
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
-        {/* Serene daylight sky canvas */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#eaf2fd] via-[#f5f8ff] to-[#edf4fc]" />
+        {/* Soft, soothing sky-pearl daytime gradient (no harsh #FFFFFF) */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#e8eef6] via-[#f1f4f9] to-[#e5ecf4]" />
 
-        {/* Soft morning sunlight glow - Top Right */}
-        <div className="absolute -top-[10%] right-[10%] size-[600px] rounded-full bg-amber-200/35 blur-[130px]" />
+        {/* Gentle morning sunlight ambiance - Soft warm cream glow */}
+        <div className="absolute -top-[10%] right-[10%] size-[620px] rounded-full bg-amber-100/35 blur-[140px]" />
 
-        {/* Azure sky ambient layer - Top Left */}
-        <div className="absolute top-[5%] -left-[10%] size-[680px] rounded-full bg-sky-200/50 blur-[140px]" />
+        {/* Soothing serene sky ambient layer - Soft mist blue */}
+        <div className="absolute top-[6%] -left-[10%] size-[700px] rounded-full bg-sky-200/35 blur-[150px]" />
 
-        {/* Subtle white/blue cloud formation - Center Left */}
-        <div className="cloud-drift absolute top-[30%] left-[15%] size-[700px] rounded-full bg-white/80 blur-[130px]" />
+        {/* Soft pearl / slate drifting cloud formation */}
+        <div className="cloud-drift absolute top-[30%] left-[12%] size-[680px] rounded-full bg-slate-200/45 blur-[140px]" />
 
-        {/* Soft crystalline blue cloud ambient - Center Right */}
-        <div className="cloud-drift absolute top-[35%] right-[10%] size-[640px] rounded-full bg-blue-100/60 blur-[140px]" />
+        {/* Soft azure atmospheric depth */}
+        <div className="cloud-drift absolute top-[36%] right-[8%] size-[640px] rounded-full bg-blue-100/45 blur-[150px]" />
 
-        {/* Serene horizon glow - Lower Screen */}
-        <div className="absolute bottom-[5%] left-[20%] size-[800px] rounded-full bg-sky-100/70 blur-[150px]" />
-        <div className="absolute -bottom-[10%] right-[15%] size-[600px] rounded-full bg-white/90 blur-[130px]" />
+        {/* Gentle horizon ambient glow */}
+        <div className="absolute bottom-[4%] left-[18%] size-[760px] rounded-full bg-sky-100/50 blur-[160px]" />
+        <div className="absolute -bottom-[8%] right-[12%] size-[620px] rounded-full bg-amber-50/50 blur-[140px]" />
       </div>
     );
   }
