@@ -3,13 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
+import { Menu, Moon, Sun, X } from "lucide-react";
 
 import type { NavItem } from "@/lib/nav-config";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { DailyStreakBadge } from "@/components/layout/daily-streak-badge";
 import { PremiumNavBadge } from "@/components/layout/premium-nav-badge";
 import { UserMenu } from "@/components/layout/user-menu";
+import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 
 export function FloatingStudentNavbar({
@@ -29,23 +30,36 @@ export function FloatingStudentNavbar({
 }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { isDark, toggleTheme } = useTheme();
 
   return (
     <header className="sticky top-3 sm:top-4 z-40 w-full px-3 sm:px-6 lg:px-8">
-      {/* Sleek, ultra-translucent, curved dark glass navigation bar floating in space */}
-      <div className="mx-auto flex h-16 sm:h-20 max-w-7xl items-center justify-between gap-2 sm:gap-4 rounded-2xl sm:rounded-3xl border border-amber-500/20 bg-[#0d0f18]/35 px-3.5 sm:px-6 shadow-[0_12px_40px_-5px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-2xl">
+      {/* Sleek, truly translucent curved glass navigation bar */}
+      <div
+        className={cn(
+          "mx-auto flex h-16 sm:h-20 max-w-7xl items-center justify-between gap-2 sm:gap-4 rounded-2xl sm:rounded-3xl px-3.5 sm:px-6 backdrop-blur-2xl transition-all duration-300",
+          isDark
+            ? "border border-amber-500/20 bg-slate-950/30 shadow-[0_12px_40px_-5px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.06)]"
+            : "border border-sky-200/70 bg-white/60 shadow-[0_12px_35px_-8px_rgba(30,64,175,0.08),inset_0_1px_0_rgba(255,255,255,0.85)] text-slate-800"
+        )}
+      >
         {/* Left: Aurelius IELTS Logo and text */}
         <div className="flex shrink-0 items-center">
           <BrandMark
             href="/student/dashboard"
-            className="text-amber-100/90 transition-opacity hover:opacity-95"
+            className="transition-opacity hover:opacity-95"
           />
         </div>
 
         {/* Center: Floating navigation items (Home, Speaking Practice, Profile, Settings) */}
         <nav
           aria-label="Main Navigation"
-          className="hidden md:flex items-center gap-1 lg:gap-2 rounded-full border border-amber-500/15 bg-[#131622]/25 p-1.5 backdrop-blur-xl"
+          className={cn(
+            "hidden md:flex items-center gap-1 lg:gap-2 rounded-full p-1.5 backdrop-blur-xl border transition-colors",
+            isDark
+              ? "border-amber-500/15 bg-[#131622]/25"
+              : "border-sky-200/60 bg-white/50 shadow-inner"
+          )}
         >
           {navItems.map((item) => {
             const isActive =
@@ -60,8 +74,12 @@ export function FloatingStudentNavbar({
                 className={cn(
                   "relative rounded-xl px-3.5 py-1.5 text-xs lg:text-sm font-medium transition-all duration-300 outline-none",
                   isActive
-                    ? "bg-amber-400/20 text-amber-200/95 shadow-[0_0_12px_rgba(245,158,11,0.25)] border border-amber-400/30"
-                    : "text-amber-100/75 hover:text-amber-100/95 hover:bg-amber-500/10"
+                    ? isDark
+                      ? "bg-amber-400/20 text-amber-200/95 shadow-[0_0_12px_rgba(245,158,11,0.25)] border border-amber-400/30"
+                      : "bg-amber-500/15 text-amber-900 border border-amber-400/40 shadow-sm font-semibold"
+                    : isDark
+                    ? "text-amber-100/75 hover:text-amber-100/95 hover:bg-amber-500/10"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-900/5"
                 )}
               >
                 {item.label}
@@ -70,9 +88,9 @@ export function FloatingStudentNavbar({
           })}
         </nav>
 
-        {/* Right: Header Icons & Animations (Daily Streak, Crown, Profile) */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Daily Streak with vibrant pulsating plasma-fire */}
+        {/* Right: Header Icons & Animations (Streak, Crown, Theme Toggle, Profile) */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* Daily Streak with vibrant bouncing plasma flame */}
           <DailyStreakBadge streakCount={streakCount} />
 
           {/* Premium Crown with slow continuous 3D rotation */}
@@ -80,6 +98,26 @@ export function FloatingStudentNavbar({
             isPremium={isPremium ?? false}
             daysRemaining={premiumDaysRemaining}
           />
+
+          {/* Dynamic Theme Toggle: Dark Galaxy vs Light Sky */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            title={isDark ? "Switch to Light Mode (Serene Sky)" : "Switch to Dark Mode (Cosmic Galaxy)"}
+            aria-label={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            className={cn(
+              "flex size-10 items-center justify-center rounded-full border transition-all duration-300 backdrop-blur-xl outline-none focus-visible:ring-2",
+              isDark
+                ? "border-amber-500/20 bg-[#131622]/30 text-amber-300 hover:border-amber-400/50 hover:bg-amber-500/15 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
+                : "border-sky-200/70 bg-white/70 text-indigo-700 hover:border-sky-300 hover:bg-white shadow-sm"
+            )}
+          >
+            {isDark ? (
+              <Sun className="size-4.5 transition-transform hover:rotate-45" />
+            ) : (
+              <Moon className="size-4.5 transition-transform hover:-rotate-12" />
+            )}
+          </button>
 
           {/* User Profile ("Xasan - Student") */}
           <UserMenu
@@ -95,7 +133,12 @@ export function FloatingStudentNavbar({
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label="Toggle navigation menu"
-            className="flex md:hidden size-10 items-center justify-center rounded-xl border border-amber-500/20 bg-[#131622]/35 text-amber-200/90 backdrop-blur-xl hover:bg-amber-500/15"
+            className={cn(
+              "flex md:hidden size-10 items-center justify-center rounded-xl border backdrop-blur-xl transition-colors",
+              isDark
+                ? "border-amber-500/20 bg-[#131622]/35 text-amber-200 hover:bg-amber-500/15"
+                : "border-sky-200/70 bg-white/70 text-slate-700 hover:bg-white"
+            )}
           >
             {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
@@ -104,7 +147,14 @@ export function FloatingStudentNavbar({
 
       {/* Mobile drawer dropdown */}
       {mobileMenuOpen && (
-        <div className="mt-2 flex flex-col md:hidden rounded-2xl border border-amber-500/20 bg-[#0d0f18]/70 p-3 shadow-2xl backdrop-blur-2xl space-y-1">
+        <div
+          className={cn(
+            "mt-2 flex flex-col md:hidden rounded-2xl border p-3 shadow-2xl backdrop-blur-2xl space-y-1 transition-colors",
+            isDark
+              ? "border-amber-500/20 bg-[#07090e]/85"
+              : "border-sky-200/70 bg-white/90 text-slate-800"
+          )}
+        >
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||
@@ -118,12 +168,18 @@ export function FloatingStudentNavbar({
                 className={cn(
                   "flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition-colors",
                   isActive
-                    ? "bg-amber-400/20 text-amber-200/95 border border-amber-400/30"
-                    : "text-amber-100/75 hover:bg-amber-500/10 hover:text-amber-100/95"
+                    ? isDark
+                      ? "bg-amber-400/20 text-amber-200/95 border border-amber-400/30"
+                      : "bg-amber-500/15 text-amber-900 border border-amber-400/40"
+                    : isDark
+                    ? "text-amber-100/75 hover:bg-amber-500/10 hover:text-amber-100/95"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 )}
               >
                 <span>{item.label}</span>
-                {isActive && <span className="size-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_#f59e0b]" />}
+                {isActive && (
+                  <span className="size-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_#f59e0b]" />
+                )}
               </Link>
             );
           })}

@@ -61,30 +61,30 @@ export function UserMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`Account menu for ${displayName}`}
-          className="focus-visible:ring-ring/50 group flex items-center gap-2.5 rounded-full border border-amber-500/20 bg-[#131622]/35 p-1 pr-2.5 outline-none backdrop-blur-xl shadow-[0_4px_16px_rgba(0,0,0,0.4),0_0_15px_rgba(217,178,86,0.12)] transition-all duration-300 hover:border-amber-400/40 hover:bg-amber-500/10 focus-visible:ring-2"
+          className="focus-visible:ring-ring/50 group flex items-center gap-2.5 rounded-full border border-amber-500/20 bg-[#131622]/25 dark:bg-[#131622]/25 light:bg-white/60 p-1 pr-2.5 outline-none backdrop-blur-xl shadow-[0_4px_16px_rgba(0,0,0,0.35),0_0_15px_rgba(217,178,86,0.12)] transition-all duration-300 hover:border-amber-400/40 hover:bg-amber-500/10 focus-visible:ring-2"
         >
           <Avatar className="size-8 ring-1.5 ring-amber-400/60 shadow-[0_0_10px_rgba(245,158,11,0.25)]">
             <AvatarImage src={image ?? undefined} alt={displayName} />
-            <AvatarFallback className="bg-amber-950/70 font-display text-xs font-semibold text-amber-200/90">
+            <AvatarFallback className="bg-amber-950/70 dark:bg-amber-950/70 light:bg-amber-100 font-display text-xs font-semibold text-amber-200/90 dark:text-amber-200/90 light:text-amber-900">
               {getInitials(displayName, email)}
             </AvatarFallback>
           </Avatar>
           <span className="hidden text-left leading-tight sm:block">
-            <span className="font-display block text-sm font-semibold tracking-tight text-amber-100/90 group-hover:text-amber-100">
+            <span className="font-display block text-sm font-semibold tracking-tight text-amber-100/90 dark:text-amber-100/90 light:text-slate-850 group-hover:text-amber-100">
               {displayName}
             </span>
-            <span className="block text-xs font-medium text-amber-300/70 capitalize">
+            <span className="block text-xs font-medium text-amber-300/70 dark:text-amber-300/70 light:text-amber-700 capitalize">
               {role === "STUDENT" ? "Student" : role.toLowerCase()}
             </span>
           </span>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          className="w-56 border border-amber-500/20 bg-[#0e111b]/85 text-amber-100/90 shadow-[0_12px_36px_rgba(0,0,0,0.8)] backdrop-blur-2xl"
+          className="w-56 border border-amber-500/20 bg-[#0e111b]/85 dark:bg-[#0e111b]/85 light:bg-white/95 text-amber-100/90 dark:text-amber-100/90 light:text-slate-800 shadow-[0_12px_36px_rgba(0,0,0,0.8)] backdrop-blur-2xl"
         >
           <DropdownMenuLabel className="flex flex-col gap-0.5">
-            <span className="font-display text-sm font-semibold text-amber-100/90">{displayName}</span>
-            <span className="truncate text-xs font-normal text-amber-200/60">{email}</span>
+            <span className="font-display text-sm font-semibold text-amber-100/90 dark:text-amber-100/90 light:text-slate-900">{displayName}</span>
+            <span className="truncate text-xs font-normal text-amber-200/60 dark:text-amber-200/60 light:text-slate-500">{email}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator className="bg-amber-500/15" />
           {role === "STUDENT" ? (
@@ -141,10 +141,10 @@ export function UserMenu({
       </DropdownMenu>
 
       <Dialog open={confirmSignOutOpen} onOpenChange={setConfirmSignOutOpen}>
-        <DialogContent className="border border-amber-500/20 bg-[#0e111b]/95 backdrop-blur-2xl text-amber-100/90">
+        <DialogContent className="border border-amber-500/20 bg-[#0e111b]/95 dark:bg-[#0e111b]/95 light:bg-white text-amber-100/90 dark:text-amber-100/90 light:text-slate-800">
           <DialogHeader>
-            <DialogTitle className="text-amber-100/90">Sign out of Aurelius IELTS?</DialogTitle>
-            <DialogDescription className="text-amber-200/65">
+            <DialogTitle className="text-amber-100/90 dark:text-amber-100/90 light:text-slate-900">Sign out of Aurelius IELTS?</DialogTitle>
+            <DialogDescription className="text-amber-200/65 dark:text-amber-200/65 light:text-slate-600">
               You&apos;ll need to sign in again to access your dashboard.
             </DialogDescription>
           </DialogHeader>
@@ -153,7 +153,7 @@ export function UserMenu({
               <Button
                 variant="outline"
                 disabled={signingOut}
-                className="border-amber-500/20 text-amber-100/85 hover:bg-amber-500/10"
+                className="border-amber-500/20 text-amber-100/85 dark:text-amber-100/85 light:text-slate-700 hover:bg-amber-500/10"
               >
                 Cancel
               </Button>

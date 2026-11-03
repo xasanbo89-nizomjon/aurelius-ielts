@@ -366,35 +366,101 @@
 }
 
 /* ---------------------------------------------------------------------- */
-/* Anti-Gravity Space Theme Variables (Visual Comfort / Eye Strain Red.)  */
+/* Anti-Gravity Theme Variables & Utilities (Dark Galaxy vs Light Sky)    */
 /* ---------------------------------------------------------------------- */
 
-.anti-gravity-space-theme {
-  --background: #080a11;
+@keyframes flame-bounce-pulse {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    filter: drop-shadow(0 0 5px #ff5500) drop-shadow(0 0 10px #ff9900);
+  }
+  30% {
+    transform: translateY(-5px) scale(1.18);
+    filter: drop-shadow(0 0 12px #ff2200) drop-shadow(0 0 22px #ff8800) drop-shadow(0 0 32px #ffcc00);
+  }
+  60% {
+    transform: translateY(1px) scale(1.05);
+    filter: drop-shadow(0 0 7px #ff4400) drop-shadow(0 0 14px #ffaa00);
+  }
+}
+
+.plasma-flame-bounce {
+  animation: flame-bounce-pulse 1.8s cubic-bezier(0.28, 0.84, 0.42, 1) infinite;
+}
+
+@keyframes cloud-drift-subtle {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(25px, -15px) scale(1.06);
+  }
+}
+
+.cloud-drift {
+  animation: cloud-drift-subtle 16s ease-in-out infinite;
+}
+
+/* Dark Mode - Immersive Deep Galaxy */
+.dark .anti-gravity-space-theme,
+html.dark .anti-gravity-space-theme,
+.anti-gravity-space-theme.dark-mode {
+  --background: #07090e;
   --foreground: #ede8dd;
-  --card: rgba(19, 22, 34, 0.32);
+  --card: rgba(19, 22, 34, 0.25);
   --card-foreground: #ede8dd;
-  --popover: rgba(15, 18, 29, 0.88);
+  --popover: rgba(15, 18, 29, 0.92);
   --popover-foreground: #ede8dd;
   --primary: #f5eedf;
   --primary-foreground: #0d0f18;
-  --secondary: rgba(26, 30, 45, 0.4);
+  --secondary: rgba(26, 30, 45, 0.35);
   --secondary-foreground: #ede8dd;
-  --muted: rgba(21, 24, 36, 0.35);
+  --muted: rgba(21, 24, 36, 0.30);
   --muted-foreground: #a39c8f;
   --accent: #d4af37;
   --accent-foreground: #090b12;
-  --border: rgba(245, 158, 11, 0.16);
-  --input: rgba(245, 158, 11, 0.2);
+  --border: rgba(245, 158, 11, 0.20);
+  --input: rgba(245, 158, 11, 0.22);
   --ring: #d4af37;
+}
+
+/* Light Mode - Serene Daytime Sky */
+.light .anti-gravity-space-theme,
+html.light .anti-gravity-space-theme,
+.anti-gravity-space-theme.light-mode {
+  --background: #f0f6ff;
+  --foreground: #1e293b;
+  --card: rgba(255, 255, 255, 0.65);
+  --card-foreground: #1e293b;
+  --popover: rgba(255, 255, 255, 0.95);
+  --popover-foreground: #1e293b;
+  --primary: #0f172a;
+  --primary-foreground: #ffffff;
+  --secondary: rgba(241, 245, 249, 0.7);
+  --secondary-foreground: #0f172a;
+  --muted: rgba(248, 250, 252, 0.6);
+  --muted-foreground: #64748b;
+  --accent: #b45309;
+  --accent-foreground: #ffffff;
+  --border: rgba(203, 213, 225, 0.6);
+  --input: rgba(226, 232, 240, 0.8);
+  --ring: #d97706;
 }
 
 @layer utilities {
   .nebula-glass {
-    background: rgba(19, 22, 34, 0.32);
+    background: rgba(19, 22, 34, 0.25);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(217, 178, 86, 0.18);
-    box-shadow: 0 14px 40px -10px rgba(0, 0, 0, 0.75), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(217, 178, 86, 0.20);
+    box-shadow: 0 14px 40px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .sky-glass {
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(224, 231, 255, 0.7);
+    box-shadow: 0 12px 35px -8px rgba(30, 64, 175, 0.08), inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
   }
 }

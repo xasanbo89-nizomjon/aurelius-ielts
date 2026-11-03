@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Crown } from "lucide-react";
 
@@ -27,7 +29,7 @@ export function PremiumNavBadge({
           aria-label={label}
           className={cn(
             "focus-visible:ring-ring/50 group relative flex h-10 items-center gap-1.5 rounded-full px-3 text-sm outline-none transition-all duration-300 focus-visible:ring-2",
-            "border border-amber-500/20 bg-[#131622]/35 backdrop-blur-xl shadow-[0_4px_16px_rgba(0,0,0,0.4),0_0_15px_rgba(217,178,86,0.18)] hover:border-amber-400/40 hover:shadow-[0_0_22px_rgba(217,178,86,0.3)]",
+            "border border-amber-500/20 bg-[#131622]/25 dark:bg-[#131622]/25 light:bg-white/60 backdrop-blur-xl shadow-[0_4px_16px_rgba(0,0,0,0.35),0_0_15px_rgba(217,178,86,0.18)] hover:border-amber-400/40 hover:shadow-[0_0_22px_rgba(217,178,86,0.3)]",
             className
           )}
         >
@@ -42,18 +44,18 @@ export function PremiumNavBadge({
 
           {isPremium ? (
             daysRemaining != null && (
-              <span className="font-display text-xs font-semibold tracking-tight text-amber-200/90 tabular-nums">
+              <span className="font-display text-xs font-semibold tracking-tight text-amber-200/90 dark:text-amber-200/90 light:text-amber-900 tabular-nums">
                 {daysRemaining}d
               </span>
             )
           ) : (
-            <span className="hidden text-xs font-medium text-amber-200/75 group-hover:text-amber-100/95 sm:inline">
+            <span className="hidden text-xs font-medium text-amber-200/80 dark:text-amber-200/80 light:text-amber-800 group-hover:text-amber-100 sm:inline">
               Upgrade
             </span>
           )}
         </Link>
       </TooltipTrigger>
-      <TooltipContent className="border border-amber-500/20 bg-[#0d0f18]/90 backdrop-blur-xl text-amber-100/90">
+      <TooltipContent className="border border-amber-500/20 bg-[#0d0f18]/90 dark:bg-[#0d0f18]/90 light:bg-white/90 backdrop-blur-xl text-amber-100/90 dark:text-amber-100/90 light:text-slate-900">
         {label}
       </TooltipContent>
     </Tooltip>

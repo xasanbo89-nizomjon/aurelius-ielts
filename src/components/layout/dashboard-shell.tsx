@@ -6,6 +6,7 @@ import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { UserMenu } from "@/components/layout/user-menu";
 import { FloatingStudentNavbar } from "@/components/layout/floating-student-navbar";
+import { DynamicBackground } from "@/components/layout/dynamic-background";
 
 export function DashboardShell({
   navItems,
@@ -31,44 +32,16 @@ export function DashboardShell({
 
   if (isStudent) {
     return (
-      <div className="dark anti-gravity-space-theme relative min-h-svh w-full bg-[#07090e] text-amber-100/90 selection:bg-amber-500/25 selection:text-amber-100 overflow-x-hidden">
+      <div className="anti-gravity-space-theme relative min-h-svh w-full text-foreground selection:bg-amber-500/25 selection:text-amber-100 overflow-x-hidden transition-colors duration-500">
         <a
           href="#main-content"
-          className="sr-only z-50 rounded-full border border-amber-400/40 bg-[#131622]/80 px-4 py-2 text-sm font-medium text-amber-100 focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:outline-none"
+          className="sr-only z-50 rounded-full border border-amber-400/40 bg-card px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:outline-none"
         >
           Skip to main content
         </a>
 
-        {/* Vibrant, Glowing Galaxy Nebula Background: Shines through the ultra-transparent glassmorphic cards */}
-        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
-          {/* Base deep cosmic space canvas */}
-          <div className="absolute inset-0 bg-gradient-to-b from-[#07090e] via-[#090c14] to-[#05070b]" />
-
-          {/* 1. Behind Top Navbar: Vibrant Violet & Indigo Aurora */}
-          <div className="absolute -top-[12%] left-[18%] size-[680px] rounded-full bg-gradient-to-r from-purple-600/35 via-violet-600/30 to-blue-600/35 blur-[130px]" />
-          <div className="absolute -top-[10%] right-[8%] size-[540px] rounded-full bg-indigo-500/25 blur-[120px]" />
-
-          {/* 2. Behind Welcome Panel & Free Plan Bar: Glowing Purple & Warm Gold Nebula */}
-          <div className="absolute top-[16%] left-[22%] size-[620px] rounded-full bg-purple-600/30 blur-[130px]" />
-          <div className="absolute top-[20%] right-[18%] size-[520px] rounded-full bg-amber-500/25 blur-[120px]" />
-
-          {/* 3. Behind 2x2 Feature Cards Grid */}
-          {/* Top-Left (Tests Card): Vivid Blue & Indigo Glow */}
-          <div className="absolute top-[40%] left-[4%] size-[560px] rounded-full bg-blue-600/35 blur-[130px]" />
-
-          {/* Top-Right (Leveled Articles Card): Radiant Cosmic Purple Glow */}
-          <div className="absolute top-[38%] right-[4%] size-[580px] rounded-full bg-violet-600/35 blur-[130px]" />
-
-          {/* Bottom-Left (Writing Card): Luminous Deep Indigo/Cyan Nebula */}
-          <div className="absolute top-[60%] left-[8%] size-[540px] rounded-full bg-cyan-600/25 blur-[140px]" />
-
-          {/* Bottom-Right (Speaking Card): Warm Golden Cosmic Nebula */}
-          <div className="absolute top-[58%] right-[8%] size-[560px] rounded-full bg-amber-500/30 blur-[130px]" />
-
-          {/* 4. Lower Section / Widgets: Deep Purple & Stardust Swirl */}
-          <div className="absolute bottom-[3%] left-[22%] size-[720px] rounded-full bg-purple-700/25 blur-[150px]" />
-          <div className="absolute -bottom-[8%] right-[15%] size-[600px] rounded-full bg-blue-700/20 blur-[140px]" />
-        </div>
+        {/* Dynamic Background: Dark Deep-Space Galaxy vs Light Serene Sky with subtle clouds */}
+        <DynamicBackground />
 
         {/* Floating Top Navigation Bar (Navbar) */}
         <FloatingStudentNavbar
