@@ -425,27 +425,28 @@ html.dark .anti-gravity-space-theme,
   --ring: #d4af37;
 }
 
-/* Light Mode - Serene Daytime Sky */
+/* Light Mode - Aurelius Original Editorial Light Theme */
 .light .anti-gravity-space-theme,
 html.light .anti-gravity-space-theme,
-.anti-gravity-space-theme.light-mode {
-  --background: #f0f6ff;
-  --foreground: #1e293b;
-  --card: rgba(255, 255, 255, 0.65);
-  --card-foreground: #1e293b;
-  --popover: rgba(255, 255, 255, 0.95);
-  --popover-foreground: #1e293b;
-  --primary: #0f172a;
-  --primary-foreground: #ffffff;
-  --secondary: rgba(241, 245, 249, 0.7);
-  --secondary-foreground: #0f172a;
-  --muted: rgba(248, 250, 252, 0.6);
-  --muted-foreground: #64748b;
-  --accent: #b45309;
-  --accent-foreground: #ffffff;
-  --border: rgba(203, 213, 225, 0.6);
-  --input: rgba(226, 232, 240, 0.8);
-  --ring: #d97706;
+.anti-gravity-space-theme.light-mode,
+html.light {
+  --background: #faf8f3;
+  --foreground: #201d18;
+  --card: #ffffff;
+  --card-foreground: #201d18;
+  --popover: #ffffff;
+  --popover-foreground: #201d18;
+  --primary: #211d17;
+  --primary-foreground: #faf8f3;
+  --secondary: #f0e9dc;
+  --secondary-foreground: #211d17;
+  --muted: #f2ede2;
+  --muted-foreground: #726b5d;
+  --accent: #785a29;
+  --accent-foreground: #faf8f3;
+  --border: #e6ddc9;
+  --input: #e6ddc9;
+  --ring: #785a29;
 }
 
 @layer utilities {

@@ -1,6 +1,7 @@
 "use client";
 
 import { Flame } from "lucide-react";
+import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 
 export function DailyStreakBadge({
@@ -12,29 +13,37 @@ export function DailyStreakBadge({
   bare?: boolean;
   className?: string;
 }) {
+  const { isDark } = useTheme();
+
   return (
     <div
       className={cn(
-        "group relative flex h-10 items-center gap-2 rounded-full px-3 text-sm font-medium transition-all duration-300",
+        "group relative flex h-10 items-center gap-2 rounded-full px-3 text-sm font-medium transition-all duration-200",
         bare
-          ? "hover:bg-amber-500/10"
-          : "border border-amber-500/20 bg-[#131622]/25 dark:bg-[#131622]/25 light:bg-white/60 backdrop-blur-xl shadow-[0_4px_16px_rgba(0,0,0,0.35),0_0_15px_rgba(255,100,0,0.18)] hover:border-amber-400/40 hover:shadow-[0_0_22px_rgba(255,100,0,0.3)]",
+          ? isDark ? "hover:bg-amber-500/10" : "hover:bg-secondary/70"
+          : isDark
+            ? "border border-amber-500/20 bg-slate-950/30 text-amber-100 hover:border-amber-400/40"
+            : "border border-border/80 bg-secondary/60 text-foreground hover:bg-secondary/90",
         className
       )}
       title={`${streakCount} day login streak`}
       aria-label={`${streakCount} day login streak`}
     >
-      {/* Animated bouncing plasma-fire flame */}
-      <span className="plasma-flame-bounce relative flex items-center justify-center">
+      {/* Clean, simple flame icon without any glow, shadow, or blur halos */}
+      <span className="flex items-center justify-center">
         <Flame
-          className="size-5 text-orange-500 fill-orange-400/90 transition-transform"
-          strokeWidth={2}
+          className="size-5 text-orange-500 fill-orange-500 transition-transform"
+          strokeWidth={1.75}
           aria-hidden="true"
         />
-        <span className="absolute inset-0 -z-10 size-5 rounded-full bg-orange-500/30 blur-sm" />
       </span>
 
-      <span className="font-display text-xs sm:text-sm font-semibold tracking-tight text-amber-100/95 dark:text-amber-100/95 light:text-amber-900 tabular-nums">
+      <span
+        className={cn(
+          "font-display text-xs sm:text-sm font-semibold tracking-tight tabular-nums transition-colors",
+          isDark ? "text-amber-100/95" : "text-foreground"
+        )}
+      >
         {streakCount}
       </span>
       <span className="sr-only">day streak</span>
