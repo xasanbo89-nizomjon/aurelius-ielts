@@ -9,6 +9,7 @@ interface ThemeContextType {
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   isDark: boolean;
+  mounted: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -19,17 +20,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    const saved = localStorage.getItem("aurelius_theme") as Theme | null;
-    if (saved === "light" || saved === "dark") {
-      setThemeState(saved);
-      applyTheme(saved);
-    } else {
-      // Default to dark mode for the cosmic anti-gravity aesthetic
-      applyTheme("dark");
+    try {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("aurelius_theme") as Theme | null;
+        if (saved === "light" || saved === "dark") {
+          setThemeState(saved);
+          applyTheme(saved);
+          return;
+        }
+      }
+    } catch {
+      // Safe fallback for restricted environments (e.g. cookies disabled, incognito or sandboxed iframes)
     }
+    applyTheme("dark");
   }, []);
 
   function applyTheme(next: Theme) {
+    if (typeof document === "undefined") return;
     const root = document.documentElement;
     if (next === "dark") {
       root.classList.add("dark");
@@ -42,7 +49,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   function setTheme(next: Theme) {
     setThemeState(next);
-    localStorage.setItem("aurelius_theme", next);
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("aurelius_theme", next);
+      }
+    } catch {
+      // Ignore storage write errors in private/sandboxed modes
+    }
     applyTheme(next);
   }
 
@@ -51,11 +64,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setTheme(next);
   }
 
-  // Provide stable context value
+  // Stable SSR-safe context value: defaults to dark during SSR/pre-hydration
   const isDark = mounted ? theme === "dark" : true;
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, isDark }}>
+    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, isDark, mounted }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -64,12 +77,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 export function useTheme() {
   const context = useContext(ThemeContext);
   if (!context) {
-    // Graceful fallback for components rendered outside or during SSR
+    // Graceful fallback for components rendered outside provider or during SSR
     return {
       theme: "dark" as Theme,
       setTheme: () => {},
       toggleTheme: () => {},
       isDark: true,
+      mounted: false,
     };
   }
   return context;
