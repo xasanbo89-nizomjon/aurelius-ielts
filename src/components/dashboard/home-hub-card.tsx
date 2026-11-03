@@ -2,14 +2,6 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight } from "lucide-react";
 
-/**
- * Phase 32 — Part 1/2 mobile redesign. Below `sm:` this renders as a
- * compact single-line row (icon + truncated title/description + trailing
- * arrow, ~72px tall) instead of the original tall vertical card — the
- * concrete "test cards too tall on mobile" complaint. At `sm:` and above
- * every class here is overridden back to the exact original vertical card
- * styling, so desktop is pixel-identical to before.
- */
 export function HomeHubCard({
   title,
   description,
@@ -24,24 +16,40 @@ export function HomeHubCard({
   return (
     <Link
       href={href}
-      className="group focus-visible:ring-ring/50 border-border/70 bg-card relative flex items-center gap-3 overflow-hidden rounded-2xl border p-4 outline-none transition-all duration-[250ms] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:block sm:rounded-3xl sm:p-8 sm:hover:-translate-y-1.5 sm:hover:shadow-soft-lg"
+      className="group relative flex flex-col justify-between overflow-hidden rounded-2xl sm:rounded-3xl border border-amber-500/25 bg-[#121624]/80 p-6 sm:p-8 backdrop-blur-xl shadow-[0_12px_40px_-5px_rgba(0,0,0,0.8),0_0_20px_rgba(217,178,86,0.1)] transition-all duration-300 hover:border-amber-400/50 hover:shadow-[0_16px_50px_-5px_rgba(0,0,0,0.9),0_0_30px_rgba(217,178,86,0.2)] hover:-translate-y-1"
     >
-      <div className="bg-accent/10 absolute -top-10 -right-10 hidden size-32 rounded-full blur-2xl transition-opacity duration-[250ms] group-hover:opacity-80 sm:block" />
-      <span className="bg-secondary text-accent flex size-11 shrink-0 items-center justify-center rounded-xl sm:relative sm:mb-6 sm:size-14 sm:rounded-2xl">
-        <Icon className="size-5 sm:size-7" strokeWidth={1.5} />
-      </span>
-      <div className="relative min-w-0 flex-1 sm:space-y-1.5">
-        <h3 className="font-display truncate text-sm font-medium tracking-tight sm:text-xl sm:whitespace-normal">{title}</h3>
-        <p className="text-muted-foreground truncate text-xs sm:mt-1.5 sm:text-sm sm:whitespace-normal">{description}</p>
+      {/* Soft gold ambient glow in corner */}
+      <div className="pointer-events-none absolute -right-12 -top-12 size-36 rounded-full bg-amber-500/10 blur-3xl transition-opacity duration-300 group-hover:opacity-100" />
+
+      <div>
+        {/* Glowing Gold Icon */}
+        <div className="mb-4 sm:mb-6">
+          <span className="relative flex size-12 sm:size-14 shrink-0 items-center justify-center rounded-2xl border border-amber-400/35 bg-gradient-to-br from-amber-500/25 via-amber-600/15 to-transparent text-amber-300 shadow-[0_0_16px_rgba(245,158,11,0.25)] transition-all duration-300 group-hover:border-amber-400/70 group-hover:shadow-[0_0_22px_rgba(245,158,11,0.45)]">
+            <Icon
+              className="size-6 sm:size-7 text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.6)]"
+              strokeWidth={1.75}
+            />
+          </span>
+        </div>
+
+        {/* Title & Description */}
+        <div className="space-y-1.5">
+          <h3 className="font-display text-xl sm:text-2xl font-semibold tracking-tight text-amber-100 transition-colors group-hover:text-amber-200">
+            {title}
+          </h3>
+          <p className="text-xs sm:text-sm text-amber-200/70 leading-relaxed">
+            {description}
+          </p>
+        </div>
       </div>
-      <ArrowRight aria-hidden="true" className="text-accent size-4 shrink-0 sm:hidden" />
-      <span className="text-accent relative mt-6 hidden items-center gap-1.5 text-sm font-medium sm:flex">
-        Open
-        <ArrowRight
-          aria-hidden="true"
-          className="size-4 -translate-x-1 opacity-0 transition-all duration-[250ms] group-hover:translate-x-0 group-hover:opacity-100"
-        />
-      </span>
+
+      {/* Action Footer */}
+      <div className="mt-6 pt-5 border-t border-amber-500/15 flex items-center justify-between text-xs font-semibold text-amber-300">
+        <span>Practice Now</span>
+        <span className="flex items-center gap-1 transition-transform duration-300 group-hover:translate-x-1">
+          Open <ArrowRight className="size-3.5" />
+        </span>
+      </div>
     </Link>
   );
 }

@@ -18,18 +18,22 @@ export const metadata: Metadata = { title: "Record your answer" };
 // The actions of this page hand the AI assessment to a background task that runs after the response has been sent; this is the time it may take.
 export const maxDuration = 120;
 
-export default async function RecordYourAnswerPage({ searchParams }: { searchParams: Promise<{ again?: string }> }) {
+export default async function RecordYourAnswerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ again?: string; custom?: string }>;
+}) {
   const { profile } = await requireStudentProfile();
   if (!(await hasActiveAccess(profile.id))) return <PremiumLockScreen feature="Speaking Practice AI" />;
 
-  const { again } = await searchParams;
+  const { again, custom } = await searchParams;
   const [allowance, topics, previous] = await Promise.all([
     getAllowance(profile.id),
     loadStudioTopics(),
     again ? getPractice({ kind: "student", studentId: profile.id }, again) : Promise.resolve(null),
   ]);
 
-  // "Practise again": the same question, ready to be answered once more (the stored question is a copy, so it is used as the student's own).
+  // "Practise again" or custom question from the Speaking dashboard card
   const initialPrompt: PracticePrompt | null = previous
     ? {
         part: previous.part as SpeakingPart,
@@ -37,8 +41,20 @@ export default async function RecordYourAnswerPage({ searchParams }: { searchPar
         topicId: null,
         questionId: null,
         question: previous.question,
-        cueCardPoints: Array.isArray(previous.cueCardPoints) ? previous.cueCardPoints.filter((point): point is string => typeof point === "string") : [],
+        cueCardPoints: Array.isArray(previous.cueCardPoints)
+          ? previous.cueCardPoints.filter((point): point is string => typeof point === "string")
+          : [],
         feedbackLanguage: isFeedbackLanguage(previous.feedbackLanguage) ? previous.feedbackLanguage : "en",
+      }
+    : custom
+    ? {
+        part: 1,
+        source: "OWN",
+        topicId: null,
+        questionId: null,
+        question: custom,
+        cueCardPoints: [],
+        feedbackLanguage: "en",
       }
     : null;
 
@@ -48,9 +64,9 @@ export default async function RecordYourAnswerPage({ searchParams }: { searchPar
         title="Record your answer"
         description="Answer an IELTS Speaking question out loud and get an AI assessment of your fluency, vocabulary, grammar and pronunciation."
         actions={
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm" className="border-amber-500/30 text-amber-100 hover:bg-amber-500/10">
             <Link href="/student/speaking-practice/recordings">
-              <History className="size-4" /> My recordings
+              <History className="size-4 text-amber-300" /> My recordings
             </Link>
           </Button>
         }
@@ -59,7 +75,14 @@ export default async function RecordYourAnswerPage({ searchParams }: { searchPar
         userKey={profile.id}
         topics={topics}
         initialPrompt={initialPrompt}
-        allowance={{ limit: allowance.limit, used: allowance.used, remaining: allowance.remaining, allowed: allowance.allowed, resetsAtIso: allowance.resetsAt.toISOString(), resetsInText: untilText(allowance.resetsAt) }}
+        allowance={{
+          limit: allowance.limit,
+          used: allowance.used,
+          remaining: allowance.remaining,
+          allowed: allowance.allowed,
+          resetsAtIso: allowance.resetsAt.toISOString(),
+          resetsInText: untilText(allowance.resetsAt),
+        }}
       />
     </div>
   );

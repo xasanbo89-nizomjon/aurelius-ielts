@@ -60,49 +60,64 @@ export function UserMenu({
     window.location.href = "/";
   }
 
+  const displayName = name?.trim() || "Xasan";
+
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          aria-label={`Account menu${name ? ` for ${name}` : ""}`}
-          className="focus-visible:ring-ring/50 flex items-center gap-2.5 rounded-full p-1 pr-1 outline-none transition-colors hover:bg-secondary focus-visible:ring-2"
+          aria-label={`Account menu for ${displayName}`}
+          className="focus-visible:ring-ring/50 group flex items-center gap-2.5 rounded-full border border-amber-500/25 bg-[#121622]/80 p-1 pr-2.5 outline-none backdrop-blur-md shadow-[0_0_15px_rgba(217,178,86,0.12)] transition-all duration-300 hover:border-amber-400/50 hover:bg-amber-500/10 focus-visible:ring-2"
         >
-          <Avatar>
-            <AvatarImage src={image ?? undefined} alt={name ?? "User"} />
-            <AvatarFallback>{getInitials(name, email)}</AvatarFallback>
+          <Avatar className="size-8 ring-1.5 ring-amber-400/70 shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+            <AvatarImage src={image ?? undefined} alt={displayName} />
+            <AvatarFallback className="bg-amber-950/80 font-display text-xs font-semibold text-amber-200">
+              {getInitials(displayName, email)}
+            </AvatarFallback>
           </Avatar>
           <span className="hidden text-left leading-tight sm:block">
-            <span className="block text-sm font-medium">{name ?? "Account"}</span>
-            <span className="text-muted-foreground block text-xs capitalize">{role.toLowerCase()}</span>
+            <span className="font-display block text-sm font-semibold tracking-tight text-amber-100 group-hover:text-amber-200">
+              {displayName}
+            </span>
+            <span className="block text-xs font-medium text-amber-300/70 capitalize">
+              {role === "STUDENT" ? "Student" : role.toLowerCase()}
+            </span>
           </span>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuContent
+          align="end"
+          className="w-56 border border-amber-500/25 bg-[#0e111c]/95 text-amber-100 shadow-[0_12px_36px_rgba(0,0,0,0.8)] backdrop-blur-xl"
+        >
           <DropdownMenuLabel className="flex flex-col gap-0.5">
-            <span className="text-foreground text-sm font-medium">{name ?? "Account"}</span>
-            <span className="text-muted-foreground truncate text-xs font-normal">{email}</span>
+            <span className="font-display text-sm font-semibold text-amber-100">{displayName}</span>
+            <span className="truncate text-xs font-normal text-amber-200/60">{email}</span>
           </DropdownMenuLabel>
-          <DropdownMenuSeparator />
+          <DropdownMenuSeparator className="bg-amber-500/20" />
           {role === "STUDENT" ? (
             <>
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem asChild className="focus:bg-amber-500/15 focus:text-amber-200 cursor-pointer">
                 <Link href="/student/profile">
-                  <UserCircle /> My Profile
+                  <UserCircle className="text-amber-400" /> My Profile
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem asChild className="focus:bg-amber-500/15 focus:text-amber-200 cursor-pointer">
                 <Link href="/student/settings">
-                  <Settings /> Settings
+                  <Settings className="text-amber-400" /> Settings
                 </Link>
               </DropdownMenuItem>
               {secondaryItems && secondaryItems.length > 0 && (
                 <>
-                  <DropdownMenuSeparator />
+                  <DropdownMenuSeparator className="bg-amber-500/20" />
                   {secondaryItems.map((item) => {
                     const Icon = NAV_ICONS[item.icon];
                     return (
-                      <DropdownMenuItem key={item.href} asChild>
+                      <DropdownMenuItem
+                        key={item.href}
+                        asChild
+                        className="focus:bg-amber-500/15 focus:text-amber-200 cursor-pointer"
+                      >
                         <Link href={item.href}>
-                          <Icon /> {item.label}
+                          <Icon className="text-amber-400/80" /> {item.label}
                         </Link>
                       </DropdownMenuItem>
                     );
@@ -111,15 +126,16 @@ export function UserMenu({
               )}
             </>
           ) : (
-            <DropdownMenuItem asChild>
+            <DropdownMenuItem asChild className="focus:bg-amber-500/15 focus:text-amber-200 cursor-pointer">
               <Link href="/teacher/dashboard">
-                <UserIcon /> My account
+                <UserIcon className="text-amber-400" /> My account
               </Link>
             </DropdownMenuItem>
           )}
-          <DropdownMenuSeparator />
+          <DropdownMenuSeparator className="bg-amber-500/20" />
           <DropdownMenuItem
             variant="destructive"
+            className="cursor-pointer"
             onSelect={(event) => {
               event.preventDefault();
               setConfirmSignOutOpen(true);
@@ -131,16 +147,20 @@ export function UserMenu({
       </DropdownMenu>
 
       <Dialog open={confirmSignOutOpen} onOpenChange={setConfirmSignOutOpen}>
-        <DialogContent>
+        <DialogContent className="border border-amber-500/25 bg-[#0e111c] text-amber-100">
           <DialogHeader>
-            <DialogTitle>Sign out of Aurelius IELTS?</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-amber-100">Sign out of Aurelius IELTS?</DialogTitle>
+            <DialogDescription className="text-amber-200/70">
               You&apos;ll need to sign in again to access your dashboard.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" disabled={signingOut}>
+              <Button
+                variant="outline"
+                disabled={signingOut}
+                className="border-amber-500/30 text-amber-100 hover:bg-amber-500/10"
+              >
                 Cancel
               </Button>
             </DialogClose>

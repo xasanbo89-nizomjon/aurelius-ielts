@@ -308,3 +308,59 @@
   color: var(--muted-foreground);
   user-select: none;
 }
+
+/* ---------------------------------------------------------------------- */
+/* Futuristic Anti-Gravity UI effects                                     */
+/* ---------------------------------------------------------------------- */
+
+@layer utilities {
+  .plasma-flame-pulse {
+    animation: plasma-fire-anim 1.6s ease-in-out infinite;
+  }
+
+  .crown-rotate-3d {
+    animation: crown-rotate-3d-anim 7s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    transform-style: preserve-3d;
+  }
+
+  .cosmic-glass {
+    background: rgba(15, 18, 29, 0.82);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(217, 178, 86, 0.22);
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.8), 0 0 15px -3px rgba(217, 178, 86, 0.08);
+  }
+
+  .cosmic-glass-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .cosmic-glass-hover:hover {
+    border-color: rgba(217, 178, 86, 0.55);
+    box-shadow: 0 18px 45px -10px rgba(0, 0, 0, 0.9), 0 0 25px -2px rgba(217, 178, 86, 0.25);
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes plasma-fire-anim {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 4px #ff5500) drop-shadow(0 0 10px #ff9900);
+  }
+  50% {
+    transform: scale(1.18);
+    filter: drop-shadow(0 0 12px #ff2200) drop-shadow(0 0 20px #ff8800) drop-shadow(0 0 30px #ffcc00);
+  }
+}
+
+@keyframes crown-rotate-3d-anim {
+  0% {
+    transform: perspective(600px) rotateY(0deg);
+  }
+  50% {
+    transform: perspective(600px) rotateY(180deg) scale(1.08);
+  }
+  100% {
+    transform: perspective(600px) rotateY(360deg);
+  }
+}

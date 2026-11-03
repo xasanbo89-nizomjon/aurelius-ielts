@@ -5,11 +5,8 @@ import type { NavItem } from "@/lib/nav-config";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
-import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
-import { DailyStreakBadge } from "@/components/layout/daily-streak-badge";
-import { NotificationsBell } from "@/components/layout/notifications-bell";
-import { PremiumNavBadge } from "@/components/layout/premium-nav-badge";
 import { UserMenu } from "@/components/layout/user-menu";
+import { FloatingStudentNavbar } from "@/components/layout/floating-student-navbar";
 
 export function DashboardShell({
   navItems,
@@ -32,6 +29,52 @@ export function DashboardShell({
   children: ReactNode;
 }) {
   const isStudent = role === "STUDENT";
+
+  if (isStudent) {
+    return (
+      <div className="relative min-h-svh w-full bg-[#0d0f17] text-[#f2ede2] selection:bg-amber-500/30 selection:text-amber-100 overflow-x-hidden">
+        <a
+          href="#main-content"
+          className="sr-only z-50 rounded-full bg-amber-500 px-4 py-2 text-sm font-medium text-black focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:outline-none"
+        >
+          Skip to main content
+        </a>
+
+        {/* Futuristic deep, dark, swirling nebula cosmic space background effects */}
+        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
+          {/* Deep blue / indigo nebula glow top-left */}
+          <div className="absolute -top-[15%] -left-[10%] size-[650px] rounded-full bg-indigo-900/25 blur-[140px]" />
+          {/* Swirling deep cosmic purple nebula glow top-right */}
+          <div className="absolute top-[20%] -right-[15%] size-[750px] rounded-full bg-purple-950/30 blur-[160px]" />
+          {/* Warm gold stardust glow */}
+          <div className="absolute top-[45%] left-[30%] size-[500px] rounded-full bg-amber-500/8 blur-[130px]" />
+          {/* Deep celestial violet nebula bottom */}
+          <div className="absolute -bottom-[10%] left-[10%] size-[600px] rounded-full bg-violet-950/25 blur-[150px]" />
+        </div>
+
+        {/* Floating Top Navigation Bar (Navbar) - Sidebar is removed completely */}
+        <FloatingStudentNavbar
+          navItems={navItems}
+          user={user}
+          streakCount={streakCount}
+          isPremium={isPremium}
+          premiumDaysRemaining={premiumDaysRemaining}
+          secondaryNavItems={secondaryNavItems}
+        />
+
+        {/* Main Content Area - Full width expanded */}
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 pt-4 pb-20 sm:px-6 sm:pt-6 lg:px-8 outline-none"
+        >
+          <div className="flex w-full flex-col gap-6 sm:gap-8">{children}</div>
+        </main>
+      </div>
+    );
+  }
+
+  // Teacher Layout - Keeps existing teacher sidebar & dashboard structure
   return (
     <div className="bg-background flex min-h-svh w-full">
       <a
@@ -43,7 +86,7 @@ export function DashboardShell({
 
       <aside className="bg-sidebar border-sidebar-border sticky top-0 hidden h-svh w-72 shrink-0 flex-col border-r lg:flex">
         <div className="px-5 pt-7 pb-5">
-          <BrandMark href={role === "TEACHER" ? "/teacher/dashboard" : "/student/dashboard"} />
+          <BrandMark href="/teacher/dashboard" />
         </div>
         <SidebarNav items={navItems} />
         <div className="text-sidebar-foreground/50 px-6 py-5 text-xs">
@@ -51,34 +94,21 @@ export function DashboardShell({
         </div>
       </aside>
 
-      {/* min-w-0: a flex item is never narrower than its widest unbreakable content unless told so, so one long single-line title or a wide table made the whole page (and its header) wider than a phone. */}
       <div className="flex min-h-svh min-w-0 flex-1 flex-col">
         <header className="bg-background/85 border-border/70 sticky top-0 z-30 flex h-18 items-center gap-1.5 border-b px-4 backdrop-blur-sm sm:px-6 sm:gap-2 lg:px-10">
           <MobileSidebar items={navItems} />
           <div className="min-w-0 flex-1" />
-          {isStudent ? (
-            <>
-              <DailyStreakBadge streakCount={streakCount} bare />
-              <NotificationsBell />
-              <PremiumNavBadge isPremium={isPremium ?? false} daysRemaining={premiumDaysRemaining} />
-              <UserMenu name={user.name} email={user.email} image={user.image} role={role} secondaryItems={secondaryNavItems} />
-            </>
-          ) : (
-            // Phase 20 — teacher header decluttered: no streak visual, just the account menu.
-            <UserMenu name={user.name} email={user.email} image={user.image} role={role} />
-          )}
+          <UserMenu name={user.name} email={user.email} image={user.image} role={role} />
         </header>
 
         <main
           id="main-content"
           tabIndex={-1}
-          className={cn("flex-1 px-4 py-5 outline-none sm:px-6 sm:py-8 lg:px-10 lg:py-10", isStudent && "pb-24 lg:pb-10")}
+          className="flex-1 px-4 py-5 outline-none sm:px-6 sm:py-8 lg:px-10 lg:py-10"
         >
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 sm:gap-8">{children}</div>
         </main>
       </div>
-
-      {isStudent && <MobileBottomNav />}
     </div>
   );
 }
