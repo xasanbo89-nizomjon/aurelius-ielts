@@ -51,12 +51,6 @@ export function UserMenu({
     setSigningOut(true);
     await clearSessionAction();
     await signOut(getFirebaseAuth());
-    // A hard navigation, not router.push()/router.refresh(): those are soft,
-    // client-side transitions that can serve "/" from Next's Router Cache —
-    // including a payload prefetched *while still signed in*, whose baked-in
-    // server redirect sends the user right back to their dashboard. Only a
-    // real full-page load (what Ctrl+R already does) is guaranteed to hit
-    // the server fresh and see the session cookie that was just cleared.
     window.location.href = "/";
   }
 
@@ -67,9 +61,9 @@ export function UserMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`Account menu for ${displayName}`}
-          className="focus-visible:ring-ring/50 group flex items-center gap-2.5 rounded-full border border-amber-500/15 bg-[#131622]/80 p-1 pr-2.5 outline-none backdrop-blur-md shadow-[0_0_15px_rgba(217,178,86,0.1)] transition-all duration-300 hover:border-amber-400/35 hover:bg-amber-500/10 focus-visible:ring-2"
+          className="focus-visible:ring-ring/50 group flex items-center gap-2.5 rounded-full border border-amber-500/20 bg-[#131622]/35 p-1 pr-2.5 outline-none backdrop-blur-xl shadow-[0_4px_16px_rgba(0,0,0,0.4),0_0_15px_rgba(217,178,86,0.12)] transition-all duration-300 hover:border-amber-400/40 hover:bg-amber-500/10 focus-visible:ring-2"
         >
-          <Avatar className="size-8 ring-1.5 ring-amber-400/50 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+          <Avatar className="size-8 ring-1.5 ring-amber-400/60 shadow-[0_0_10px_rgba(245,158,11,0.25)]">
             <AvatarImage src={image ?? undefined} alt={displayName} />
             <AvatarFallback className="bg-amber-950/70 font-display text-xs font-semibold text-amber-200/90">
               {getInitials(displayName, email)}
@@ -86,7 +80,7 @@ export function UserMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          className="w-56 border border-amber-500/15 bg-[#0e111b]/95 text-amber-100/90 shadow-[0_12px_36px_rgba(0,0,0,0.8)] backdrop-blur-xl"
+          className="w-56 border border-amber-500/20 bg-[#0e111b]/85 text-amber-100/90 shadow-[0_12px_36px_rgba(0,0,0,0.8)] backdrop-blur-2xl"
         >
           <DropdownMenuLabel className="flex flex-col gap-0.5">
             <span className="font-display text-sm font-semibold text-amber-100/90">{displayName}</span>
@@ -147,7 +141,7 @@ export function UserMenu({
       </DropdownMenu>
 
       <Dialog open={confirmSignOutOpen} onOpenChange={setConfirmSignOutOpen}>
-        <DialogContent className="border border-amber-500/15 bg-[#0e111b] text-amber-100/90">
+        <DialogContent className="border border-amber-500/20 bg-[#0e111b]/95 backdrop-blur-2xl text-amber-100/90">
           <DialogHeader>
             <DialogTitle className="text-amber-100/90">Sign out of Aurelius IELTS?</DialogTitle>
             <DialogDescription className="text-amber-200/65">

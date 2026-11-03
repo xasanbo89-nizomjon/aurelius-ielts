@@ -370,21 +370,31 @@
 /* ---------------------------------------------------------------------- */
 
 .anti-gravity-space-theme {
-  --background: #090b12;
+  --background: #080a11;
   --foreground: #ede8dd;
-  --card: #131622;
+  --card: rgba(19, 22, 34, 0.32);
   --card-foreground: #ede8dd;
-  --popover: #131622;
+  --popover: rgba(15, 18, 29, 0.88);
   --popover-foreground: #ede8dd;
   --primary: #f5eedf;
   --primary-foreground: #0d0f18;
-  --secondary: #181d2a;
+  --secondary: rgba(26, 30, 45, 0.4);
   --secondary-foreground: #ede8dd;
-  --muted: #151824;
-  --muted-foreground: #9e978a;
+  --muted: rgba(21, 24, 36, 0.35);
+  --muted-foreground: #a39c8f;
   --accent: #d4af37;
   --accent-foreground: #090b12;
-  --border: rgba(245, 158, 11, 0.10);
-  --input: rgba(245, 158, 11, 0.15);
+  --border: rgba(245, 158, 11, 0.16);
+  --input: rgba(245, 158, 11, 0.2);
   --ring: #d4af37;
+}
+
+@layer utilities {
+  .nebula-glass {
+    background: rgba(19, 22, 34, 0.32);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(217, 178, 86, 0.18);
+    box-shadow: 0 14px 40px -10px rgba(0, 0, 0, 0.75), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
 }

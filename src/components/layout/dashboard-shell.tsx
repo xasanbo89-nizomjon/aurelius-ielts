@@ -31,33 +31,43 @@ export function DashboardShell({
 
   if (isStudent) {
     return (
-      <div className="dark anti-gravity-space-theme relative min-h-svh w-full bg-[#080a11] text-amber-100/90 selection:bg-amber-500/25 selection:text-amber-100 overflow-x-hidden">
+      <div className="dark anti-gravity-space-theme relative min-h-svh w-full bg-[#07090e] text-amber-100/90 selection:bg-amber-500/25 selection:text-amber-100 overflow-x-hidden">
         <a
           href="#main-content"
-          className="sr-only z-50 rounded-full border border-amber-400/40 bg-[#121622] px-4 py-2 text-sm font-medium text-amber-100 focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:outline-none"
+          className="sr-only z-50 rounded-full border border-amber-400/40 bg-[#131622]/80 px-4 py-2 text-sm font-medium text-amber-100 focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:outline-none"
         >
           Skip to main content
         </a>
 
-        {/* Space Nebula Background: Immersive deep-space cosmic theme with subtle, blurred glowing ambient nebula circles */}
+        {/* Vibrant, Glowing Galaxy Nebula Background: Shines through the ultra-transparent glassmorphic cards */}
         <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
-          {/* Base deep space cosmic gradient */}
-          <div className="absolute inset-0 bg-gradient-to-b from-[#080a11] via-[#0c0e17] to-[#06080d]" />
+          {/* Base deep cosmic space canvas */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#07090e] via-[#090c14] to-[#05070b]" />
 
-          {/* Deep Purple Nebula Ambient Glow - Top Right */}
-          <div className="absolute -top-[12%] right-[2%] size-[700px] rounded-full bg-purple-900/20 blur-[160px]" />
+          {/* 1. Behind Top Navbar: Vibrant Violet & Indigo Aurora */}
+          <div className="absolute -top-[12%] left-[18%] size-[680px] rounded-full bg-gradient-to-r from-purple-600/35 via-violet-600/30 to-blue-600/35 blur-[130px]" />
+          <div className="absolute -top-[10%] right-[8%] size-[540px] rounded-full bg-indigo-500/25 blur-[120px]" />
 
-          {/* Soft Blue / Deep Indigo Nebula Ambient Glow - Top Left */}
-          <div className="absolute top-[8%] -left-[12%] size-[640px] rounded-full bg-blue-950/30 blur-[160px]" />
+          {/* 2. Behind Welcome Panel & Free Plan Bar: Glowing Purple & Warm Gold Nebula */}
+          <div className="absolute top-[16%] left-[22%] size-[620px] rounded-full bg-purple-600/30 blur-[130px]" />
+          <div className="absolute top-[20%] right-[18%] size-[520px] rounded-full bg-amber-500/25 blur-[120px]" />
 
-          {/* Faint Amber / Gold Stardust Ambient Glow - Center */}
-          <div className="absolute top-[40%] left-[22%] size-[540px] rounded-full bg-amber-500/[0.08] blur-[140px]" />
+          {/* 3. Behind 2x2 Feature Cards Grid */}
+          {/* Top-Left (Tests Card): Vivid Blue & Indigo Glow */}
+          <div className="absolute top-[40%] left-[4%] size-[560px] rounded-full bg-blue-600/35 blur-[130px]" />
 
-          {/* Deep Indigo / Cosmic Navy Nebula Ambient Glow - Bottom Right */}
-          <div className="absolute bottom-[4%] -right-[8%] size-[660px] rounded-full bg-indigo-950/25 blur-[160px]" />
+          {/* Top-Right (Leveled Articles Card): Radiant Cosmic Purple Glow */}
+          <div className="absolute top-[38%] right-[4%] size-[580px] rounded-full bg-violet-600/35 blur-[130px]" />
 
-          {/* Soft Purple Nebula Ambient Glow - Bottom Left */}
-          <div className="absolute -bottom-[10%] left-[10%] size-[580px] rounded-full bg-purple-950/20 blur-[140px]" />
+          {/* Bottom-Left (Writing Card): Luminous Deep Indigo/Cyan Nebula */}
+          <div className="absolute top-[60%] left-[8%] size-[540px] rounded-full bg-cyan-600/25 blur-[140px]" />
+
+          {/* Bottom-Right (Speaking Card): Warm Golden Cosmic Nebula */}
+          <div className="absolute top-[58%] right-[8%] size-[560px] rounded-full bg-amber-500/30 blur-[130px]" />
+
+          {/* 4. Lower Section / Widgets: Deep Purple & Stardust Swirl */}
+          <div className="absolute bottom-[3%] left-[22%] size-[720px] rounded-full bg-purple-700/25 blur-[150px]" />
+          <div className="absolute -bottom-[8%] right-[15%] size-[600px] rounded-full bg-blue-700/20 blur-[140px]" />
         </div>
 
         {/* Floating Top Navigation Bar (Navbar) */}
@@ -87,7 +97,7 @@ export function DashboardShell({
     <div className="bg-background flex min-h-svh w-full">
       <a
         href="#main-content"
-        className="bg-primary text-primary-foreground focus-visible:ring-ring sr-only z-50 rounded-full px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:visible:ring-2 focus-visible:outline-none"
+        className="bg-primary text-primary-foreground focus-visible:ring-ring sr-only z-50 rounded-full px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:visible:ring-2 focus:outline-none"
       >
         Skip to main content
       </a>
