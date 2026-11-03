@@ -67,16 +67,16 @@ export function UserMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`Account menu for ${displayName}`}
-          className="focus-visible:ring-ring/50 group flex items-center gap-2.5 rounded-full border border-amber-500/25 bg-[#121622]/80 p-1 pr-2.5 outline-none backdrop-blur-md shadow-[0_0_15px_rgba(217,178,86,0.12)] transition-all duration-300 hover:border-amber-400/50 hover:bg-amber-500/10 focus-visible:ring-2"
+          className="focus-visible:ring-ring/50 group flex items-center gap-2.5 rounded-full border border-amber-500/15 bg-[#131622]/80 p-1 pr-2.5 outline-none backdrop-blur-md shadow-[0_0_15px_rgba(217,178,86,0.1)] transition-all duration-300 hover:border-amber-400/35 hover:bg-amber-500/10 focus-visible:ring-2"
         >
-          <Avatar className="size-8 ring-1.5 ring-amber-400/70 shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+          <Avatar className="size-8 ring-1.5 ring-amber-400/50 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
             <AvatarImage src={image ?? undefined} alt={displayName} />
-            <AvatarFallback className="bg-amber-950/80 font-display text-xs font-semibold text-amber-200">
+            <AvatarFallback className="bg-amber-950/70 font-display text-xs font-semibold text-amber-200/90">
               {getInitials(displayName, email)}
             </AvatarFallback>
           </Avatar>
           <span className="hidden text-left leading-tight sm:block">
-            <span className="font-display block text-sm font-semibold tracking-tight text-amber-100 group-hover:text-amber-200">
+            <span className="font-display block text-sm font-semibold tracking-tight text-amber-100/90 group-hover:text-amber-100">
               {displayName}
             </span>
             <span className="block text-xs font-medium text-amber-300/70 capitalize">
@@ -86,28 +86,28 @@ export function UserMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          className="w-56 border border-amber-500/25 bg-[#0e111c]/95 text-amber-100 shadow-[0_12px_36px_rgba(0,0,0,0.8)] backdrop-blur-xl"
+          className="w-56 border border-amber-500/15 bg-[#0e111b]/95 text-amber-100/90 shadow-[0_12px_36px_rgba(0,0,0,0.8)] backdrop-blur-xl"
         >
           <DropdownMenuLabel className="flex flex-col gap-0.5">
-            <span className="font-display text-sm font-semibold text-amber-100">{displayName}</span>
+            <span className="font-display text-sm font-semibold text-amber-100/90">{displayName}</span>
             <span className="truncate text-xs font-normal text-amber-200/60">{email}</span>
           </DropdownMenuLabel>
-          <DropdownMenuSeparator className="bg-amber-500/20" />
+          <DropdownMenuSeparator className="bg-amber-500/15" />
           {role === "STUDENT" ? (
             <>
               <DropdownMenuItem asChild className="focus:bg-amber-500/15 focus:text-amber-200 cursor-pointer">
                 <Link href="/student/profile">
-                  <UserCircle className="text-amber-400" /> My Profile
+                  <UserCircle className="text-amber-400/80" /> My Profile
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild className="focus:bg-amber-500/15 focus:text-amber-200 cursor-pointer">
                 <Link href="/student/settings">
-                  <Settings className="text-amber-400" /> Settings
+                  <Settings className="text-amber-400/80" /> Settings
                 </Link>
               </DropdownMenuItem>
               {secondaryItems && secondaryItems.length > 0 && (
                 <>
-                  <DropdownMenuSeparator className="bg-amber-500/20" />
+                  <DropdownMenuSeparator className="bg-amber-500/15" />
                   {secondaryItems.map((item) => {
                     const Icon = NAV_ICONS[item.icon];
                     return (
@@ -117,7 +117,7 @@ export function UserMenu({
                         className="focus:bg-amber-500/15 focus:text-amber-200 cursor-pointer"
                       >
                         <Link href={item.href}>
-                          <Icon className="text-amber-400/80" /> {item.label}
+                          <Icon className="text-amber-400/75" /> {item.label}
                         </Link>
                       </DropdownMenuItem>
                     );
@@ -128,11 +128,11 @@ export function UserMenu({
           ) : (
             <DropdownMenuItem asChild className="focus:bg-amber-500/15 focus:text-amber-200 cursor-pointer">
               <Link href="/teacher/dashboard">
-                <UserIcon className="text-amber-400" /> My account
+                <UserIcon className="text-amber-400/80" /> My account
               </Link>
             </DropdownMenuItem>
           )}
-          <DropdownMenuSeparator className="bg-amber-500/20" />
+          <DropdownMenuSeparator className="bg-amber-500/15" />
           <DropdownMenuItem
             variant="destructive"
             className="cursor-pointer"
@@ -147,10 +147,10 @@ export function UserMenu({
       </DropdownMenu>
 
       <Dialog open={confirmSignOutOpen} onOpenChange={setConfirmSignOutOpen}>
-        <DialogContent className="border border-amber-500/25 bg-[#0e111c] text-amber-100">
+        <DialogContent className="border border-amber-500/15 bg-[#0e111b] text-amber-100/90">
           <DialogHeader>
-            <DialogTitle className="text-amber-100">Sign out of Aurelius IELTS?</DialogTitle>
-            <DialogDescription className="text-amber-200/70">
+            <DialogTitle className="text-amber-100/90">Sign out of Aurelius IELTS?</DialogTitle>
+            <DialogDescription className="text-amber-200/65">
               You&apos;ll need to sign in again to access your dashboard.
             </DialogDescription>
           </DialogHeader>
@@ -159,7 +159,7 @@ export function UserMenu({
               <Button
                 variant="outline"
                 disabled={signingOut}
-                className="border-amber-500/30 text-amber-100 hover:bg-amber-500/10"
+                className="border-amber-500/20 text-amber-100/85 hover:bg-amber-500/10"
               >
                 Cancel
               </Button>

@@ -16,7 +16,7 @@ export function DailyStreakBadge({
         "group relative flex h-10 items-center gap-2 rounded-full px-3 text-sm font-medium transition-all duration-300",
         bare
           ? "hover:bg-amber-500/10"
-          : "border border-amber-500/25 bg-[#121622]/80 backdrop-blur-md shadow-[0_0_15px_rgba(255,100,0,0.18)] hover:border-amber-400/50 hover:shadow-[0_0_22px_rgba(255,100,0,0.3)]",
+          : "border border-amber-500/15 bg-[#131622]/80 backdrop-blur-md shadow-[0_0_15px_rgba(255,100,0,0.14)] hover:border-amber-400/35 hover:shadow-[0_0_20px_rgba(255,100,0,0.25)]",
         className
       )}
       title={`${streakCount} day login streak`}
@@ -29,10 +29,10 @@ export function DailyStreakBadge({
           strokeWidth={2}
           aria-hidden="true"
         />
-        <span className="absolute inset-0 -z-10 size-5 rounded-full bg-orange-500/30 blur-sm" />
+        <span className="absolute inset-0 -z-10 size-5 rounded-full bg-orange-500/25 blur-sm" />
       </span>
 
-      <span className="font-display text-xs sm:text-sm font-semibold tracking-tight text-amber-100 tabular-nums">
+      <span className="font-display text-xs sm:text-sm font-semibold tracking-tight text-amber-100/90 tabular-nums">
         {streakCount}
       </span>
       <span className="sr-only">day streak</span>

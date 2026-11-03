@@ -364,3 +364,27 @@
     transform: perspective(600px) rotateY(360deg);
   }
 }
+
+/* ---------------------------------------------------------------------- */
+/* Anti-Gravity Space Theme Variables (Visual Comfort / Eye Strain Red.)  */
+/* ---------------------------------------------------------------------- */
+
+.anti-gravity-space-theme {
+  --background: #090b12;
+  --foreground: #ede8dd;
+  --card: #131622;
+  --card-foreground: #ede8dd;
+  --popover: #131622;
+  --popover-foreground: #ede8dd;
+  --primary: #f5eedf;
+  --primary-foreground: #0d0f18;
+  --secondary: #181d2a;
+  --secondary-foreground: #ede8dd;
+  --muted: #151824;
+  --muted-foreground: #9e978a;
+  --accent: #d4af37;
+  --accent-foreground: #090b12;
+  --border: rgba(245, 158, 11, 0.10);
+  --input: rgba(245, 158, 11, 0.15);
+  --ring: #d4af37;
+}

@@ -11,7 +11,6 @@ import { getStudentReadingStats } from "@/lib/reading-analytics";
 import { getSpeakingPracticeStats } from "@/lib/speaking-practice";
 import { getPremiumIdentity } from "@/lib/premium-identity";
 import { getStreakSummary } from "@/lib/streaks";
-import { PageHeader } from "@/components/dashboard/page-header";
 import { HomeHubCard } from "@/components/dashboard/home-hub-card";
 import { SpeakingHubCard } from "@/components/dashboard/speaking-hub-card";
 import { WhatsNewSection } from "@/components/dashboard/whats-new-section";
@@ -52,15 +51,15 @@ export default async function StudentDashboardPage() {
 
   return (
     <div className="flex w-full flex-col gap-6 sm:gap-8">
-      {/* Central Floating Welcome Panel */}
-      <div className="relative overflow-hidden rounded-3xl border border-amber-500/25 bg-[#121624]/85 p-6 sm:p-8 backdrop-blur-xl shadow-[0_12px_45px_-10px_rgba(0,0,0,0.85),0_0_25px_rgba(217,178,86,0.12)]">
-        {/* Soft gold and violet ambient glow */}
-        <div className="pointer-events-none absolute -left-12 -top-12 size-48 rounded-full bg-indigo-500/10 blur-3xl" />
-        <div className="pointer-events-none absolute -right-12 -bottom-12 size-48 rounded-full bg-amber-500/10 blur-3xl" />
+      {/* Central Floating Welcome Panel with Soft Amber-500/10 Rim */}
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-amber-500/10 bg-[#131622]/80 p-6 sm:p-8 backdrop-blur-xl shadow-[0_12px_36px_-6px_rgba(0,0,0,0.7)]">
+        {/* Soft, eye-comfortable ambient nebula glows */}
+        <div className="pointer-events-none absolute -left-12 -top-12 size-48 rounded-full bg-indigo-900/15 blur-3xl" />
+        <div className="pointer-events-none absolute -right-12 -bottom-12 size-48 rounded-full bg-amber-500/[0.06] blur-3xl" />
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            <h1 className="font-display text-2xl sm:text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-100 to-amber-300 drop-shadow-[0_2px_12px_rgba(245,158,11,0.25)]">
+            <h1 className="font-display text-2xl sm:text-4xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-200/95 via-amber-100/90 to-amber-200/85 drop-shadow-[0_2px_12px_rgba(245,158,11,0.18)]">
               Welcome back, {firstName}
             </h1>
             <p className="text-sm sm:text-base text-amber-200/70 font-normal">
@@ -94,7 +93,7 @@ export default async function StudentDashboardPage() {
         currentStreak={studyStreak.currentStreak}
       />
 
-      {/* The Four Cards: Balanced 2x2 Grid with Anti-Gravity Glassmorphism */}
+      {/* The Four Cards: Balanced 2x2 Grid with Eye-Comfortable Dark Glassmorphism */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
         {/* Top-Left: Tests */}
         <HomeHubCard
@@ -128,7 +127,7 @@ export default async function StudentDashboardPage() {
         />
       </div>
 
-      {/* Secondary widgets */}
+      {/* Secondary widgets rendered with the dark comfortable theme */}
       <ReadingStatsWidget stats={readingStats} />
       <SpeakingPracticeWidget stats={speakingStats} />
       <WhatsNewSection items={whatsNew} />

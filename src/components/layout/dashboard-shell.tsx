@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-import { cn } from "@/lib/utils";
 import type { NavItem } from "@/lib/nav-config";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
@@ -32,27 +31,36 @@ export function DashboardShell({
 
   if (isStudent) {
     return (
-      <div className="relative min-h-svh w-full bg-[#0d0f17] text-[#f2ede2] selection:bg-amber-500/30 selection:text-amber-100 overflow-x-hidden">
+      <div className="dark anti-gravity-space-theme relative min-h-svh w-full bg-[#080a11] text-amber-100/90 selection:bg-amber-500/25 selection:text-amber-100 overflow-x-hidden">
         <a
           href="#main-content"
-          className="sr-only z-50 rounded-full bg-amber-500 px-4 py-2 text-sm font-medium text-black focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:outline-none"
+          className="sr-only z-50 rounded-full border border-amber-400/40 bg-[#121622] px-4 py-2 text-sm font-medium text-amber-100 focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:outline-none"
         >
           Skip to main content
         </a>
 
-        {/* Futuristic deep, dark, swirling nebula cosmic space background effects */}
+        {/* Space Nebula Background: Immersive deep-space cosmic theme with subtle, blurred glowing ambient nebula circles */}
         <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
-          {/* Deep blue / indigo nebula glow top-left */}
-          <div className="absolute -top-[15%] -left-[10%] size-[650px] rounded-full bg-indigo-900/25 blur-[140px]" />
-          {/* Swirling deep cosmic purple nebula glow top-right */}
-          <div className="absolute top-[20%] -right-[15%] size-[750px] rounded-full bg-purple-950/30 blur-[160px]" />
-          {/* Warm gold stardust glow */}
-          <div className="absolute top-[45%] left-[30%] size-[500px] rounded-full bg-amber-500/8 blur-[130px]" />
-          {/* Deep celestial violet nebula bottom */}
-          <div className="absolute -bottom-[10%] left-[10%] size-[600px] rounded-full bg-violet-950/25 blur-[150px]" />
+          {/* Base deep space cosmic gradient */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#080a11] via-[#0c0e17] to-[#06080d]" />
+
+          {/* Deep Purple Nebula Ambient Glow - Top Right */}
+          <div className="absolute -top-[12%] right-[2%] size-[700px] rounded-full bg-purple-900/20 blur-[160px]" />
+
+          {/* Soft Blue / Deep Indigo Nebula Ambient Glow - Top Left */}
+          <div className="absolute top-[8%] -left-[12%] size-[640px] rounded-full bg-blue-950/30 blur-[160px]" />
+
+          {/* Faint Amber / Gold Stardust Ambient Glow - Center */}
+          <div className="absolute top-[40%] left-[22%] size-[540px] rounded-full bg-amber-500/[0.08] blur-[140px]" />
+
+          {/* Deep Indigo / Cosmic Navy Nebula Ambient Glow - Bottom Right */}
+          <div className="absolute bottom-[4%] -right-[8%] size-[660px] rounded-full bg-indigo-950/25 blur-[160px]" />
+
+          {/* Soft Purple Nebula Ambient Glow - Bottom Left */}
+          <div className="absolute -bottom-[10%] left-[10%] size-[580px] rounded-full bg-purple-950/20 blur-[140px]" />
         </div>
 
-        {/* Floating Top Navigation Bar (Navbar) - Sidebar is removed completely */}
+        {/* Floating Top Navigation Bar (Navbar) */}
         <FloatingStudentNavbar
           navItems={navItems}
           user={user}
@@ -79,7 +87,7 @@ export function DashboardShell({
     <div className="bg-background flex min-h-svh w-full">
       <a
         href="#main-content"
-        className="bg-primary text-primary-foreground focus-visible:ring-ring sr-only z-50 rounded-full px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus-visible:ring-2 focus-visible:outline-none"
+        className="bg-primary text-primary-foreground focus-visible:ring-ring sr-only z-50 rounded-full px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:visible:ring-2 focus-visible:outline-none"
       >
         Skip to main content
       </a>

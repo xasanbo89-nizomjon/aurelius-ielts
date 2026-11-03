@@ -32,20 +32,20 @@ export function FloatingStudentNavbar({
 
   return (
     <header className="sticky top-3 sm:top-4 z-40 w-full px-3 sm:px-6 lg:px-8">
-      {/* Sleek, translucent, curved dark glass navigation bar floating in space with soft gold-rimmed edges */}
-      <div className="mx-auto flex h-16 sm:h-20 max-w-7xl items-center justify-between gap-2 sm:gap-4 rounded-2xl sm:rounded-3xl border border-amber-500/25 bg-[#0d0f17]/85 px-3.5 sm:px-6 shadow-[0_12px_40px_-5px_rgba(0,0,0,0.85),0_0_25px_-5px_rgba(217,178,86,0.15)] backdrop-blur-2xl">
+      {/* Sleek, translucent, curved dark glass navigation bar floating in space with soft amber-500/15 rimmed edges */}
+      <div className="mx-auto flex h-16 sm:h-20 max-w-7xl items-center justify-between gap-2 sm:gap-4 rounded-2xl sm:rounded-3xl border border-amber-500/15 bg-[#0d0f18]/85 px-3.5 sm:px-6 shadow-[0_12px_40px_-5px_rgba(0,0,0,0.85),0_0_20px_-5px_rgba(217,178,86,0.1)] backdrop-blur-2xl">
         {/* Left: Aurelius IELTS Logo and text */}
         <div className="flex shrink-0 items-center">
           <BrandMark
             href="/student/dashboard"
-            className="text-amber-100 transition-opacity hover:opacity-90"
+            className="text-amber-100/90 transition-opacity hover:opacity-95"
           />
         </div>
 
         {/* Center: Floating navigation items (Home, Speaking Practice, Profile, Settings) */}
         <nav
           aria-label="Main Navigation"
-          className="hidden md:flex items-center gap-1 lg:gap-2 rounded-full border border-amber-500/15 bg-[#121624]/60 p-1.5 backdrop-blur-md shadow-inner"
+          className="hidden md:flex items-center gap-1 lg:gap-2 rounded-full border border-amber-500/10 bg-[#131622]/60 p-1.5 backdrop-blur-md"
         >
           {navItems.map((item) => {
             const isActive =
@@ -60,8 +60,8 @@ export function FloatingStudentNavbar({
                 className={cn(
                   "relative rounded-xl px-3.5 py-1.5 text-xs lg:text-sm font-medium transition-all duration-300 outline-none",
                   isActive
-                    ? "bg-amber-400/15 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.25)] border border-amber-400/30"
-                    : "text-amber-100/70 hover:text-amber-200 hover:bg-amber-500/10"
+                    ? "bg-amber-400/15 text-amber-200/95 shadow-[0_0_12px_rgba(245,158,11,0.2)] border border-amber-400/25"
+                    : "text-amber-100/75 hover:text-amber-100/95 hover:bg-amber-500/10"
                 )}
               >
                 {item.label}
@@ -95,7 +95,7 @@ export function FloatingStudentNavbar({
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label="Toggle navigation menu"
-            className="flex md:hidden size-10 items-center justify-center rounded-xl border border-amber-500/25 bg-[#121622]/80 text-amber-200 hover:bg-amber-500/15"
+            className="flex md:hidden size-10 items-center justify-center rounded-xl border border-amber-500/20 bg-[#131622]/80 text-amber-200/90 hover:bg-amber-500/15"
           >
             {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
@@ -104,7 +104,7 @@ export function FloatingStudentNavbar({
 
       {/* Mobile drawer dropdown */}
       {mobileMenuOpen && (
-        <div className="mt-2 flex flex-col md:hidden rounded-2xl border border-amber-500/25 bg-[#0d0f17]/95 p-3 shadow-2xl backdrop-blur-2xl space-y-1">
+        <div className="mt-2 flex flex-col md:hidden rounded-2xl border border-amber-500/15 bg-[#0d0f18]/95 p-3 shadow-2xl backdrop-blur-2xl space-y-1">
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||
@@ -118,8 +118,8 @@ export function FloatingStudentNavbar({
                 className={cn(
                   "flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition-colors",
                   isActive
-                    ? "bg-amber-400/15 text-amber-200 border border-amber-400/30"
-                    : "text-amber-100/70 hover:bg-amber-500/10 hover:text-amber-200"
+                    ? "bg-amber-400/15 text-amber-200/95 border border-amber-400/25"
+                    : "text-amber-100/75 hover:bg-amber-500/10 hover:text-amber-100/95"
                 )}
               >
                 <span>{item.label}</span>
