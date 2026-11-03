@@ -35,29 +35,32 @@ export function SpeakingHubCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col justify-between overflow-hidden rounded-2xl sm:rounded-3xl p-6 sm:p-8 transition-all duration-300 hover:-translate-y-1",
+        "group relative flex flex-col justify-between overflow-hidden rounded-2xl sm:rounded-3xl p-6 sm:p-8 backdrop-blur-xl transition-all duration-300 hover:-translate-y-1",
         isDark
-          ? "border border-amber-500/20 bg-slate-950/30 backdrop-blur-xl shadow-[0_12px_40px_-8px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.06)] hover:border-amber-400/40 hover:bg-slate-950/40 hover:shadow-[0_18px_50px_-5px_rgba(0,0,0,0.8),0_0_25px_rgba(217,178,86,0.15)]"
-          : "border border-[#e6ddc9] bg-white shadow-soft text-[#201d18] hover:border-[#d4c5a9] hover:shadow-soft-lg"
+          ? "border border-amber-500/20 bg-slate-950/30 shadow-[0_12px_40px_-8px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.06)] hover:border-amber-400/40 hover:bg-slate-950/40 hover:shadow-[0_18px_50px_-5px_rgba(0,0,0,0.8),0_0_25px_rgba(217,178,86,0.15)]"
+          : "border border-slate-300/60 bg-[#f8fafc]/85 shadow-[0_10px_30px_-6px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.6)] text-slate-800 hover:border-slate-400/80 hover:bg-[#f1f5f9]/90 hover:shadow-[0_16px_40px_-6px_rgba(15,23,42,0.1)]"
       )}
     >
-      {/* Ambient corner glow in dark mode */}
-      {isDark && (
-        <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-amber-500/[0.15] blur-3xl transition-opacity duration-300 group-hover:opacity-100" />
-      )}
+      {/* Ambient corner glow */}
+      <div
+        className={cn(
+          "pointer-events-none absolute -right-12 -top-12 size-40 rounded-full blur-3xl transition-opacity duration-300 group-hover:opacity-100",
+          isDark ? "bg-amber-500/[0.15]" : "bg-sky-200/[0.3]"
+        )}
+      />
 
       <div>
         {/* Top Icon & Header */}
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <span
             className={cn(
-              "relative flex size-12 sm:size-14 shrink-0 items-center justify-center rounded-2xl border transition-all duration-300",
+              "relative flex size-12 sm:size-14 shrink-0 items-center justify-center rounded-2xl border backdrop-blur-md transition-all duration-300",
               isDark
-                ? "border-amber-400/30 bg-gradient-to-br from-amber-500/20 via-amber-600/10 to-transparent text-amber-300/95 shadow-[0_0_16px_rgba(245,158,11,0.22)] backdrop-blur-md"
-                : "border-[#e6ddc9] bg-[#f0e9dc] text-[#785a29] group-hover:bg-[#211d17] group-hover:text-[#faf8f3]"
+                ? "border-amber-400/30 bg-gradient-to-br from-amber-500/20 via-amber-600/10 to-transparent text-amber-300/95 shadow-[0_0_16px_rgba(245,158,11,0.22)]"
+                : "border-amber-400/35 bg-amber-50 text-amber-800 shadow-xs"
             )}
           >
-            <Mic className="size-6 sm:size-7" strokeWidth={1.75} />
+            <Mic className="size-6 sm:size-7 drop-shadow-xs" strokeWidth={1.75} />
           </span>
           <Link
             href={href}
@@ -65,7 +68,7 @@ export function SpeakingHubCard({
               "flex items-center gap-1.5 text-xs font-semibold transition-colors",
               isDark
                 ? "text-amber-300/80 hover:text-amber-200"
-                : "text-[#785a29] hover:text-[#201d18]"
+                : "text-amber-800 hover:text-amber-900"
             )}
           >
             <span>Open Practice</span>
@@ -78,7 +81,7 @@ export function SpeakingHubCard({
           <h3
             className={cn(
               "font-display text-xl sm:text-2xl font-semibold tracking-tight transition-colors",
-              isDark ? "text-amber-100/95" : "text-[#201d18]"
+              isDark ? "text-amber-100/95" : "text-slate-900"
             )}
           >
             {title}
@@ -86,7 +89,7 @@ export function SpeakingHubCard({
           <p
             className={cn(
               "text-xs sm:text-sm leading-relaxed",
-              isDark ? "text-amber-200/70" : "text-[#726b5d]"
+              isDark ? "text-amber-200/70" : "text-slate-600"
             )}
           >
             {description}
@@ -98,17 +101,17 @@ export function SpeakingHubCard({
       <div
         className={cn(
           "mt-6 pt-5 border-t",
-          isDark ? "border-amber-500/15" : "border-[#e6ddc9]"
+          isDark ? "border-amber-500/15" : "border-slate-300/50"
         )}
       >
         <label
           htmlFor="custom-speaking-prompt"
           className={cn(
             "mb-2 flex items-center gap-1.5 text-xs font-medium",
-            isDark ? "text-amber-200/90" : "text-[#726b5d]"
+            isDark ? "text-amber-200/90" : "text-slate-700"
           )}
         >
-          <Sparkles className={cn("size-3.5", isDark ? "text-amber-400" : "text-[#785a29]")} />
+          <Sparkles className={cn("size-3.5", isDark ? "text-amber-400" : "text-amber-600")} />
           <span>Enter Your Custom IELTS Speaking Question Here:</span>
         </label>
 
@@ -124,7 +127,7 @@ export function SpeakingHubCard({
               "w-full rounded-xl py-2.5 pr-24 pl-3.5 text-xs sm:text-sm transition-all duration-200 outline-none",
               isDark
                 ? "border border-amber-500/25 bg-[#0a0d14]/30 text-amber-100/95 placeholder:text-amber-200/35 focus:border-amber-400/60 focus:bg-[#0a0d14]/50 focus:ring-2 focus:ring-amber-500/20 backdrop-blur-md"
-                : "border border-[#e6ddc9] bg-[#faf8f3] text-[#201d18] placeholder:text-[#726b5d]/60 focus:border-[#785a29] focus:bg-white focus:ring-2 focus:ring-[#785a29]/15"
+                : "border border-slate-300/70 bg-[#edf2f7]/80 text-slate-800 placeholder:text-slate-500/70 focus:border-amber-600/60 focus:bg-white/90 focus:ring-2 focus:ring-amber-500/20"
             )}
           />
 
@@ -134,10 +137,10 @@ export function SpeakingHubCard({
               disabled={submitting}
               title="Start Practice with this Question"
               className={cn(
-                "group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all duration-200 outline-none",
+                "group/btn flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all duration-200 outline-none",
                 isDark
                   ? "border border-amber-400/35 bg-gradient-to-r from-amber-500/25 via-amber-400/20 to-amber-600/25 text-amber-200/95 shadow-[0_0_12px_rgba(245,158,11,0.2)] hover:border-amber-400/70 hover:from-amber-500/40 hover:to-amber-600/40 hover:text-amber-100 backdrop-blur-sm"
-                  : "bg-[#211d17] text-[#faf8f3] shadow-xs hover:bg-[#211d17]/90 active:scale-95"
+                  : "border border-amber-500/40 bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-xs hover:from-amber-700 hover:to-amber-800"
               )}
             >
               <Mic className="size-3.5 group-hover/btn:scale-110 transition-transform" />

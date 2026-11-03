@@ -19,7 +19,7 @@ export function BrandMark({ href = "/", className }: { href?: string; className?
           "relative flex size-9 shrink-0 items-center justify-center rounded-xl transition-all duration-300",
           isDark
             ? "border border-amber-400/30 bg-gradient-to-br from-amber-500/20 via-amber-600/10 to-transparent text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.2)] backdrop-blur-sm group-hover:border-amber-400/60"
-            : "bg-primary text-primary-foreground shadow-xs"
+            : "border border-amber-500/30 bg-amber-100/80 text-amber-900 shadow-xs"
         )}
       >
         <GraduationCap className="size-5" strokeWidth={1.75} />
@@ -27,7 +27,7 @@ export function BrandMark({ href = "/", className }: { href?: string; className?
       <span
         className={cn(
           "font-display text-lg leading-none font-semibold tracking-tight transition-colors",
-          isDark ? "text-white" : "text-foreground"
+          isDark ? "text-white" : "text-slate-900"
         )}
       >
         Aurelius{" "}
@@ -36,7 +36,7 @@ export function BrandMark({ href = "/", className }: { href?: string; className?
             "transition-colors",
             isDark
               ? "text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.35)]"
-              : "text-accent"
+              : "text-amber-700 font-bold"
           )}
         >
           IELTS

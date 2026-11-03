@@ -23,26 +23,29 @@ export function HomeHubCard({
     <Link
       href={href}
       className={cn(
-        "group relative flex flex-col justify-between overflow-hidden rounded-2xl sm:rounded-3xl p-6 sm:p-8 transition-all duration-300 hover:-translate-y-1",
+        "group relative flex flex-col justify-between overflow-hidden rounded-2xl sm:rounded-3xl p-6 sm:p-8 backdrop-blur-xl transition-all duration-300 hover:-translate-y-1",
         isDark
-          ? "border border-amber-500/20 bg-slate-950/30 backdrop-blur-xl shadow-[0_12px_40px_-8px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.06)] hover:border-amber-400/40 hover:bg-slate-950/40 hover:shadow-[0_18px_50px_-5px_rgba(0,0,0,0.8),0_0_25px_rgba(217,178,86,0.15)]"
-          : "border border-[#e6ddc9] bg-white shadow-soft text-[#201d18] hover:border-[#d4c5a9] hover:shadow-soft-lg"
+          ? "border border-amber-500/20 bg-slate-950/30 shadow-[0_12px_40px_-8px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.06)] hover:border-amber-400/40 hover:bg-slate-950/40 hover:shadow-[0_18px_50px_-5px_rgba(0,0,0,0.8),0_0_25px_rgba(217,178,86,0.15)]"
+          : "border border-slate-300/60 bg-[#f8fafc]/85 shadow-[0_10px_30px_-6px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.6)] text-slate-800 hover:border-slate-400/80 hover:bg-[#f1f5f9]/90 hover:shadow-[0_16px_40px_-6px_rgba(15,23,42,0.1)]"
       )}
     >
-      {/* Ambient glow in dark mode */}
-      {isDark && (
-        <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-amber-500/[0.15] blur-3xl transition-opacity duration-300 group-hover:opacity-100" />
-      )}
+      {/* Ambient glow in corner */}
+      <div
+        className={cn(
+          "pointer-events-none absolute -right-12 -top-12 size-40 rounded-full blur-3xl transition-opacity duration-300 group-hover:opacity-100",
+          isDark ? "bg-amber-500/[0.15]" : "bg-sky-200/[0.3]"
+        )}
+      />
 
       <div>
         {/* Glowing Icon */}
         <div className="mb-4 sm:mb-6">
           <span
             className={cn(
-              "relative flex size-12 sm:size-14 shrink-0 items-center justify-center rounded-2xl border transition-all duration-300",
+              "relative flex size-12 sm:size-14 shrink-0 items-center justify-center rounded-2xl border backdrop-blur-md transition-all duration-300",
               isDark
-                ? "border-amber-400/30 bg-gradient-to-br from-amber-500/20 via-amber-600/10 to-transparent text-amber-300/95 shadow-[0_0_16px_rgba(245,158,11,0.22)] backdrop-blur-md group-hover:border-amber-400/60 group-hover:shadow-[0_0_24px_rgba(245,158,11,0.4)]"
-                : "border-[#e6ddc9] bg-[#f0e9dc] text-[#785a29] group-hover:bg-[#211d17] group-hover:text-[#faf8f3]"
+                ? "border-amber-400/30 bg-gradient-to-br from-amber-500/20 via-amber-600/10 to-transparent text-amber-300/95 shadow-[0_0_16px_rgba(245,158,11,0.22)] group-hover:border-amber-400/60 group-hover:shadow-[0_0_24px_rgba(245,158,11,0.4)]"
+                : "border-amber-400/35 bg-amber-50 text-amber-800 shadow-xs group-hover:border-amber-500/60"
             )}
           >
             <Icon className="size-6 sm:size-7 drop-shadow-xs" strokeWidth={1.75} />
@@ -56,7 +59,7 @@ export function HomeHubCard({
               "font-display text-xl sm:text-2xl font-semibold tracking-tight transition-colors",
               isDark
                 ? "text-amber-100/95 group-hover:text-amber-200"
-                : "text-[#201d18] group-hover:text-[#785a29]"
+                : "text-slate-900 group-hover:text-amber-800"
             )}
           >
             {title}
@@ -64,7 +67,7 @@ export function HomeHubCard({
           <p
             className={cn(
               "text-sm sm:text-base leading-relaxed",
-              isDark ? "text-amber-200/65" : "text-[#726b5d]"
+              isDark ? "text-amber-200/65" : "text-slate-600"
             )}
           >
             {description}
@@ -75,8 +78,8 @@ export function HomeHubCard({
       {/* Action footer */}
       <div
         className={cn(
-          "mt-6 sm:mt-8 flex items-center justify-between pt-4 border-t",
-          isDark ? "border-amber-500/15" : "border-[#e6ddc9]"
+          "mt-6 sm:mt-8 flex items-center justify-between pt-4 border-t transition-colors",
+          isDark ? "border-amber-500/15" : "border-slate-300/50"
         )}
       >
         <span
@@ -84,7 +87,7 @@ export function HomeHubCard({
             "text-xs sm:text-sm font-medium transition-colors",
             isDark
               ? "text-amber-300/80 group-hover:text-amber-200"
-              : "text-[#785a29] group-hover:text-[#201d18]"
+              : "text-amber-800 group-hover:text-amber-950 font-semibold"
           )}
         >
           Open Module
@@ -94,7 +97,7 @@ export function HomeHubCard({
             "flex size-8 sm:size-9 items-center justify-center rounded-full border transition-all duration-300 group-hover:translate-x-1",
             isDark
               ? "border-amber-400/30 bg-amber-500/15 text-amber-200 group-hover:bg-amber-500/25"
-              : "border-[#e6ddc9] bg-[#f0e9dc] text-[#211d17] group-hover:bg-[#211d17] group-hover:text-[#faf8f3]"
+              : "border-slate-300/70 bg-slate-200/60 text-slate-700 group-hover:bg-slate-900 group-hover:text-white"
           )}
         >
           <ArrowRight className="size-4" />

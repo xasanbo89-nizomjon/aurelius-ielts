@@ -1,5 +1,8 @@
-export function formatRelativeTime(date: Date): string {
-  const diffMs = Date.now() - date.getTime();
+export function formatRelativeTime(date: Date | string | number | null | undefined): string {
+  if (!date) return "—";
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return "—";
+  const diffMs = Date.now() - d.getTime();
   const diffSec = Math.round(diffMs / 1000);
   const diffMin = Math.round(diffSec / 60);
   const diffHour = Math.round(diffMin / 60);
@@ -9,7 +12,7 @@ export function formatRelativeTime(date: Date): string {
   if (diffMin < 60) return `${diffMin}m ago`;
   if (diffHour < 24) return `${diffHour}h ago`;
   if (diffDay < 7) return `${diffDay}d ago`;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 /** Real accumulated seconds -> a compact "1h 23m" / "45m" / "0m" label — used across the Phase 15 study-time displays. */

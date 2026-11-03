@@ -425,28 +425,28 @@ html.dark .anti-gravity-space-theme,
   --ring: #d4af37;
 }
 
-/* Light Mode - Aurelius Original Editorial Light Theme */
+/* Light Mode - Soothing Soft Pearl, Warm Cream & Gentle Slate-50/Blue-50 Tones (Zero Eye Strain) */
 .light .anti-gravity-space-theme,
 html.light .anti-gravity-space-theme,
 .anti-gravity-space-theme.light-mode,
 html.light {
-  --background: #faf8f3;
-  --foreground: #201d18;
-  --card: #ffffff;
-  --card-foreground: #201d18;
-  --popover: #ffffff;
-  --popover-foreground: #201d18;
-  --primary: #211d17;
-  --primary-foreground: #faf8f3;
-  --secondary: #f0e9dc;
-  --secondary-foreground: #211d17;
-  --muted: #f2ede2;
-  --muted-foreground: #726b5d;
-  --accent: #785a29;
-  --accent-foreground: #faf8f3;
-  --border: #e6ddc9;
-  --input: #e6ddc9;
-  --ring: #785a29;
+  --background: #f1f4f9;
+  --foreground: #1e293b;
+  --card: #f8fafc;
+  --card-foreground: #1e293b;
+  --popover: #f8fafc;
+  --popover-foreground: #1e293b;
+  --primary: #0f172a;
+  --primary-foreground: #f8fafc;
+  --secondary: #e8eef6;
+  --secondary-foreground: #0f172a;
+  --muted: #edf2f8;
+  --muted-foreground: #64748b;
+  --accent: #b45309;
+  --accent-foreground: #ffffff;
+  --border: #cbd5e1;
+  --input: #cbd5e1;
+  --ring: #d97706;
 }
 
 @layer utilities {

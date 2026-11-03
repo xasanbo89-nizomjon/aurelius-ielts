@@ -1,16 +1,9 @@
-import type { Metadata } from "next";
+"use client";
+
+import { useEffect, useState } from "react";
 import { ClipboardCheck, Newspaper, PenLine } from "lucide-react";
 
-import { requireStudentProfile } from "@/lib/session";
-import { getWhatsNewFeed } from "@/lib/whats-new";
-import { recordLoginAndGetStreak } from "@/lib/login-streak";
-import { getStudentSuccessSummary } from "@/lib/analytics/student-success";
-import { getSubscriptionSummary } from "@/lib/subscription";
-import { getWeeklyActivityBreakdown } from "@/lib/study-activity";
-import { getStudentReadingStats } from "@/lib/reading-analytics";
-import { getSpeakingPracticeStats } from "@/lib/speaking-practice";
-import { getPremiumIdentity } from "@/lib/premium-identity";
-import { getStreakSummary } from "@/lib/streaks";
+import { getStudentDashboardData, type StudentDashboardData } from "@/actions/student-dashboard.actions";
 import { WelcomeHero } from "@/components/dashboard/welcome-hero";
 import { HomeHubCard } from "@/components/dashboard/home-hub-card";
 import { SpeakingHubCard } from "@/components/dashboard/speaking-hub-card";
@@ -21,59 +14,106 @@ import { PremiumBadge } from "@/components/student/premium-badge";
 import { ReadingStatsWidget } from "@/components/student/reading-stats-widget";
 import { SpeakingPracticeWidget } from "@/components/student/speaking-practice-widget";
 
-export const metadata: Metadata = { title: "Home — Aurelius IELTS" };
+const INITIAL_DASHBOARD_DATA: StudentDashboardData = {
+  firstName: "Xasan",
+  whatsNew: [],
+  streakCount: 0,
+  success: {
+    currentEstimate: null,
+    targetBand: null,
+    gap: null,
+    testsCompleted: 0,
+    weeklyProgress: { currentAvg: null, priorAvg: null, delta: null },
+    monthlyProgress: { currentAvg: null, priorAvg: null, delta: null },
+    trend: "NOT_ENOUGH_DATA",
+    goalProgressPercent: null,
+    estimatedCompletionDate: null,
+  },
+  subscription: {
+    subscription: {
+      id: "",
+      studentId: "",
+      status: "EXPIRED",
+      startDate: new Date(0),
+      endDate: new Date(0),
+      planId: null,
+      source: null,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    },
+    status: "EXPIRED",
+    daysRemaining: null,
+    hasAccess: false,
+    isPremium: false,
+  },
+  weeklyActivity: [],
+  readingStats: {
+    articlesRead: 0,
+    totalReadingTimeSeconds: 0,
+    wordsSaved: 0,
+    highlightsCreated: 0,
+    readingStreak: 0,
+  },
+  speakingStats: {
+    practiceCount: 0,
+    averageBand: null,
+    bestBand: null,
+    weakestSkill: null,
+    lastPracticeDate: null,
+  },
+  premium: {
+    isPremium: false,
+    planName: null,
+    expiresAt: null,
+    daysRemaining: null,
+  },
+  studyStreak: {
+    currentStreak: 0,
+    longestStreak: 0,
+    lastActiveDate: null,
+    streakFreezeUsedAt: null,
+  },
+};
 
-export default async function StudentDashboardPage() {
-  const { user, profile } = await requireStudentProfile();
+export default function StudentDashboardPage() {
+  const [data, setData] = useState<StudentDashboardData>(INITIAL_DASHBOARD_DATA);
 
-  const [
-    whatsNew,
-    streakCount,
-    success,
-    subscription,
-    weeklyActivity,
-    readingStats,
-    speakingStats,
-    premium,
-    studyStreak,
-  ] = await Promise.all([
-    getWhatsNewFeed(profile.id, profile.teacherId),
-    recordLoginAndGetStreak(user.id),
-    getStudentSuccessSummary(profile.id),
-    getSubscriptionSummary(profile.id),
-    getWeeklyActivityBreakdown(profile.id),
-    getStudentReadingStats(profile.id),
-    getSpeakingPracticeStats(profile.id),
-    getPremiumIdentity(profile.id),
-    getStreakSummary(profile.id),
-  ]);
-
-  const firstName = user.name?.trim().split(/\s+/)[0] || "Xasan";
+  useEffect(() => {
+    let active = true;
+    getStudentDashboardData().then((result) => {
+      if (active && result) {
+        setData(result);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="flex w-full flex-col gap-6 sm:gap-8">
       {/* Central Floating Welcome Panel with Adaptive Glassmorphism */}
       <WelcomeHero
-        firstName={firstName}
-        actions={premium.isPremium ? <PremiumBadge size="lg" /> : undefined}
+        firstName={data.firstName}
+        actions={data.premium.isPremium ? <PremiumBadge size="lg" /> : undefined}
       />
 
       {/* Mobile-only stats bar */}
       <MobileDashboardWidgets
-        targetBand={success.targetBand}
-        goalProgressPercent={success.goalProgressPercent}
-        isPremium={subscription.isPremium}
-        premiumDaysRemaining={subscription.isPremium ? subscription.daysRemaining : null}
-        streakCount={streakCount}
-        weeklyActivity={weeklyActivity}
+        targetBand={data.success.targetBand}
+        goalProgressPercent={data.success.goalProgressPercent}
+        isPremium={data.subscription.isPremium}
+        premiumDaysRemaining={data.subscription.isPremium ? data.subscription.daysRemaining : null}
+        streakCount={data.streakCount}
+        weeklyActivity={data.weeklyActivity}
       />
 
       {/* Clean Centered "Free Plan / Upgrade to Premium" Bar */}
       <PremiumSummaryCard
-        isPremium={premium.isPremium}
-        planName={premium.planName}
-        daysRemaining={premium.daysRemaining}
-        currentStreak={studyStreak.currentStreak}
+        isPremium={data.premium.isPremium}
+        planName={data.premium.planName}
+        daysRemaining={data.premium.daysRemaining}
+        currentStreak={data.studyStreak.currentStreak}
       />
 
       {/* The Four Cards: Balanced 2x2 Grid with True Low-Opacity Glassmorphism */}
@@ -111,9 +151,9 @@ export default async function StudentDashboardPage() {
       </div>
 
       {/* Secondary widgets */}
-      <ReadingStatsWidget stats={readingStats} />
-      <SpeakingPracticeWidget stats={speakingStats} />
-      <WhatsNewSection items={whatsNew} />
+      <ReadingStatsWidget stats={data.readingStats} />
+      <SpeakingPracticeWidget stats={data.speakingStats} />
+      <WhatsNewSection items={data.whatsNew} />
     </div>
   );
 }

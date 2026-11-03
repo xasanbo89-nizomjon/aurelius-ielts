@@ -20,10 +20,10 @@ export function DailyStreakBadge({
       className={cn(
         "group relative flex h-10 items-center gap-2 rounded-full px-3 text-sm font-medium transition-all duration-200",
         bare
-          ? isDark ? "hover:bg-amber-500/10" : "hover:bg-secondary/70"
+          ? isDark ? "hover:bg-amber-500/10" : "hover:bg-slate-200/60"
           : isDark
             ? "border border-amber-500/20 bg-slate-950/30 text-amber-100 hover:border-amber-400/40"
-            : "border border-border/80 bg-secondary/60 text-foreground hover:bg-secondary/90",
+            : "border border-slate-300/60 bg-slate-200/50 text-slate-800 hover:bg-slate-200/80 shadow-xs",
         className
       )}
       title={`${streakCount} day login streak`}
@@ -41,7 +41,7 @@ export function DailyStreakBadge({
       <span
         className={cn(
           "font-display text-xs sm:text-sm font-semibold tracking-tight tabular-nums transition-colors",
-          isDark ? "text-amber-100/95" : "text-foreground"
+          isDark ? "text-amber-100/95" : "text-slate-900"
         )}
       >
         {streakCount}

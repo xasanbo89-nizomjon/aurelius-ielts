@@ -34,13 +34,13 @@ export function FloatingStudentNavbar({
 
   return (
     <header className="sticky top-3 sm:top-4 z-40 w-full px-3 sm:px-6 lg:px-8">
-      {/* Sleek navigation bar adapting seamlessly between Dark Galaxy and Original Light */}
+      {/* Sleek, translucent glass navigation bar */}
       <div
         className={cn(
-          "mx-auto flex h-16 sm:h-20 max-w-7xl items-center justify-between gap-2 sm:gap-4 rounded-2xl sm:rounded-3xl px-3.5 sm:px-6 transition-all duration-300",
+          "mx-auto flex h-16 sm:h-20 max-w-7xl items-center justify-between gap-2 sm:gap-4 rounded-2xl sm:rounded-3xl px-3.5 sm:px-6 backdrop-blur-2xl transition-all duration-300",
           isDark
-            ? "border border-amber-500/20 bg-slate-950/30 backdrop-blur-2xl shadow-[0_12px_40px_-5px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.06)]"
-            : "border border-[#e6ddc9] bg-white/95 backdrop-blur-md shadow-soft text-[#201d18]"
+            ? "border border-amber-500/20 bg-slate-950/30 shadow-[0_12px_40px_-5px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.06)]"
+            : "border border-slate-300/60 bg-[#f8fafc]/85 shadow-[0_10px_30px_-6px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.6)] text-slate-800"
         )}
       >
         {/* Left: Aurelius IELTS Logo and text */}
@@ -55,10 +55,10 @@ export function FloatingStudentNavbar({
         <nav
           aria-label="Main Navigation"
           className={cn(
-            "hidden md:flex items-center gap-1 lg:gap-2 rounded-full p-1.5 transition-colors",
+            "hidden md:flex items-center gap-1 lg:gap-2 rounded-full p-1.5 backdrop-blur-xl border transition-colors",
             isDark
-              ? "border border-amber-500/15 bg-[#131622]/25 backdrop-blur-xl"
-              : "border border-[#e6ddc9] bg-[#f0e9dc]/60"
+              ? "border-amber-500/15 bg-[#131622]/25"
+              : "border-slate-300/50 bg-slate-200/40 shadow-inner"
           )}
         >
           {navItems.map((item) => {
@@ -72,14 +72,14 @@ export function FloatingStudentNavbar({
                 href={item.href}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "relative rounded-xl px-3.5 py-1.5 text-xs lg:text-sm font-medium transition-all duration-200 outline-none",
+                  "relative rounded-xl px-3.5 py-1.5 text-xs lg:text-sm font-medium transition-all duration-300 outline-none",
                   isActive
                     ? isDark
                       ? "bg-amber-400/20 text-amber-200/95 shadow-[0_0_12px_rgba(245,158,11,0.25)] border border-amber-400/30 font-semibold"
-                      : "bg-[#211d17] text-[#faf8f3] shadow-xs font-semibold"
+                      : "bg-slate-900 text-white shadow-xs font-semibold"
                     : isDark
-                    ? "text-amber-100/75 hover:text-amber-100 hover:bg-amber-500/10"
-                    : "text-[#726b5d] hover:text-[#201d18] hover:bg-[#f0e9dc]"
+                    ? "text-amber-100/75 hover:text-amber-100/95 hover:bg-amber-500/10"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
                 )}
               >
                 {item.label}
@@ -106,10 +106,10 @@ export function FloatingStudentNavbar({
             title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
             aria-label={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
             className={cn(
-              "flex size-10 items-center justify-center rounded-full border transition-all duration-300 outline-none focus-visible:ring-2",
+              "flex size-10 items-center justify-center rounded-full border transition-all duration-300 backdrop-blur-xl outline-none focus-visible:ring-2",
               isDark
                 ? "border-amber-500/20 bg-[#131622]/30 text-amber-300 hover:border-amber-400/50 hover:bg-amber-500/15 shadow-[0_0_12px_rgba(245,158,11,0.15)]"
-                : "border border-[#e6ddc9] bg-[#f0e9dc]/70 text-[#201d18] hover:bg-[#f0e9dc]"
+                : "border-slate-300/70 bg-slate-100/75 text-amber-700 hover:border-slate-400 hover:bg-slate-200/80 shadow-xs"
             )}
           >
             {isDark ? (
@@ -134,10 +134,10 @@ export function FloatingStudentNavbar({
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label="Toggle navigation menu"
             className={cn(
-              "flex md:hidden size-10 items-center justify-center rounded-xl border transition-colors",
+              "flex md:hidden size-10 items-center justify-center rounded-xl border backdrop-blur-xl transition-colors",
               isDark
                 ? "border-amber-500/20 bg-[#131622]/35 text-amber-200 hover:bg-amber-500/15"
-                : "border border-[#e6ddc9] bg-[#f0e9dc]/70 text-[#201d18] hover:bg-[#f0e9dc]"
+                : "border-slate-300/70 bg-slate-100/80 text-slate-700 hover:bg-slate-200"
             )}
           >
             {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
@@ -152,7 +152,7 @@ export function FloatingStudentNavbar({
             "mt-2 flex flex-col md:hidden rounded-2xl border p-3 shadow-xl backdrop-blur-2xl space-y-1 transition-colors",
             isDark
               ? "border-amber-500/20 bg-[#07090e]/95 text-amber-100"
-              : "border border-[#e6ddc9] bg-white text-[#201d18] shadow-soft"
+              : "border-slate-300/70 bg-[#f8fafc]/95 text-slate-800"
           )}
         >
           {navItems.map((item) => {
@@ -170,10 +170,10 @@ export function FloatingStudentNavbar({
                   isActive
                     ? isDark
                       ? "bg-amber-400/20 text-amber-200/95 border border-amber-400/30"
-                      : "bg-[#211d17] text-[#faf8f3] font-semibold"
+                      : "bg-slate-900 text-white font-semibold"
                     : isDark
                     ? "text-amber-100/75 hover:bg-amber-500/10 hover:text-amber-100/95"
-                    : "text-[#726b5d] hover:bg-[#f0e9dc] hover:text-[#201d18]"
+                    : "text-slate-600 hover:bg-slate-200/60 hover:text-slate-900"
                 )}
               >
                 <span>{item.label}</span>
@@ -181,7 +181,7 @@ export function FloatingStudentNavbar({
                   <span
                     className={cn(
                       "size-1.5 rounded-full",
-                      isDark ? "bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]" : "bg-[#211d17]"
+                      isDark ? "bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]" : "bg-white"
                     )}
                   />
                 )}
