@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Moon, Sun, X, LogOut, UserCircle, Settings } from "lucide-react";
+import { Menu, X, LogOut, UserCircle, Settings } from "lucide-react";
 
 import type { NavItem } from "@/lib/nav-config";
 import { BrandMark } from "@/components/layout/brand-mark";
@@ -35,7 +35,7 @@ export function FloatingStudentNavbar({
 }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark } = useTheme();
 
   async function handleSignOut() {
     await clearSessionAction();
@@ -106,26 +106,6 @@ export function FloatingStudentNavbar({
                 </Link>
               );
             })}
-
-            {/* Theme Switcher Toggle (Sun/Moon) */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              title={isDark ? "Switch to Light Mode" : "Switch to Dark Cosmic Mode"}
-              aria-label={isDark ? "Switch to Light Mode" : "Switch to Dark Cosmic Mode"}
-              className={cn(
-                "flex size-9 items-center justify-center rounded-full border transition-all duration-300 backdrop-blur-xl outline-none focus-visible:ring-2 ml-1",
-                isDark
-                  ? "border-amber-400/40 bg-slate-950/30 text-amber-300 hover:border-amber-300 hover:bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
-                  : "border-slate-300 bg-slate-100 text-amber-700 hover:bg-slate-200"
-              )}
-            >
-              {isDark ? (
-                <Sun className="size-4.5 transition-transform hover:rotate-45" />
-              ) : (
-                <Moon className="size-4.5 transition-transform hover:-rotate-12" />
-              )}
-            </button>
           </nav>
 
           {/* Mobile Menu Button */}
@@ -278,14 +258,6 @@ export function FloatingStudentNavbar({
               <span>{item.label}</span>
             </Link>
           ))}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium hover:bg-amber-500/15 cursor-pointer text-left"
-          >
-            <span>{isDark ? "Light Mode" : "Dark Cosmic Mode"}</span>
-            {isDark ? <Sun className="size-4 text-amber-300" /> : <Moon className="size-4 text-slate-700" />}
-          </button>
         </div>
       )}
     </header>
