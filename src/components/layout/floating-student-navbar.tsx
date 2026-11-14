@@ -162,9 +162,9 @@ export function FloatingStudentNavbar({
                   aria-hidden="true"
                 >
                   <img
-                    src="/images/luxury-royal-crown.png"
+                    src="/images/luxury-royal-crown.png?v=2"
                     alt="Imperial Gold Crown"
-                    className="size-full object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.12)]"
+                    className="size-full object-contain drop-shadow-sm"
                   />
                 </div>
               </button>
