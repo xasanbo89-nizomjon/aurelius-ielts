@@ -106,6 +106,26 @@ export function FloatingStudentNavbar({
                 </Link>
               );
             })}
+
+            {/* Theme Switcher Toggle (Sun/Moon) */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              title={isDark ? "Switch to Light Mode" : "Switch to Dark Cosmic Mode"}
+              aria-label={isDark ? "Switch to Light Mode" : "Switch to Dark Cosmic Mode"}
+              className={cn(
+                "flex size-9 items-center justify-center rounded-full border transition-all duration-300 backdrop-blur-xl outline-none focus-visible:ring-2 ml-1",
+                isDark
+                  ? "border-amber-400/40 bg-slate-950/30 text-amber-300 hover:border-amber-300 hover:bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                  : "border-slate-300 bg-slate-100 text-amber-700 hover:bg-slate-200"
+              )}
+            >
+              {isDark ? (
+                <Sun className="size-4.5 transition-transform hover:rotate-45" />
+              ) : (
+                <Moon className="size-4.5 transition-transform hover:-rotate-12" />
+              )}
+            </button>
           </nav>
 
           {/* Mobile Menu Button */}
@@ -120,7 +140,7 @@ export function FloatingStudentNavbar({
         </div>
 
         {/* Right: Floating Profile Card with Purple Plasma Flame & 3D Imperial Royal Crown */}
-        <div className="relative shrink-0 flex items-center gap-3">
+        <div className="relative shrink-0 flex items-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -180,19 +200,20 @@ export function FloatingStudentNavbar({
                   </span>
                 </div>
 
-                {/* 3. Floating 3D Royal Imperial Crown on the Top-Right Corner */}
+                {/* 3. Floating 3D Royal Imperial Crown on the Top-Right Corner - 100% Pure Transparent PNG */}
                 <div
-                  className="absolute -top-7 -right-6 pointer-events-none w-20 h-20 z-30 transition-transform duration-300 group-hover:scale-110"
+                  className="absolute -top-7 -right-5 pointer-events-none w-18 h-18 sm:w-20 sm:h-20 z-30 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[15deg] rotate-[10deg]"
                   aria-hidden="true"
                 >
                   <img
-                    src="/images/luxury-royal-crown.jpg"
+                    src="/images/luxury-royal-crown.png"
                     alt="Imperial Gold Crown"
-                    className="size-full object-contain mix-blend-screen drop-shadow-[0_0_15px_rgba(251,191,36,0.85)] drop-shadow-[0_0_25px_rgba(245,158,11,0.5)]"
+                    className="size-full object-contain drop-shadow-[0_0_16px_rgba(251,191,36,0.9)] drop-shadow-[0_0_28px_rgba(245,158,11,0.6)]"
                   />
                   {/* Sparkling golden starburst glints */}
-                  <span className="absolute top-2 right-4 size-1.5 rounded-full bg-white animate-ping" />
-                  <span className="absolute bottom-4 left-3 size-1 rounded-full bg-amber-300 animate-pulse" />
+                  <span className="absolute -top-1 right-3 size-1.5 rounded-full bg-white shadow-[0_0_8px_#fff] animate-ping" />
+                  <span className="absolute bottom-2 -left-1 size-1 rounded-full bg-amber-300 shadow-[0_0_6px_#fde047] animate-pulse" />
+                  <span className="absolute top-3 -right-1 size-1.5 rounded-full bg-amber-200 shadow-[0_0_8px_#fef08a] animate-ping" style={{ animationDuration: "2.3s" }} />
                 </div>
               </button>
             </DropdownMenuTrigger>
@@ -229,26 +250,6 @@ export function FloatingStudentNavbar({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
-          {/* Theme Switcher Toggle (Sun/Moon) */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            title={isDark ? "Switch to Light Mode" : "Switch to Dark Cosmic Mode"}
-            aria-label={isDark ? "Switch to Light Mode" : "Switch to Dark Cosmic Mode"}
-            className={cn(
-              "flex size-10 items-center justify-center rounded-full border transition-all duration-300 backdrop-blur-xl outline-none focus-visible:ring-2",
-              isDark
-                ? "border-amber-400/40 bg-slate-950/25 text-amber-300 hover:border-amber-300 hover:bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
-                : "border-slate-300 bg-slate-100 text-amber-700 hover:bg-slate-200"
-            )}
-          >
-            {isDark ? (
-              <Sun className="size-4.5 transition-transform hover:rotate-45" />
-            ) : (
-              <Moon className="size-4.5 transition-transform hover:-rotate-12" />
-            )}
-          </button>
         </div>
       </div>
 
@@ -277,6 +278,14 @@ export function FloatingStudentNavbar({
               <span>{item.label}</span>
             </Link>
           ))}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium hover:bg-amber-500/15 cursor-pointer text-left"
+          >
+            <span>{isDark ? "Light Mode" : "Dark Cosmic Mode"}</span>
+            {isDark ? <Sun className="size-4 text-amber-300" /> : <Moon className="size-4 text-slate-700" />}
+          </button>
         </div>
       )}
     </header>
