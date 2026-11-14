@@ -44,11 +44,10 @@ export function PremiumNavBadge({
               className={cn(
                 "size-5 transition-transform",
                 isDark
-                  ? "text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]"
-                  : "text-amber-600"
+                  ? "text-blue-400"
+                  : "text-blue-600"
               )}
               strokeWidth={1.75}
-              fill={isDark ? "rgba(245, 158, 11, 0.4)" : "rgba(217, 119, 6, 0.25)"}
             />
           </span>
 

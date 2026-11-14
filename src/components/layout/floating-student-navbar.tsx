@@ -121,9 +121,8 @@ export function FloatingStudentNavbar({
                 )}
                 aria-label={`Student account: ${displayName}`}
               >
-                {/* 1. Purple/Magenta Glowing Plasma Flame */}
+                {/* 1. Purple/Magenta Plasma Flame */}
                 <div className="relative flex size-8 shrink-0 items-center justify-center">
-                  <span className="absolute inset-0 -z-10 rounded-full bg-fuchsia-500/20 blur-md" />
                   <svg
                     viewBox="0 0 24 24"
                     className="size-7 drop-shadow-sm"
@@ -159,17 +158,14 @@ export function FloatingStudentNavbar({
 
                 {/* 3. Floating 3D Royal Imperial Crown on the Top-Right Corner */}
                 <div
-                  className="absolute -top-7 -right-5 pointer-events-none w-18 h-18 sm:w-20 sm:h-20 z-30 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[15deg] rotate-[10deg]"
+                  className="absolute -top-6 -right-5 pointer-events-none w-16 h-16 sm:w-18 sm:h-18 z-30 transition-transform duration-300 group-hover:scale-105 group-hover:rotate-[12deg] rotate-[8deg]"
                   aria-hidden="true"
                 >
                   <img
                     src="/images/luxury-royal-crown.png"
                     alt="Imperial Gold Crown"
-                    className="size-full object-contain drop-shadow-[0_2px_8px_rgba(37,99,235,0.2)]"
+                    className="size-full object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.12)]"
                   />
-                  {/* Subtle sparkling glints */}
-                  <span className="absolute -top-1 right-3 size-1.5 rounded-full bg-white shadow-[0_0_8px_#fff] animate-ping" />
-                  <span className="absolute bottom-2 -left-1 size-1 rounded-full bg-blue-300 shadow-[0_0_6px_#93c5fd] animate-pulse" />
                 </div>
               </button>
             </DropdownMenuTrigger>
