@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { BookOpen, ClipboardCheck, Headphones, Landmark } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
 import { HomeHubCard } from "@/components/dashboard/home-hub-card";
@@ -16,25 +15,25 @@ export default function StudentTestsHubPage() {
           title="Cambridge Tests"
           description="Official-style practice tests — free for every student, no subscription required."
           href="/student/tests/cambridge"
-          icon={Landmark}
+          icon="cambridge"
         />
         <HomeHubCard
           title="Reading Tests"
           description="Practice reading tests from your teacher, timed the same way as the real exam."
           href="/student/tests/reading"
-          icon={BookOpen}
+          icon="reading"
         />
         <HomeHubCard
           title="Listening Tests"
           description="Practice listening tests from your teacher, timed the same way as the real exam."
           href="/student/tests/listening"
-          icon={Headphones}
+          icon="listening"
         />
         <HomeHubCard
           title="Mock Exams"
           description="Sit all four sections back-to-back under real exam timing."
           href="/student/tests/mock"
-          icon={ClipboardCheck}
+          icon="mock"
         />
       </div>
     </>
