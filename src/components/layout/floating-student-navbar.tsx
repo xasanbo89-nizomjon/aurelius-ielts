@@ -52,17 +52,14 @@ export function FloatingStudentNavbar({
         <div
           className={cn(
             "relative flex h-16 sm:h-20 w-full lg:w-auto items-center justify-between gap-4 sm:gap-8 rounded-[32px] px-6 sm:px-10 transition-all duration-300",
-            isDark
-              ? "border border-amber-400/40 bg-slate-950/20 backdrop-blur-2xl shadow-[0_12px_45px_-5px_rgba(0,0,0,0.65),0_0_25px_rgba(245,158,11,0.2),inset_0_1px_1px_rgba(255,255,255,0.18)]"
-              : "border border-slate-300/70 bg-[#f8fafc]/90 backdrop-blur-xl shadow-md text-slate-800"
+            "border border-slate-200/80 bg-white/90 backdrop-blur-xl shadow-md text-slate-800"
           )}
           style={{
             clipPath: "none",
           }}
         >
-          {/* Subtle curved top sheen and bottom glowing gold rim */}
-          <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/25 to-transparent" />
-          <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/80 to-transparent shadow-[0_0_12px_rgba(251,191,36,0.8)]" />
+          {/* Subtle curved top sheen */}
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent" />
 
           {/* Left: Aurelius IELTS Golden Crest Logo */}
           <BrandMark href="/student/dashboard" />
@@ -89,20 +86,13 @@ export function FloatingStudentNavbar({
                   href={item.href}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "relative py-1 text-sm sm:text-base font-medium transition-all duration-200 outline-none",
+                    "relative py-1 text-sm sm:text-base transition-all duration-200 outline-none",
                     isActive
-                      ? isDark
-                        ? "text-[#fef08a] font-semibold drop-shadow-[0_0_10px_rgba(254,240,138,0.7)]"
-                        : "text-slate-900 font-bold border-b-2 border-slate-900"
-                      : isDark
-                      ? "text-[#fef3c7]/85 hover:text-[#fef08a] hover:drop-shadow-[0_0_8px_rgba(254,240,138,0.5)]"
-                      : "text-slate-600 hover:text-slate-900"
+                      ? "text-blue-600 font-bold border-b-2 border-blue-600"
+                      : "text-slate-600 hover:text-blue-600 font-medium"
                   )}
                 >
                   {item.label}
-                  {isActive && isDark && (
-                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-amber-400 via-amber-300 to-amber-400 rounded-full shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
-                  )}
                 </Link>
               );
             })}
@@ -113,7 +103,7 @@ export function FloatingStudentNavbar({
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label="Toggle navigation menu"
-            className="flex md:hidden size-10 items-center justify-center rounded-xl border border-amber-400/30 bg-slate-900/60 text-amber-200"
+            className="flex md:hidden size-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 hover:text-blue-600 shadow-xs"
           >
             {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
@@ -127,22 +117,16 @@ export function FloatingStudentNavbar({
                 type="button"
                 className={cn(
                   "relative group flex h-14 sm:h-16 items-center gap-3.5 rounded-[26px] px-5 sm:px-6 transition-all duration-300 outline-none cursor-pointer overflow-visible",
-                  isDark
-                    ? "border border-amber-400/40 bg-slate-950/25 backdrop-blur-2xl shadow-[0_12px_40px_-5px_rgba(0,0,0,0.65),0_0_22px_rgba(245,158,11,0.2),inset_0_1px_1px_rgba(255,255,255,0.18)] hover:border-amber-300 hover:shadow-[0_0_28px_rgba(245,158,11,0.35)]"
-                    : "border border-slate-300/70 bg-[#f8fafc]/90 shadow-md text-slate-800"
+                  "border border-slate-200/80 bg-white/90 shadow-md text-blue-950 hover:border-blue-300"
                 )}
                 aria-label={`Student account: ${displayName}`}
               >
-                {/* Subtle top reflection & bottom glowing gold rim */}
-                <div className="pointer-events-none absolute inset-x-4 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-                <div className="pointer-events-none absolute inset-x-4 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/80 to-transparent shadow-[0_0_10px_rgba(251,191,36,0.7)]" />
-
                 {/* 1. Purple/Magenta Glowing Plasma Flame */}
                 <div className="relative flex size-8 shrink-0 items-center justify-center">
-                  <span className="absolute inset-0 -z-10 rounded-full bg-fuchsia-500/40 blur-md animate-pulse" />
+                  <span className="absolute inset-0 -z-10 rounded-full bg-fuchsia-500/20 blur-md" />
                   <svg
                     viewBox="0 0 24 24"
-                    className="size-7 drop-shadow-[0_0_10px_rgba(217,70,239,0.9)] drop-shadow-[0_0_18px_rgba(168,85,247,0.7)]"
+                    className="size-7 drop-shadow-sm"
                     fill="none"
                     xmlns="http://www.w3.org/2000/svg"
                   >
@@ -168,19 +152,12 @@ export function FloatingStudentNavbar({
 
                 {/* 2. Text: "Xasan - Student" */}
                 <div className="flex items-center text-left">
-                  <span
-                    className={cn(
-                      "font-display text-sm sm:text-base font-semibold tracking-wide transition-colors",
-                      isDark
-                        ? "text-[#fef3c7] drop-shadow-[0_2px_8px_rgba(254,240,138,0.4)]"
-                        : "text-slate-800"
-                    )}
-                  >
+                  <span className="font-display text-sm sm:text-base font-semibold tracking-wide text-blue-950">
                     {displayName} - Student
                   </span>
                 </div>
 
-                {/* 3. Floating 3D Royal Imperial Crown on the Top-Right Corner - 100% Pure Transparent PNG */}
+                {/* 3. Floating 3D Royal Imperial Crown on the Top-Right Corner */}
                 <div
                   className="absolute -top-7 -right-5 pointer-events-none w-18 h-18 sm:w-20 sm:h-20 z-30 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-[15deg] rotate-[10deg]"
                   aria-hidden="true"
@@ -188,43 +165,37 @@ export function FloatingStudentNavbar({
                   <img
                     src="/images/luxury-royal-crown.png"
                     alt="Imperial Gold Crown"
-                    className="size-full object-contain drop-shadow-[0_0_16px_rgba(251,191,36,0.9)] drop-shadow-[0_0_28px_rgba(245,158,11,0.6)]"
+                    className="size-full object-contain drop-shadow-[0_2px_8px_rgba(37,99,235,0.2)]"
                   />
-                  {/* Sparkling golden starburst glints */}
+                  {/* Subtle sparkling glints */}
                   <span className="absolute -top-1 right-3 size-1.5 rounded-full bg-white shadow-[0_0_8px_#fff] animate-ping" />
-                  <span className="absolute bottom-2 -left-1 size-1 rounded-full bg-amber-300 shadow-[0_0_6px_#fde047] animate-pulse" />
-                  <span className="absolute top-3 -right-1 size-1.5 rounded-full bg-amber-200 shadow-[0_0_8px_#fef08a] animate-ping" style={{ animationDuration: "2.3s" }} />
+                  <span className="absolute bottom-2 -left-1 size-1 rounded-full bg-blue-300 shadow-[0_0_6px_#93c5fd] animate-pulse" />
                 </div>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className={cn(
-                "w-56 mt-2 rounded-2xl",
-                isDark
-                  ? "border border-amber-400/40 bg-[#0e111b]/95 text-amber-100 shadow-[0_12px_40px_rgba(0,0,0,0.85)] backdrop-blur-2xl"
-                  : "border border-slate-300 bg-white text-slate-800 shadow-xl"
-              )}
+              className="w-56 mt-2 rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-xl"
             >
               <DropdownMenuLabel className="flex flex-col gap-0.5">
-                <span className="font-display text-sm font-semibold">{user.name ?? "Xasan"}</span>
-                <span className="truncate text-xs opacity-70">{user.email}</span>
+                <span className="font-display text-sm font-semibold text-blue-950">{user.name ?? "Xasan"}</span>
+                <span className="truncate text-xs text-slate-500">{user.email}</span>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator className={isDark ? "bg-amber-500/20" : "bg-slate-200"} />
+              <DropdownMenuSeparator className="bg-slate-200" />
               <DropdownMenuItem asChild className="cursor-pointer">
                 <Link href="/student/profile">
-                  <UserCircle className="size-4 mr-2 text-amber-400" /> My Profile
+                  <UserCircle className="size-4 mr-2 text-blue-600" /> My Profile
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild className="cursor-pointer">
                 <Link href="/student/settings">
-                  <Settings className="size-4 mr-2 text-amber-400" /> Settings
+                  <Settings className="size-4 mr-2 text-blue-600" /> Settings
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuSeparator className={isDark ? "bg-amber-500/20" : "bg-slate-200"} />
+              <DropdownMenuSeparator className="bg-slate-200" />
               <DropdownMenuItem
                 onClick={handleSignOut}
-                className="cursor-pointer text-red-400 hover:text-red-300 focus:text-red-300"
+                className="cursor-pointer text-red-600 hover:text-red-700 focus:text-red-700"
               >
                 <LogOut className="size-4 mr-2" /> Log out
               </DropdownMenuItem>
@@ -239,8 +210,8 @@ export function FloatingStudentNavbar({
           className={cn(
             "mt-3 flex flex-col md:hidden rounded-3xl border p-4 shadow-2xl backdrop-blur-2xl space-y-2 transition-colors",
             isDark
-              ? "border-amber-400/40 bg-[#07090e]/95 text-amber-100"
-              : "border-slate-300 bg-white text-slate-800"
+              ? "border-slate-800 bg-[#07090e]/95 text-slate-100"
+              : "border-slate-200 bg-white text-slate-900 shadow-xl"
           )}
         >
           {[
@@ -253,7 +224,7 @@ export function FloatingStudentNavbar({
               key={item.href}
               href={item.href}
               onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium hover:bg-amber-500/15"
+              className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
             >
               <span>{item.label}</span>
             </Link>

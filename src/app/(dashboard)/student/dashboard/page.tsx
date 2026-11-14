@@ -136,20 +136,20 @@ export default function StudentDashboardPage() {
               className={cn(
                 "group relative block rounded-[28px] p-6 sm:p-7 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden",
                 isDark
-                  ? "border border-amber-400/40 bg-slate-950/20 shadow-[0_12px_45px_-5px_rgba(0,0,0,0.65),0_0_24px_rgba(245,158,11,0.2),inset_0_1px_1px_rgba(255,255,255,0.18)] hover:border-amber-300 hover:shadow-[0_0_32px_rgba(245,158,11,0.35)]"
+                  ? "border border-slate-700/60 bg-slate-900/60 shadow-lg text-slate-100"
                   : "border border-slate-300/70 bg-[#f8fafc]/90 shadow-md text-slate-800"
               )}
             >
-              {/* Top glass reflection and bottom glowing gold rim */}
+              {/* Top glass reflection */}
               <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/90 to-transparent shadow-[0_0_14px_rgba(251,191,36,0.85)]" />
+              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
 
               <h2
                 className={cn(
                   "font-display text-2xl sm:text-3xl font-bold tracking-tight mb-1.5 transition-colors",
                   isDark
-                    ? "text-[#fef08a] drop-shadow-[0_2px_10px_rgba(254,240,138,0.5)]"
-                    : "text-slate-900 font-bold"
+                    ? "text-blue-400"
+                    : "text-blue-950 font-bold"
                 )}
               >
                 Tests
@@ -158,7 +158,7 @@ export default function StudentDashboardPage() {
                 className={cn(
                   "text-sm sm:text-base font-medium",
                   isDark
-                    ? "text-[#fef3c7]/85 drop-shadow-[0_1px_6px_rgba(254,240,138,0.3)]"
+                    ? "text-slate-300"
                     : "text-slate-600"
                 )}
               >
@@ -173,21 +173,21 @@ export default function StudentDashboardPage() {
               className={cn(
                 "relative rounded-[32px] p-6 sm:p-9 text-center backdrop-blur-2xl transition-all duration-300 flex flex-col items-center justify-center overflow-hidden",
                 isDark
-                  ? "border border-amber-400/45 bg-slate-950/25 shadow-[0_15px_50px_-5px_rgba(0,0,0,0.7),0_0_28px_rgba(245,158,11,0.22),inset_0_1px_1px_rgba(255,255,255,0.2)]"
+                  ? "border border-slate-700/60 bg-slate-900/60 shadow-xl text-slate-100"
                   : "border border-slate-300/70 bg-[#f8fafc]/90 shadow-lg text-slate-800"
               )}
             >
-              {/* Top and bottom subtle glowing gold rims */}
+              {/* Top and bottom subtle rims */}
               <div className="pointer-events-none absolute inset-x-12 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/25 to-transparent" />
-              <div className="pointer-events-none absolute inset-x-12 bottom-0 h-[2.5px] bg-gradient-to-r from-transparent via-amber-400/90 to-transparent shadow-[0_0_16px_rgba(251,191,36,0.9)]" />
+              <div className="pointer-events-none absolute inset-x-12 bottom-0 h-[2.5px] bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
 
               {/* Title: Welcome back, Xasan */}
               <h1
                 className={cn(
                   "font-display text-3xl sm:text-4xl lg:text-[42px] font-extrabold tracking-tight mb-2 transition-colors leading-tight",
                   isDark
-                    ? "text-[#fef08a] drop-shadow-[0_4px_16px_rgba(254,240,138,0.6)]"
-                    : "text-slate-900"
+                    ? "text-blue-400"
+                    : "text-blue-950"
                 )}
               >
                 Welcome back, {data.firstName}
@@ -198,7 +198,7 @@ export default function StudentDashboardPage() {
                 className={cn(
                   "text-base sm:text-lg lg:text-xl font-normal mb-5 sm:mb-6",
                   isDark
-                    ? "text-[#fef3c7]/90 drop-shadow-[0_2px_8px_rgba(254,240,138,0.3)]"
+                    ? "text-slate-300"
                     : "text-slate-600"
                 )}
               >
@@ -211,14 +211,14 @@ export default function StudentDashboardPage() {
                 className={cn(
                   "group relative inline-flex items-center gap-1.5 rounded-full px-6 sm:px-8 py-2 sm:py-2.5 text-xs sm:text-sm transition-all duration-300 cursor-pointer outline-none",
                   isDark
-                    ? "border border-amber-400/45 bg-slate-950/35 backdrop-blur-md shadow-[0_0_16px_rgba(245,158,11,0.22),inset_0_1px_1px_rgba(255,255,255,0.18)] hover:border-amber-300 hover:shadow-[0_0_24px_rgba(245,158,11,0.4)]"
+                    ? "border border-slate-700 bg-slate-800/80 backdrop-blur-md shadow-sm hover:border-blue-500"
                     : "border border-slate-300 bg-slate-100 text-slate-800 hover:bg-slate-200"
                 )}
               >
-                <span className={isDark ? "text-[#fef3c7]/90 font-medium" : "text-slate-600 font-medium"}>
+                <span className={isDark ? "text-slate-300 font-medium" : "text-slate-600 font-medium"}>
                   {data.premium.isPremium ? "Premium Plan /" : "Free Plan /"}
                 </span>
-                <span className="text-amber-400 font-bold group-hover:text-amber-300 transition-colors drop-shadow-[0_0_8px_rgba(245,158,11,0.6)]">
+                <span className="text-blue-600 font-bold group-hover:text-blue-700 transition-colors">
                   {data.premium.isPremium ? "Manage Subscription" : "Upgrade to Premium"}
                 </span>
               </Link>
@@ -232,20 +232,20 @@ export default function StudentDashboardPage() {
               className={cn(
                 "group relative block rounded-[28px] p-6 sm:p-7 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden",
                 isDark
-                  ? "border border-amber-400/40 bg-slate-950/20 shadow-[0_12px_45px_-5px_rgba(0,0,0,0.65),0_0_24px_rgba(245,158,11,0.2),inset_0_1px_1px_rgba(255,255,255,0.18)] hover:border-amber-300 hover:shadow-[0_0_32px_rgba(245,158,11,0.35)]"
+                  ? "border border-slate-700/60 bg-slate-900/60 shadow-lg text-slate-100"
                   : "border border-slate-300/70 bg-[#f8fafc]/90 shadow-md text-slate-800"
               )}
             >
-              {/* Top glass reflection and bottom glowing gold rim */}
+              {/* Top glass reflection and bottom rim */}
               <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/90 to-transparent shadow-[0_0_14px_rgba(251,191,36,0.85)]" />
+              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
 
               <h2
                 className={cn(
                   "font-display text-2xl sm:text-3xl font-bold tracking-tight mb-1.5 transition-colors",
                   isDark
-                    ? "text-[#fef08a] drop-shadow-[0_2px_10px_rgba(254,240,138,0.5)]"
-                    : "text-slate-900 font-bold"
+                    ? "text-blue-400"
+                    : "text-blue-950 font-bold"
                 )}
               >
                 Writing
@@ -254,7 +254,7 @@ export default function StudentDashboardPage() {
                 className={cn(
                   "text-sm sm:text-base font-medium",
                   isDark
-                    ? "text-[#fef3c7]/85 drop-shadow-[0_1px_6px_rgba(254,240,138,0.3)]"
+                    ? "text-slate-300"
                     : "text-slate-600"
                 )}
               >
@@ -275,20 +275,20 @@ export default function StudentDashboardPage() {
               className={cn(
                 "group relative block rounded-[28px] p-6 sm:p-7 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden",
                 isDark
-                  ? "border border-amber-400/40 bg-slate-950/20 shadow-[0_12px_45px_-5px_rgba(0,0,0,0.65),0_0_24px_rgba(245,158,11,0.2),inset_0_1px_1px_rgba(255,255,255,0.18)] hover:border-amber-300 hover:shadow-[0_0_32px_rgba(245,158,11,0.35)]"
+                  ? "border border-slate-700/60 bg-slate-900/60 shadow-lg text-slate-100"
                   : "border border-slate-300/70 bg-[#f8fafc]/90 shadow-md text-slate-800"
               )}
             >
-              {/* Top glass reflection and bottom glowing gold rim */}
+              {/* Top glass reflection and bottom rim */}
               <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/90 to-transparent shadow-[0_0_14px_rgba(251,191,36,0.85)]" />
+              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
 
               <h2
                 className={cn(
                   "font-display text-2xl sm:text-3xl font-bold tracking-tight mb-1.5 transition-colors",
                   isDark
-                    ? "text-[#fef08a] drop-shadow-[0_2px_10px_rgba(254,240,138,0.5)]"
-                    : "text-slate-900 font-bold"
+                    ? "text-blue-400"
+                    : "text-blue-950 font-bold"
                 )}
               >
                 Leveled Articles
@@ -297,7 +297,7 @@ export default function StudentDashboardPage() {
                 className={cn(
                   "text-sm sm:text-base font-medium",
                   isDark
-                    ? "text-[#fef3c7]/85 drop-shadow-[0_1px_6px_rgba(254,240,138,0.3)]"
+                    ? "text-slate-300"
                     : "text-slate-600"
                 )}
               >
@@ -312,13 +312,13 @@ export default function StudentDashboardPage() {
               className={cn(
                 "relative rounded-[28px] p-6 sm:p-7 backdrop-blur-2xl transition-all duration-300 overflow-hidden",
                 isDark
-                  ? "border border-amber-400/40 bg-slate-950/20 shadow-[0_12px_45px_-5px_rgba(0,0,0,0.65),0_0_26px_rgba(245,158,11,0.22),inset_0_1px_1px_rgba(255,255,255,0.18)]"
+                  ? "border border-slate-700/60 bg-slate-900/60 shadow-lg text-slate-100"
                   : "border border-slate-300/70 bg-[#f8fafc]/90 shadow-md text-slate-800"
               )}
             >
-              {/* Top glass reflection and bottom glowing gold rim */}
+              {/* Top glass reflection and bottom rim */}
               <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/90 to-transparent shadow-[0_0_14px_rgba(251,191,36,0.85)]" />
+              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500/30 to-transparent" />
 
               {/* Title & Progress */}
               <div className="flex items-center justify-between mb-4">
@@ -327,8 +327,8 @@ export default function StudentDashboardPage() {
                     className={cn(
                       "font-display text-2xl sm:text-3xl font-bold tracking-tight mb-1 transition-colors",
                       isDark
-                        ? "text-[#fef08a] drop-shadow-[0_2px_10px_rgba(254,240,138,0.5)]"
-                        : "text-slate-900 font-bold"
+                        ? "text-blue-400"
+                        : "text-blue-950 font-bold"
                     )}
                   >
                     Speaking
@@ -337,7 +337,7 @@ export default function StudentDashboardPage() {
                     className={cn(
                       "text-sm sm:text-base font-medium",
                       isDark
-                        ? "text-[#fef3c7]/85 drop-shadow-[0_1px_6px_rgba(254,240,138,0.3)]"
+                        ? "text-slate-300"
                         : "text-slate-600"
                     )}
                   >
@@ -350,8 +350,8 @@ export default function StudentDashboardPage() {
                   className={cn(
                     "hidden sm:flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full border transition-all duration-200",
                     isDark
-                      ? "border-amber-400/40 text-amber-300 hover:bg-amber-400/15"
-                      : "border-slate-300 text-slate-700 hover:bg-slate-100"
+                      ? "border-blue-500/40 text-blue-400 hover:bg-blue-500/15"
+                      : "border-blue-200 text-blue-700 hover:bg-blue-50"
                   )}
                 >
                   <span>Practice Library</span>
@@ -365,7 +365,7 @@ export default function StudentDashboardPage() {
                 className={cn(
                   "relative flex items-center gap-3 rounded-2xl p-2 sm:p-2.5 backdrop-blur-md transition-all duration-300",
                   isDark
-                    ? "border border-amber-400/40 bg-slate-950/35 shadow-[inset_0_2px_10px_rgba(0,0,0,0.6)]"
+                    ? "border border-slate-700 bg-slate-950/50 shadow-inner"
                     : "border border-slate-300 bg-slate-100/90"
                 )}
               >
@@ -378,15 +378,15 @@ export default function StudentDashboardPage() {
                     className={cn(
                       "w-full bg-transparent text-sm sm:text-base font-normal outline-none transition-colors",
                       isDark
-                        ? "text-[#fef3c7] placeholder:text-[#fef3c7]/65"
+                        ? "text-slate-100 placeholder:text-slate-400"
                         : "text-slate-900 placeholder:text-slate-400"
                     )}
                   />
                   {/* Blinking cursor simulation if input is empty */}
-                  {!customQuestion && isDark && (
+                  {!customQuestion && (
                     <span
                       className={cn(
-                        "pointer-events-none absolute top-1 right-4 text-amber-300 font-bold",
+                        "pointer-events-none absolute top-1 right-4 text-blue-600 font-bold",
                         cursorVisible ? "opacity-100" : "opacity-0"
                       )}
                     >
@@ -395,28 +395,25 @@ export default function StudentDashboardPage() {
                   )}
                 </div>
 
-                {/* Golden Circular Microphone Button Surrounded by Concentric Particle Glow Ring */}
+                {/* Circular Microphone Button Surrounded by Concentric Particle Glow Ring */}
                 <div className="relative shrink-0 flex items-center justify-center p-1">
-                  {/* Concentric Golden Sparkling Ring Halo */}
-                  <div className="absolute inset-0 -m-1.5 rounded-full border border-amber-400/40 animate-spin opacity-75" style={{ animationDuration: "12s" }}>
-                    <span className="absolute -top-1 left-1/2 size-1.5 rounded-full bg-white shadow-[0_0_8px_#fff]" />
-                    <span className="absolute -bottom-1 left-1/4 size-1 rounded-full bg-amber-300 shadow-[0_0_6px_#fde047]" />
+                  <div className="absolute inset-0 -m-1.5 rounded-full border border-blue-400/30 animate-spin opacity-50" style={{ animationDuration: "12s" }}>
+                    <span className="absolute -top-1 left-1/2 size-1.5 rounded-full bg-blue-400 shadow-[0_0_8px_#60a5fa]" />
+                    <span className="absolute -bottom-1 left-1/4 size-1 rounded-full bg-blue-300 shadow-[0_0_6px_#93c5fd]" />
                   </div>
-                  <div className="absolute inset-0 -m-3 rounded-full border border-dashed border-amber-300/30 animate-spin opacity-60" style={{ animationDuration: "20s", animationDirection: "reverse" }} />
-                  <div className="absolute inset-0 rounded-full bg-amber-400/20 blur-md animate-pulse" />
+                  <div className="absolute inset-0 -m-3 rounded-full border border-dashed border-blue-300/30 animate-spin opacity-40" style={{ animationDuration: "20s", animationDirection: "reverse" }} />
+                  <div className="absolute inset-0 rounded-full bg-blue-400/15 blur-md animate-pulse" />
 
-                  {/* Circular Golden Button */}
+                  {/* Circular Blue Button */}
                   <button
                     type="submit"
                     title="Start Speaking Practice"
                     className={cn(
                       "relative flex size-12 sm:size-14 items-center justify-center rounded-full border-2 transition-all duration-300 outline-none cursor-pointer active:scale-95",
-                      isDark
-                        ? "border-[#fef08a] bg-gradient-to-br from-[#fef08a] via-[#f59e0b] to-[#d97706] text-slate-950 shadow-[0_0_24px_rgba(245,158,11,0.85)] hover:shadow-[0_0_36px_rgba(245,158,11,1)] hover:scale-105"
-                        : "border-amber-500 bg-amber-500 text-white shadow-md hover:bg-amber-600"
+                      "border-blue-500 bg-blue-600 text-white shadow-md hover:bg-blue-700"
                     )}
                   >
-                    <Mic className="size-6 sm:size-7 drop-shadow-sm text-slate-950" strokeWidth={2.2} />
+                    <Mic className="size-6 sm:size-7 drop-shadow-sm text-white" strokeWidth={2.2} />
                   </button>
                 </div>
               </form>
@@ -430,7 +427,7 @@ export default function StudentDashboardPage() {
       {/* ========================================================================= */}
       {/* SECONDARY DASHBOARD DATA & WIDGETS (Preserved below the main showcase)     */}
       {/* ========================================================================= */}
-      <div className="w-full max-w-7xl mx-auto space-y-8 pt-6 border-t border-amber-500/15">
+      <div className="w-full max-w-7xl mx-auto space-y-8 pt-6 border-t border-slate-200">
         <MobileDashboardWidgets
           targetBand={data.success.targetBand}
           goalProgressPercent={data.success.goalProgressPercent}

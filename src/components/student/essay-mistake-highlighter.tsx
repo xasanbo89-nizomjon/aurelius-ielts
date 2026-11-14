@@ -17,7 +17,7 @@ const CATEGORY_COLORS: Record<GrammarIssue["category"], string> = {
   TENSE: "bg-red-500/15 text-red-700 dark:text-red-400",
   ARTICLE: "bg-red-500/15 text-red-700 dark:text-red-400",
   PREPOSITION: "bg-red-500/15 text-red-700 dark:text-red-400",
-  SPELLING: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  SPELLING: "bg-sky-500/15 text-sky-700 dark:text-sky-400",
   LINKING_WORD: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
   INFORMAL_LANGUAGE: "bg-purple-500/15 text-purple-700 dark:text-purple-400",
 };

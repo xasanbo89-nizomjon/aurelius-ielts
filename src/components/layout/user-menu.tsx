@@ -67,23 +67,23 @@ export function UserMenu({
           className={cn(
             "focus-visible:ring-ring/50 group flex items-center gap-2.5 rounded-full p-1 pr-2.5 outline-none transition-all duration-300 focus-visible:ring-2",
             isDark
-              ? "border border-amber-500/20 bg-[#131622]/25 backdrop-blur-xl shadow-[0_4px_16px_rgba(0,0,0,0.35),0_0_15px_rgba(217,178,86,0.12)] hover:border-amber-400/40 hover:bg-amber-500/10"
-              : "border border-[#e6ddc9] bg-[#f0e9dc]/70 text-[#201d18] hover:bg-[#f0e9dc]"
+              ? "border border-slate-700 bg-slate-800/60 backdrop-blur-xl shadow-sm hover:border-blue-500"
+              : "border border-slate-200 bg-slate-100/80 text-slate-900 hover:bg-slate-200"
           )}
         >
           <Avatar
             className={cn(
               "size-8",
               isDark
-                ? "ring-1.5 ring-amber-400/60 shadow-[0_0_10px_rgba(245,158,11,0.25)]"
-                : "ring-1 ring-[#e6ddc9]"
+                ? "ring-1.5 ring-blue-500/60 shadow-sm"
+                : "ring-1 ring-slate-300"
             )}
           >
             <AvatarImage src={image ?? undefined} alt={displayName} />
             <AvatarFallback
               className={cn(
                 "font-display text-xs font-semibold",
-                isDark ? "bg-amber-950/70 text-amber-200/90" : "bg-[#211d17] text-[#faf8f3]"
+                isDark ? "bg-blue-950 text-blue-200" : "bg-blue-600 text-white"
               )}
             >
               {getInitials(displayName, email)}
@@ -93,7 +93,7 @@ export function UserMenu({
             <span
               className={cn(
                 "font-display block text-sm font-semibold tracking-tight transition-colors",
-                isDark ? "text-amber-100/90 group-hover:text-amber-100" : "text-[#201d18]"
+                isDark ? "text-slate-100 group-hover:text-blue-300" : "text-blue-950"
               )}
             >
               {displayName}
@@ -101,7 +101,7 @@ export function UserMenu({
             <span
               className={cn(
                 "block text-xs font-medium capitalize",
-                isDark ? "text-amber-300/70" : "text-[#785a29]"
+                isDark ? "text-blue-400" : "text-blue-600"
               )}
             >
               {role === "STUDENT" ? "Student" : role.toLowerCase()}
@@ -113,15 +113,15 @@ export function UserMenu({
           className={cn(
             "w-56",
             isDark
-              ? "border border-amber-500/20 bg-[#0e111b]/95 text-amber-100/90 shadow-[0_12px_36px_rgba(0,0,0,0.8)] backdrop-blur-2xl"
-              : "border border-[#e6ddc9] bg-white text-[#201d18] shadow-lg"
+              ? "border border-slate-800 bg-[#0e111b]/95 text-slate-100 shadow-xl backdrop-blur-2xl"
+              : "border border-slate-200 bg-white text-slate-900 shadow-lg"
           )}
         >
           <DropdownMenuLabel className="flex flex-col gap-0.5">
             <span
               className={cn(
                 "font-display text-sm font-semibold",
-                isDark ? "text-amber-100/90" : "text-[#201d18]"
+                isDark ? "text-slate-100" : "text-blue-950"
               )}
             >
               {displayName}
@@ -129,40 +129,40 @@ export function UserMenu({
             <span
               className={cn(
                 "truncate text-xs font-normal",
-                isDark ? "text-amber-200/60" : "text-[#726b5d]"
+                isDark ? "text-slate-400" : "text-slate-500"
               )}
             >
               {email}
             </span>
           </DropdownMenuLabel>
-          <DropdownMenuSeparator className={isDark ? "bg-amber-500/15" : "bg-[#e6ddc9]"} />
+          <DropdownMenuSeparator className={isDark ? "bg-slate-800" : "bg-slate-200"} />
           {role === "STUDENT" ? (
             <>
               <DropdownMenuItem
                 asChild
                 className={cn(
                   "cursor-pointer",
-                  isDark ? "focus:bg-amber-500/15 focus:text-amber-200" : "focus:bg-[#f0e9dc] focus:text-[#201d18]"
+                  isDark ? "focus:bg-blue-950/40 focus:text-blue-300" : "focus:bg-blue-50 focus:text-blue-900"
                 )}
               >
                 <Link href="/student/profile">
-                  <UserCircle className={isDark ? "text-amber-400/80" : "text-[#785a29]"} /> My Profile
+                  <UserCircle className={isDark ? "text-blue-400" : "text-blue-600"} /> My Profile
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 asChild
                 className={cn(
                   "cursor-pointer",
-                  isDark ? "focus:bg-amber-500/15 focus:text-amber-200" : "focus:bg-[#f0e9dc] focus:text-[#201d18]"
+                  isDark ? "focus:bg-blue-950/40 focus:text-blue-300" : "focus:bg-blue-50 focus:text-blue-900"
                 )}
               >
                 <Link href="/student/settings">
-                  <Settings className={isDark ? "text-amber-400/80" : "text-[#785a29]"} /> Settings
+                  <Settings className={isDark ? "text-blue-400" : "text-blue-600"} /> Settings
                 </Link>
               </DropdownMenuItem>
               {secondaryItems && secondaryItems.length > 0 && (
                 <>
-                  <DropdownMenuSeparator className={isDark ? "bg-amber-500/15" : "bg-[#e6ddc9]"} />
+                  <DropdownMenuSeparator className={isDark ? "bg-slate-800" : "bg-slate-200"} />
                   {secondaryItems.map((item) => {
                     const Icon = NAV_ICONS[item.icon];
                     return (
@@ -171,11 +171,11 @@ export function UserMenu({
                         asChild
                         className={cn(
                           "cursor-pointer",
-                          isDark ? "focus:bg-amber-500/15 focus:text-amber-200" : "focus:bg-[#f0e9dc] focus:text-[#201d18]"
+                          isDark ? "focus:bg-blue-950/40 focus:text-blue-300" : "focus:bg-blue-50 focus:text-blue-900"
                         )}
                       >
                         <Link href={item.href}>
-                          <Icon className={isDark ? "text-amber-400/75" : "text-[#785a29]"} /> {item.label}
+                          <Icon className={isDark ? "text-blue-400" : "text-blue-600"} /> {item.label}
                         </Link>
                       </DropdownMenuItem>
                     );
@@ -188,15 +188,15 @@ export function UserMenu({
               asChild
               className={cn(
                 "cursor-pointer",
-                isDark ? "focus:bg-amber-500/15 focus:text-amber-200" : "focus:bg-[#f0e9dc] focus:text-[#201d18]"
+                isDark ? "focus:bg-blue-950/40 focus:text-blue-300" : "focus:bg-blue-50 focus:text-blue-900"
               )}
             >
               <Link href="/teacher/dashboard">
-                <UserIcon className={isDark ? "text-amber-400/80" : "text-[#785a29]"} /> My account
+                <UserIcon className={isDark ? "text-blue-400" : "text-blue-600"} /> My account
               </Link>
             </DropdownMenuItem>
           )}
-          <DropdownMenuSeparator className={isDark ? "bg-amber-500/15" : "bg-[#e6ddc9]"} />
+          <DropdownMenuSeparator className={isDark ? "bg-slate-800" : "bg-slate-200"} />
           <DropdownMenuItem
             className={cn(
               "text-destructive cursor-pointer",
@@ -216,13 +216,13 @@ export function UserMenu({
         <DialogContent
           className={cn(
             isDark
-              ? "border border-amber-500/20 bg-[#0c0e17]/95 text-amber-100 backdrop-blur-2xl"
-              : "border border-[#e6ddc9] bg-white text-[#201d18]"
+              ? "border border-slate-800 bg-[#0c0e17]/95 text-slate-100 backdrop-blur-2xl"
+              : "border border-slate-200 bg-white text-slate-900"
           )}
         >
           <DialogHeader>
             <DialogTitle>Log out of Aurelius IELTS?</DialogTitle>
-            <DialogDescription className={isDark ? "text-amber-200/70" : "text-[#726b5d]"}>
+            <DialogDescription className={isDark ? "text-slate-400" : "text-slate-600"}>
               You will need to sign in again to access your practice tests and progress.
             </DialogDescription>
           </DialogHeader>
@@ -232,7 +232,7 @@ export function UserMenu({
                 type="button"
                 variant="outline"
                 disabled={signingOut}
-                className={isDark ? "border-amber-500/20 bg-transparent text-amber-100 hover:bg-amber-500/10" : ""}
+                className={isDark ? "border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800" : ""}
               >
                 Cancel
               </Button>

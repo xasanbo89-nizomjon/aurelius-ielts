@@ -41,8 +41,8 @@ export function DashboardShell({
         className={cn(
           "relative isolate min-h-svh w-full overflow-x-hidden transition-colors duration-500",
           isDark
-            ? "anti-gravity-space-theme dark dark-mode bg-transparent text-amber-100/90 selection:bg-amber-500/25 selection:text-amber-100"
-            : "light light-mode text-slate-800 selection:bg-amber-500/20 selection:text-amber-900"
+            ? "anti-gravity-space-theme dark dark-mode bg-transparent text-slate-100 selection:bg-blue-500/25 selection:text-white"
+            : "light light-mode text-slate-800 selection:bg-blue-500/20 selection:text-blue-900"
         )}
       >
         <a
@@ -50,7 +50,7 @@ export function DashboardShell({
           className={cn(
             "sr-only z-50 rounded-full border px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:outline-none",
             isDark
-              ? "border-amber-400/40 bg-[#131622]/80 text-amber-100"
+              ? "border-slate-700 bg-slate-900/90 text-slate-100"
               : "border-slate-300 bg-white/90 text-slate-800 shadow-sm"
           )}
         >

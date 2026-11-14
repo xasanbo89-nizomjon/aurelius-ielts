@@ -37,15 +37,15 @@ export function SpeakingHubCard({
       className={cn(
         "group relative flex flex-col justify-between overflow-hidden rounded-2xl sm:rounded-3xl p-6 sm:p-8 backdrop-blur-xl transition-all duration-300 hover:-translate-y-1",
         isDark
-          ? "border border-amber-500/20 bg-slate-950/30 shadow-[0_12px_40px_-8px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.06)] hover:border-amber-400/40 hover:bg-slate-950/40 hover:shadow-[0_18px_50px_-5px_rgba(0,0,0,0.8),0_0_25px_rgba(217,178,86,0.15)]"
-          : "border border-slate-300/60 bg-[#f8fafc]/85 shadow-[0_10px_30px_-6px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.6)] text-slate-800 hover:border-slate-400/80 hover:bg-[#f1f5f9]/90 hover:shadow-[0_16px_40px_-6px_rgba(15,23,42,0.1)]"
+          ? "border border-slate-800 bg-slate-900/40 shadow-lg hover:border-blue-500/40 hover:bg-slate-900/60"
+          : "border border-slate-300/60 bg-[#f8fafc]/85 shadow-[0_10px_30px_-6px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.6)] text-slate-800 hover:border-blue-300 hover:bg-[#f1f5f9]/90 hover:shadow-[0_16px_40px_-6px_rgba(15,23,42,0.1)]"
       )}
     >
       {/* Ambient corner glow */}
       <div
         className={cn(
           "pointer-events-none absolute -right-12 -top-12 size-40 rounded-full blur-3xl transition-opacity duration-300 group-hover:opacity-100",
-          isDark ? "bg-amber-500/[0.15]" : "bg-sky-200/[0.3]"
+          isDark ? "bg-blue-600/10" : "bg-blue-100/50"
         )}
       />
 
@@ -56,8 +56,8 @@ export function SpeakingHubCard({
             className={cn(
               "relative flex size-12 sm:size-14 shrink-0 items-center justify-center rounded-2xl border backdrop-blur-md transition-all duration-300",
               isDark
-                ? "border-amber-400/30 bg-gradient-to-br from-amber-500/20 via-amber-600/10 to-transparent text-amber-300/95 shadow-[0_0_16px_rgba(245,158,11,0.22)]"
-                : "border-amber-400/35 bg-amber-50 text-amber-800 shadow-xs"
+                ? "border-blue-500/30 bg-blue-950/40 text-blue-400"
+                : "border-blue-200 bg-blue-50 text-blue-700 shadow-xs"
             )}
           >
             <Mic className="size-6 sm:size-7 drop-shadow-xs" strokeWidth={1.75} />
@@ -67,8 +67,8 @@ export function SpeakingHubCard({
             className={cn(
               "flex items-center gap-1.5 text-xs font-semibold transition-colors",
               isDark
-                ? "text-amber-300/80 hover:text-amber-200"
-                : "text-amber-800 hover:text-amber-900"
+                ? "text-blue-400 hover:text-blue-300"
+                : "text-blue-600 hover:text-blue-800"
             )}
           >
             <span>Open Practice</span>
@@ -80,8 +80,8 @@ export function SpeakingHubCard({
         <div className="space-y-1.5">
           <h3
             className={cn(
-              "font-display text-xl sm:text-2xl font-semibold tracking-tight transition-colors",
-              isDark ? "text-amber-100/95" : "text-slate-900"
+              "font-display text-xl sm:text-2xl font-bold tracking-tight transition-colors",
+              isDark ? "text-slate-100" : "text-blue-950"
             )}
           >
             {title}
@@ -89,7 +89,7 @@ export function SpeakingHubCard({
           <p
             className={cn(
               "text-xs sm:text-sm leading-relaxed",
-              isDark ? "text-amber-200/70" : "text-slate-600"
+              isDark ? "text-slate-300" : "text-slate-600"
             )}
           >
             {description}
@@ -101,17 +101,17 @@ export function SpeakingHubCard({
       <div
         className={cn(
           "mt-6 pt-5 border-t",
-          isDark ? "border-amber-500/15" : "border-slate-300/50"
+          isDark ? "border-slate-800" : "border-slate-200"
         )}
       >
         <label
           htmlFor="custom-speaking-prompt"
           className={cn(
             "mb-2 flex items-center gap-1.5 text-xs font-medium",
-            isDark ? "text-amber-200/90" : "text-slate-700"
+            isDark ? "text-slate-300" : "text-slate-700"
           )}
         >
-          <Sparkles className={cn("size-3.5", isDark ? "text-amber-400" : "text-amber-600")} />
+          <Sparkles className="size-3.5 text-blue-600 dark:text-blue-400" />
           <span>Enter Your Custom IELTS Speaking Question Here:</span>
         </label>
 
@@ -126,8 +126,8 @@ export function SpeakingHubCard({
             className={cn(
               "w-full rounded-xl py-2.5 pr-24 pl-3.5 text-xs sm:text-sm transition-all duration-200 outline-none",
               isDark
-                ? "border border-amber-500/25 bg-[#0a0d14]/30 text-amber-100/95 placeholder:text-amber-200/35 focus:border-amber-400/60 focus:bg-[#0a0d14]/50 focus:ring-2 focus:ring-amber-500/20 backdrop-blur-md"
-                : "border border-slate-300/70 bg-[#edf2f7]/80 text-slate-800 placeholder:text-slate-500/70 focus:border-amber-600/60 focus:bg-white/90 focus:ring-2 focus:ring-amber-500/20"
+                ? "border border-slate-700 bg-slate-950/50 text-slate-100 placeholder:text-slate-500 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 backdrop-blur-md"
+                : "border border-slate-300/70 bg-[#edf2f7]/80 text-slate-800 placeholder:text-slate-500/70 focus:border-blue-500 focus:bg-white/90 focus:ring-2 focus:ring-blue-500/20"
             )}
           />
 
@@ -138,9 +138,7 @@ export function SpeakingHubCard({
               title="Start Practice with this Question"
               className={cn(
                 "group/btn flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all duration-200 outline-none",
-                isDark
-                  ? "border border-amber-400/35 bg-gradient-to-r from-amber-500/25 via-amber-400/20 to-amber-600/25 text-amber-200/95 shadow-[0_0_12px_rgba(245,158,11,0.2)] hover:border-amber-400/70 hover:from-amber-500/40 hover:to-amber-600/40 hover:text-amber-100 backdrop-blur-sm"
-                  : "border border-amber-500/40 bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-xs hover:from-amber-700 hover:to-amber-800"
+                "border border-blue-500 bg-blue-600 text-white shadow-xs hover:bg-blue-700 active:scale-95"
               )}
             >
               <Mic className="size-3.5 group-hover/btn:scale-110 transition-transform" />

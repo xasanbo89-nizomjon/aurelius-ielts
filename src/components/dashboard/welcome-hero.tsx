@@ -13,20 +13,20 @@ export function WelcomeHero({
       className={cn(
         "relative overflow-hidden rounded-2xl sm:rounded-3xl p-6 sm:p-8 backdrop-blur-xl transition-all duration-300",
         "border border-slate-300/60 bg-[#f8fafc]/85 shadow-[0_10px_30px_-6px_rgba(15,23,42,0.06),inset_0_1px_0_rgba(255,255,255,0.6)] text-slate-800",
-        "dark:border-amber-500/20 dark:bg-slate-950/30 dark:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.06)]"
+        "dark:border-slate-800 dark:bg-slate-900/40 dark:shadow-lg"
       )}
     >
-      {/* Soft ambient glow: Purple/amber in dark mode; soft sky/cream in light mode */}
+      {/* Soft ambient glow */}
       <div
         className={cn(
           "pointer-events-none absolute -left-12 -top-12 size-52 rounded-full blur-3xl",
-          "bg-sky-200/25 dark:bg-purple-600/20"
+          "bg-blue-100/40 dark:bg-blue-600/10"
         )}
       />
       <div
         className={cn(
           "pointer-events-none absolute -right-12 -bottom-12 size-52 rounded-full blur-3xl",
-          "bg-amber-100/30 dark:bg-amber-500/15"
+          "bg-sky-100/40 dark:bg-sky-600/10"
         )}
       />
 
@@ -34,15 +34,15 @@ export function WelcomeHero({
         <div className="space-y-1">
           <h1
             className={cn(
-              "font-display text-2xl sm:text-4xl font-bold tracking-tight text-slate-900",
-              "dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-amber-200/95 dark:via-amber-100/90 dark:to-amber-200/85 dark:drop-shadow-[0_2px_12px_rgba(245,158,11,0.22)]"
+              "font-display text-2xl sm:text-4xl font-bold tracking-tight text-blue-950",
+              "dark:text-slate-100"
             )}
           >
             Welcome back, {firstName}
           </h1>
           <p
             className={cn(
-              "text-sm sm:text-base font-normal text-slate-600 dark:text-amber-200/75"
+              "text-sm sm:text-base font-normal text-slate-600 dark:text-slate-300"
             )}
           >
             What would you like to study today?

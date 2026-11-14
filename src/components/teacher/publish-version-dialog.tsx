@@ -50,7 +50,7 @@ export function PublishVersionDialog({ previous, busy, onConfirm, onCancel }: { 
         </label>
 
         {archive && previous && previous.inProgress > 0 && (
-          <p className="text-sm text-amber-700 dark:text-amber-400" data-testid="archive-blocked">
+          <p className="text-sm text-blue-700 dark:text-blue-400" data-testid="archive-blocked">
             {previous.inProgress} student{previous.inProgress === 1 ? " is" : "s are"} in the middle of {name}, so it will stay published until they finish. This version is published either way.
           </p>
         )}

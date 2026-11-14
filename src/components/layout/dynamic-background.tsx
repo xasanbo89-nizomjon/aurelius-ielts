@@ -7,8 +7,8 @@ export function DynamicBackground() {
       {/* Soft, soothing pearl & light warm cream base gradient */}
       <div className="absolute inset-0 bg-gradient-to-b from-[#e8eef6] via-[#f1f4f9] to-[#e5ecf4]" />
 
-      {/* Gentle morning sunlight ambiance - Soft warm cream glow */}
-      <div className="absolute -top-[10%] right-[10%] size-[620px] rounded-full bg-amber-100/35 blur-[140px]" />
+      {/* Gentle morning sky ambiance - Soft azure glow */}
+      <div className="absolute -top-[10%] right-[10%] size-[620px] rounded-full bg-blue-100/40 blur-[140px]" />
 
       {/* Soothing serene sky ambient layer - Soft mist blue */}
       <div className="absolute top-[6%] -left-[10%] size-[700px] rounded-full bg-sky-200/35 blur-[150px]" />
@@ -21,7 +21,7 @@ export function DynamicBackground() {
 
       {/* Gentle horizon ambient glow */}
       <div className="absolute bottom-[4%] left-[18%] size-[760px] rounded-full bg-sky-100/50 blur-[160px]" />
-      <div className="absolute -bottom-[8%] right-[12%] size-[620px] rounded-full bg-amber-50/50 blur-[140px]" />
+      <div className="absolute -bottom-[8%] right-[12%] size-[620px] rounded-full bg-slate-100/50 blur-[140px]" />
     </div>
   );
 }

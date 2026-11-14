@@ -57,7 +57,7 @@ export function ReviewHeader({
         </Card>
         <Card className="py-3">
           <CardContent className="space-y-0.5 px-3 text-center">
-            <p className="flex items-center justify-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+            <p className="flex items-center justify-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400">
               <SkipForward className="size-3.5" /> Skipped
             </p>
             <p className="font-display text-lg font-medium">{skippedCount}</p>

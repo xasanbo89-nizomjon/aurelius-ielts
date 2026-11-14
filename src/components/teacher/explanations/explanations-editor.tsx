@@ -206,7 +206,7 @@ export function ExplanationsEditor({ data, ai: initialAi, usage }: { data: Expla
           <div className="space-y-1">
             <p className="text-sm font-medium" data-testid="ex-counts">
               {counts.approved + counts.auto} of {counts.total} question{counts.total === 1 ? "" : "s"} have an explanation students can see{counts.auto > 0 && <span> ({counts.auto} written automatically)</span>}
-              {counts.draft > 0 && <span className="text-amber-600 dark:text-amber-400"> · {counts.draft} draft{counts.draft === 1 ? "" : "s"} to review</span>}
+              {counts.draft > 0 && <span className="text-blue-600 dark:text-blue-400"> · {counts.draft} draft{counts.draft === 1 ? "" : "s"} to review</span>}
               {counts.outdated > 0 && <span className="text-destructive"> · {counts.outdated} outdated</span>}
             </p>
             <p className="text-muted-foreground text-xs">
@@ -277,7 +277,7 @@ export function ExplanationsEditor({ data, ai: initialAi, usage }: { data: Expla
                 </p>
                 <div className="flex items-center gap-2">
                   {row.hasEvidence && <span className="text-muted-foreground text-xs">evidence set</span>}
-                  <Badge variant={row.state === "APPROVED" ? "success" : row.state === "AUTO" ? "accent" : "outline"} className={cn(row.state === "OUTDATED" && "border-destructive/60 text-destructive", row.state === "DRAFT" && "border-amber-500/60 text-amber-700 dark:text-amber-300")} data-testid={`ex-state-${row.startNumber}`}>
+                  <Badge variant={row.state === "APPROVED" ? "success" : row.state === "AUTO" ? "accent" : "outline"} className={cn(row.state === "OUTDATED" && "border-destructive/60 text-destructive", row.state === "DRAFT" && "border-blue-500/60 text-blue-700 dark:text-blue-300")} data-testid={`ex-state-${row.startNumber}`}>
                     {STATE_LABEL[row.state]}
                   </Badge>
                 </div>

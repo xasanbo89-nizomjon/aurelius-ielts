@@ -11,7 +11,7 @@ import type { ReviewQuestionStatus } from "@/components/exam/review/review-quest
 const STATUS_META: Record<ReviewQuestionStatus, { icon: typeof CheckCircle2; label: string; badgeClassName: string }> = {
   correct: { icon: CheckCircle2, label: "Correct", badgeClassName: "border-success/30 bg-success/10 text-success" },
   incorrect: { icon: XCircle, label: "Incorrect", badgeClassName: "border-destructive/30 bg-destructive/10 text-destructive" },
-  skipped: { icon: MinusCircle, label: "Skipped", badgeClassName: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  skipped: { icon: MinusCircle, label: "Skipped", badgeClassName: "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400" },
 };
 
 /** A "Choose TWO" row is shown as one set (any order): what the student ticked and what was right. */
@@ -149,7 +149,7 @@ export function ReviewQuestionCard({
                   <tr key={line.number} data-testid={`review-line-${line.number}`} data-correct={line.isCorrect ? "true" : "false"} data-answered={line.answered ? "true" : "false"}>
                     <td className="py-1.5 pr-3 font-medium tabular-nums">
                       <span className="inline-flex items-center gap-1">
-                        {line.isCorrect ? <CheckCircle2 className="text-success size-3.5" aria-label="correct" /> : line.answered ? <XCircle className="text-destructive size-3.5" aria-label="incorrect" /> : <MinusCircle className="size-3.5 text-amber-600" aria-label="not answered" />}
+                        {line.isCorrect ? <CheckCircle2 className="text-success size-3.5" aria-label="correct" /> : line.answered ? <XCircle className="text-destructive size-3.5" aria-label="incorrect" /> : <MinusCircle className="size-3.5 text-blue-600 dark:text-blue-400" aria-label="not answered" />}
                         {line.number}
                       </span>
                     </td>
@@ -171,7 +171,7 @@ export function ReviewQuestionCard({
             <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
               <div>
                 <dt className="text-muted-foreground font-medium">Your answer</dt>
-                <dd className={status === "correct" ? undefined : status === "incorrect" ? "text-destructive" : "text-amber-600 dark:text-amber-400"} data-testid="review-student-answer">
+                <dd className={status === "correct" ? undefined : status === "incorrect" ? "text-destructive" : "text-blue-600 dark:text-blue-400"} data-testid="review-student-answer">
                   {lines[0]?.student ?? "Not answered"}
                 </dd>
               </div>

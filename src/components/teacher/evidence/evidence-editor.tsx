@@ -228,7 +228,7 @@ export function EvidenceEditor({ data, ai: initialAi }: { data: EvidenceEditorDa
         <div className="space-y-1">
           <p className="text-sm font-medium" data-testid="ev-coverage">
             Evidence is set for {coverage.confirmed} of {coverage.total} question{coverage.total === 1 ? "" : "s"}
-            {coverage.suggested > 0 && <span className="text-amber-600 dark:text-amber-400"> · {coverage.suggested} AI suggestion{coverage.suggested === 1 ? "" : "s"} waiting for you</span>}
+            {coverage.suggested > 0 && <span className="text-blue-600 dark:text-blue-400"> · {coverage.suggested} AI suggestion{coverage.suggested === 1 ? "" : "s"} waiting for you</span>}
           </p>
           <p className="text-muted-foreground text-xs">
             In their review students see the evidence as light-green words with a [number] badge, and pressing the question scrolls the passage to it, only where evidence is set. A True / False / Not Given question whose answer is Not Given needs none.
@@ -426,7 +426,7 @@ export function EvidenceEditor({ data, ai: initialAi }: { data: EvidenceEditorDa
                                 <CheckCircle2 className="size-3" aria-hidden="true" /> Evidence set
                               </Badge>
                             )}
-                            {entry.item?.state === "SUGGESTED" && <Badge variant="outline" className="border-amber-500/60 text-amber-700 dark:text-amber-300">AI suggestion</Badge>}
+                            {entry.item?.state === "SUGGESTED" && <Badge variant="outline" className="border-blue-500/60 text-blue-700 dark:text-blue-300">AI suggestion</Badge>}
                             {!entry.item && entry.needsNoEvidence && <Badge variant="outline">Not Given - none needed</Badge>}
                             {!entry.item && !entry.needsNoEvidence && <Badge variant="outline">Not set</Badge>}
                           </div>

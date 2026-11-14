@@ -378,7 +378,7 @@ function AnswerKeySection({ importedTestId, validation, answers }: { importedTes
         <div className="flex items-center justify-between">
           <h2 className="font-display text-lg font-medium">Answer Key</h2>
           {missingCount > 0 && (
-            <Badge variant="outline" className="text-amber-600">
+            <Badge variant="outline" className="text-blue-600">
               {missingCount} missing
             </Badge>
           )}

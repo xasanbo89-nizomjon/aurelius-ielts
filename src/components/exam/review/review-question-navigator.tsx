@@ -43,7 +43,7 @@ export function ReviewQuestionNavigator({
                 "focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 question.status === "correct" && "border-success/30 bg-success/15 text-success hover:bg-success/25",
                 question.status === "incorrect" && "border-destructive/30 bg-destructive/15 text-destructive hover:bg-destructive/25",
-                question.status === "skipped" && "border-amber-500/30 bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 dark:text-amber-400",
+                question.status === "skipped" && "border-blue-500/30 bg-blue-500/15 text-blue-600 hover:bg-blue-500/25 dark:text-blue-400",
                 isCurrent && "ring-2 ring-sky-500 ring-offset-2 ring-offset-background"
               )}
             >
@@ -63,7 +63,7 @@ export function ReviewQuestionNavigator({
           Incorrect: {incorrectCount}
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="size-3 rounded border border-amber-500/30 bg-amber-500/15" aria-hidden="true" />
+          <span className="size-3 rounded border border-blue-500/30 bg-blue-500/15" aria-hidden="true" />
           Skipped: {skippedCount}
         </span>
       </div>

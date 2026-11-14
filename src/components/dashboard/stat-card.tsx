@@ -34,7 +34,7 @@ export function StatCard({
           </p>
           {caption && <p className="text-muted-foreground text-xs">{caption}</p>}
         </div>
-        <span className="bg-secondary text-accent flex size-10 shrink-0 items-center justify-center rounded-xl">
+        <span className="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 flex size-10 shrink-0 items-center justify-center rounded-xl">
           <Icon className="size-5" strokeWidth={1.75} />
         </span>
       </CardContent>

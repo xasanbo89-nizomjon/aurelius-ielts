@@ -1,12 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 
 export function BrandMark({ href = "/", className }: { href?: string; className?: string }) {
-  const { isDark } = useTheme();
-
   return (
     <Link
       href={href}
@@ -87,26 +84,12 @@ export function BrandMark({ href = "/", className }: { href?: string; className?
         </svg>
       </div>
 
-      {/* Two-line Golden Typography: "Aurelius" on top, "IELTS" below */}
+      {/* Two-line Typography: "Aurelius" on top, "IELTS" below */}
       <div className="flex flex-col text-left leading-none">
-        <span
-          className={cn(
-            "font-serif text-base sm:text-lg font-bold tracking-wide transition-colors",
-            isDark
-              ? "text-[#fef08a] drop-shadow-[0_2px_10px_rgba(254,240,138,0.5)]"
-              : "text-slate-900"
-          )}
-        >
+        <span className="font-serif text-base sm:text-lg font-bold tracking-wide text-slate-900 dark:text-white">
           Aurelius
         </span>
-        <span
-          className={cn(
-            "font-display text-sm sm:text-base font-black tracking-widest transition-colors",
-            isDark
-              ? "text-[#f59e0b] drop-shadow-[0_2px_12px_rgba(245,158,11,0.6)]"
-              : "text-amber-700"
-          )}
-        >
+        <span className="font-display text-sm sm:text-base font-black tracking-widest text-blue-600">
           IELTS
         </span>
       </div>

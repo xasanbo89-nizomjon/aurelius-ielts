@@ -64,9 +64,9 @@ export default async function RecordYourAnswerPage({
         title="Record your answer"
         description="Answer an IELTS Speaking question out loud and get an AI assessment of your fluency, vocabulary, grammar and pronunciation."
         actions={
-          <Button asChild variant="outline" size="sm" className="border-amber-500/30 text-amber-100 hover:bg-amber-500/10">
+          <Button asChild variant="outline" size="sm" className="border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-500/30 dark:text-blue-300 dark:hover:bg-blue-500/10">
             <Link href="/student/speaking-practice/recordings">
-              <History className="size-4 text-amber-300" /> My recordings
+              <History className="size-4 text-blue-600 dark:text-blue-400" /> My recordings
             </Link>
           </Button>
         }

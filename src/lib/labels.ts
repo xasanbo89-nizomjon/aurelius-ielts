@@ -140,7 +140,7 @@ export const VOCABULARY_STATUS_COLORS: Record<VocabularyStatus, { dot: string; b
   LEARNING: {
     dot: "bg-amber-500",
     bg: "bg-amber-500/10",
-    text: "text-amber-600 dark:text-amber-400",
+    text: "text-blue-700 dark:text-blue-300",
     border: "border-amber-500/25",
   },
   KNOWN: { dot: "bg-blue-500", bg: "bg-blue-500/10", text: "text-blue-600 dark:text-blue-400", border: "border-blue-500/25" },
