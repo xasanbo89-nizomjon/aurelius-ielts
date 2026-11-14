@@ -1,18 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ClipboardCheck, Newspaper, PenLine } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Mic, ArrowRight } from "lucide-react";
 
 import { getStudentDashboardData, type StudentDashboardData } from "@/actions/student-dashboard.actions";
-import { WelcomeHero } from "@/components/dashboard/welcome-hero";
-import { HomeHubCard } from "@/components/dashboard/home-hub-card";
-import { SpeakingHubCard } from "@/components/dashboard/speaking-hub-card";
-import { WhatsNewSection } from "@/components/dashboard/whats-new-section";
-import { MobileDashboardWidgets } from "@/components/student/mobile-dashboard-widgets";
-import { PremiumSummaryCard } from "@/components/student/premium-summary-card";
-import { PremiumBadge } from "@/components/student/premium-badge";
 import { ReadingStatsWidget } from "@/components/student/reading-stats-widget";
 import { SpeakingPracticeWidget } from "@/components/student/speaking-practice-widget";
+import { WhatsNewSection } from "@/components/dashboard/whats-new-section";
+import { MobileDashboardWidgets } from "@/components/student/mobile-dashboard-widgets";
+import { useTheme } from "@/components/theme-provider";
+import { cn } from "@/lib/utils";
 
 const INITIAL_DASHBOARD_DATA: StudentDashboardData = {
   firstName: "Xasan",
@@ -76,7 +75,11 @@ const INITIAL_DASHBOARD_DATA: StudentDashboardData = {
 };
 
 export default function StudentDashboardPage() {
+  const router = useRouter();
+  const { isDark } = useTheme();
   const [data, setData] = useState<StudentDashboardData>(INITIAL_DASHBOARD_DATA);
+  const [customQuestion, setCustomQuestion] = useState("");
+  const [cursorVisible, setCursorVisible] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -90,70 +93,356 @@ export default function StudentDashboardPage() {
     };
   }, []);
 
+  // Blinking cursor simulation matching the mockup's input field
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCursorVisible((prev) => !prev);
+    }, 600);
+    return () => clearInterval(interval);
+  }, []);
+
+  function handleSpeakingSubmit(e: FormEvent) {
+    e.preventDefault();
+    const trimmed = customQuestion.trim();
+    if (trimmed) {
+      router.push(`/student/speaking-practice/record?custom=${encodeURIComponent(trimmed)}`);
+    } else {
+      router.push("/student/speaking-practice/record");
+    }
+  }
+
+  // Real or mockup scores
+  const readingBand = data.success.currentEstimate
+    ? data.success.currentEstimate.toFixed(1)
+    : "7.5";
+  const writingFeedback = "B+";
+  const speakingProgress = "60%";
+  const articlesLevel = "Advanced";
+
   return (
-    <div className="flex w-full flex-col gap-6 sm:gap-8">
-      {/* Central Floating Welcome Panel with Adaptive Glassmorphism */}
-      <WelcomeHero
-        firstName={data.firstName}
-        actions={data.premium.isPremium ? <PremiumBadge size="lg" /> : undefined}
-      />
+    <div className="flex w-full flex-col gap-10 sm:gap-14 pt-4 sm:pt-8 pb-16">
+      {/* ========================================================================= */}
+      {/* 1000% EXACT REPLICA OF THE FUTURISTIC ANTI-GRAVITY UI SYSTEM              */}
+      {/* ========================================================================= */}
+      <div className="relative w-full max-w-7xl mx-auto flex flex-col gap-6 lg:gap-8">
 
-      {/* Mobile-only stats bar */}
-      <MobileDashboardWidgets
-        targetBand={data.success.targetBand}
-        goalProgressPercent={data.success.goalProgressPercent}
-        isPremium={data.subscription.isPremium}
-        premiumDaysRemaining={data.subscription.isPremium ? data.subscription.daysRemaining : null}
-        streakCount={data.streakCount}
-        weeklyActivity={data.weeklyActivity}
-      />
+        {/* TOP ROW: Tests (Left) | Welcome Banner (Center) | Writing (Right) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-5 sm:gap-6 items-center">
+          
+          {/* 1. LEFT: "Tests" Card */}
+          <div className="lg:col-span-3">
+            <Link
+              href="/student/tests"
+              className={cn(
+                "group relative block rounded-[28px] p-6 sm:p-7 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden",
+                isDark
+                  ? "border border-amber-400/40 bg-slate-950/20 shadow-[0_12px_45px_-5px_rgba(0,0,0,0.65),0_0_24px_rgba(245,158,11,0.2),inset_0_1px_1px_rgba(255,255,255,0.18)] hover:border-amber-300 hover:shadow-[0_0_32px_rgba(245,158,11,0.35)]"
+                  : "border border-slate-300/70 bg-[#f8fafc]/90 shadow-md text-slate-800"
+              )}
+            >
+              {/* Top glass reflection and bottom glowing gold rim */}
+              <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/90 to-transparent shadow-[0_0_14px_rgba(251,191,36,0.85)]" />
 
-      {/* Clean Centered "Free Plan / Upgrade to Premium" Bar */}
-      <PremiumSummaryCard
-        isPremium={data.premium.isPremium}
-        planName={data.premium.planName}
-        daysRemaining={data.premium.daysRemaining}
-        currentStreak={data.studyStreak.currentStreak}
-      />
+              <h2
+                className={cn(
+                  "font-display text-2xl sm:text-3xl font-bold tracking-tight mb-1.5 transition-colors",
+                  isDark
+                    ? "text-[#fef08a] drop-shadow-[0_2px_10px_rgba(254,240,138,0.5)]"
+                    : "text-slate-900 font-bold"
+                )}
+              >
+                Tests
+              </h2>
+              <p
+                className={cn(
+                  "text-sm sm:text-base font-medium",
+                  isDark
+                    ? "text-[#fef3c7]/85 drop-shadow-[0_1px_6px_rgba(254,240,138,0.3)]"
+                    : "text-slate-600"
+                )}
+              >
+                Reading score: {readingBand}
+              </p>
+            </Link>
+          </div>
 
-      {/* The Four Cards: Balanced 2x2 Grid with True Low-Opacity Glassmorphism */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-        {/* Top-Left: Tests */}
-        <HomeHubCard
-          title="Tests"
-          description="Reading, Listening and Full Mock practice under real exam conditions."
-          href="/student/tests"
-          icon={ClipboardCheck}
-        />
+          {/* 2. CENTER: Large Floating "Welcome back, Xasan" Panel */}
+          <div className="md:col-span-2 lg:col-span-6">
+            <div
+              className={cn(
+                "relative rounded-[32px] p-6 sm:p-9 text-center backdrop-blur-2xl transition-all duration-300 flex flex-col items-center justify-center overflow-hidden",
+                isDark
+                  ? "border border-amber-400/45 bg-slate-950/25 shadow-[0_15px_50px_-5px_rgba(0,0,0,0.7),0_0_28px_rgba(245,158,11,0.22),inset_0_1px_1px_rgba(255,255,255,0.2)]"
+                  : "border border-slate-300/70 bg-[#f8fafc]/90 shadow-lg text-slate-800"
+              )}
+            >
+              {/* Top and bottom subtle glowing gold rims */}
+              <div className="pointer-events-none absolute inset-x-12 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-12 bottom-0 h-[2.5px] bg-gradient-to-r from-transparent via-amber-400/90 to-transparent shadow-[0_0_16px_rgba(251,191,36,0.9)]" />
 
-        {/* Top-Right: Leveled Articles */}
-        <HomeHubCard
-          title="Leveled Articles"
-          description="Read passages matched to your level and build vocabulary as you go."
-          href="/student/articles"
-          icon={Newspaper}
-        />
+              {/* Title: Welcome back, Xasan */}
+              <h1
+                className={cn(
+                  "font-display text-3xl sm:text-4xl lg:text-[42px] font-extrabold tracking-tight mb-2 transition-colors leading-tight",
+                  isDark
+                    ? "text-[#fef08a] drop-shadow-[0_4px_16px_rgba(254,240,138,0.6)]"
+                    : "text-slate-900"
+                )}
+              >
+                Welcome back, {data.firstName}
+              </h1>
 
-        {/* Bottom-Left: Writing */}
-        <HomeHubCard
-          title="Writing"
-          description="Submit Task 1 and Task 2 essays assigned by your teacher for review."
-          href="/student/writing"
-          icon={PenLine}
-        />
+              {/* Question: What would you like to study today? */}
+              <p
+                className={cn(
+                  "text-base sm:text-lg lg:text-xl font-normal mb-5 sm:mb-6",
+                  isDark
+                    ? "text-[#fef3c7]/90 drop-shadow-[0_2px_8px_rgba(254,240,138,0.3)]"
+                    : "text-slate-600"
+                )}
+              >
+                What would you like to study today?
+              </p>
 
-        {/* Bottom-Right: Speaking with Integrated Custom Question Input */}
-        <SpeakingHubCard
-          title="Speaking"
-          description="Practice your speaking skills for the IELTS exam."
-          href="/student/speaking-practice"
-        />
+              {/* Integrated Pill Capsule Button: Free Plan / Upgrade to Premium */}
+              <Link
+                href="/student/premium"
+                className={cn(
+                  "group relative inline-flex items-center gap-1.5 rounded-full px-6 sm:px-8 py-2 sm:py-2.5 text-xs sm:text-sm transition-all duration-300 cursor-pointer outline-none",
+                  isDark
+                    ? "border border-amber-400/45 bg-slate-950/35 backdrop-blur-md shadow-[0_0_16px_rgba(245,158,11,0.22),inset_0_1px_1px_rgba(255,255,255,0.18)] hover:border-amber-300 hover:shadow-[0_0_24px_rgba(245,158,11,0.4)]"
+                    : "border border-slate-300 bg-slate-100 text-slate-800 hover:bg-slate-200"
+                )}
+              >
+                <span className={isDark ? "text-[#fef3c7]/90 font-medium" : "text-slate-600 font-medium"}>
+                  {data.premium.isPremium ? "Premium Plan /" : "Free Plan /"}
+                </span>
+                <span className="text-amber-400 font-bold group-hover:text-amber-300 transition-colors drop-shadow-[0_0_8px_rgba(245,158,11,0.6)]">
+                  {data.premium.isPremium ? "Manage Subscription" : "Upgrade to Premium"}
+                </span>
+              </Link>
+            </div>
+          </div>
+
+          {/* 3. RIGHT: "Writing" Card */}
+          <div className="lg:col-span-3">
+            <Link
+              href="/student/writing"
+              className={cn(
+                "group relative block rounded-[28px] p-6 sm:p-7 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden",
+                isDark
+                  ? "border border-amber-400/40 bg-slate-950/20 shadow-[0_12px_45px_-5px_rgba(0,0,0,0.65),0_0_24px_rgba(245,158,11,0.2),inset_0_1px_1px_rgba(255,255,255,0.18)] hover:border-amber-300 hover:shadow-[0_0_32px_rgba(245,158,11,0.35)]"
+                  : "border border-slate-300/70 bg-[#f8fafc]/90 shadow-md text-slate-800"
+              )}
+            >
+              {/* Top glass reflection and bottom glowing gold rim */}
+              <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/90 to-transparent shadow-[0_0_14px_rgba(251,191,36,0.85)]" />
+
+              <h2
+                className={cn(
+                  "font-display text-2xl sm:text-3xl font-bold tracking-tight mb-1.5 transition-colors",
+                  isDark
+                    ? "text-[#fef08a] drop-shadow-[0_2px_10px_rgba(254,240,138,0.5)]"
+                    : "text-slate-900 font-bold"
+                )}
+              >
+                Writing
+              </h2>
+              <p
+                className={cn(
+                  "text-sm sm:text-base font-medium",
+                  isDark
+                    ? "text-[#fef3c7]/85 drop-shadow-[0_1px_6px_rgba(254,240,138,0.3)]"
+                    : "text-slate-600"
+                )}
+              >
+                Feedback: {writingFeedback}
+              </p>
+            </Link>
+          </div>
+
+        </div>
+
+        {/* BOTTOM ROW: Leveled Articles (Left) | Speaking with Custom Input (Right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-center">
+          
+          {/* 4. LOWER LEFT: "Leveled Articles" Card */}
+          <div className="lg:col-span-5">
+            <Link
+              href="/student/articles"
+              className={cn(
+                "group relative block rounded-[28px] p-6 sm:p-7 backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden",
+                isDark
+                  ? "border border-amber-400/40 bg-slate-950/20 shadow-[0_12px_45px_-5px_rgba(0,0,0,0.65),0_0_24px_rgba(245,158,11,0.2),inset_0_1px_1px_rgba(255,255,255,0.18)] hover:border-amber-300 hover:shadow-[0_0_32px_rgba(245,158,11,0.35)]"
+                  : "border border-slate-300/70 bg-[#f8fafc]/90 shadow-md text-slate-800"
+              )}
+            >
+              {/* Top glass reflection and bottom glowing gold rim */}
+              <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/90 to-transparent shadow-[0_0_14px_rgba(251,191,36,0.85)]" />
+
+              <h2
+                className={cn(
+                  "font-display text-2xl sm:text-3xl font-bold tracking-tight mb-1.5 transition-colors",
+                  isDark
+                    ? "text-[#fef08a] drop-shadow-[0_2px_10px_rgba(254,240,138,0.5)]"
+                    : "text-slate-900 font-bold"
+                )}
+              >
+                Leveled Articles
+              </h2>
+              <p
+                className={cn(
+                  "text-sm sm:text-base font-medium",
+                  isDark
+                    ? "text-[#fef3c7]/85 drop-shadow-[0_1px_6px_rgba(254,240,138,0.3)]"
+                    : "text-slate-600"
+                )}
+              >
+                Level: {articlesLevel}
+              </p>
+            </Link>
+          </div>
+
+          {/* 5. LOWER RIGHT: "Speaking" Wide Card with Integrated Input & Glowing Mic Button */}
+          <div className="lg:col-span-7">
+            <div
+              className={cn(
+                "relative rounded-[28px] p-6 sm:p-7 backdrop-blur-2xl transition-all duration-300 overflow-hidden",
+                isDark
+                  ? "border border-amber-400/40 bg-slate-950/20 shadow-[0_12px_45px_-5px_rgba(0,0,0,0.65),0_0_26px_rgba(245,158,11,0.22),inset_0_1px_1px_rgba(255,255,255,0.18)]"
+                  : "border border-slate-300/70 bg-[#f8fafc]/90 shadow-md text-slate-800"
+              )}
+            >
+              {/* Top glass reflection and bottom glowing gold rim */}
+              <div className="pointer-events-none absolute inset-x-8 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-8 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/90 to-transparent shadow-[0_0_14px_rgba(251,191,36,0.85)]" />
+
+              {/* Title & Progress */}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2
+                    className={cn(
+                      "font-display text-2xl sm:text-3xl font-bold tracking-tight mb-1 transition-colors",
+                      isDark
+                        ? "text-[#fef08a] drop-shadow-[0_2px_10px_rgba(254,240,138,0.5)]"
+                        : "text-slate-900 font-bold"
+                    )}
+                  >
+                    Speaking
+                  </h2>
+                  <p
+                    className={cn(
+                      "text-sm sm:text-base font-medium",
+                      isDark
+                        ? "text-[#fef3c7]/85 drop-shadow-[0_1px_6px_rgba(254,240,138,0.3)]"
+                        : "text-slate-600"
+                    )}
+                  >
+                    Progress: {speakingProgress}
+                  </p>
+                </div>
+
+                <Link
+                  href="/student/speaking-practice"
+                  className={cn(
+                    "hidden sm:flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-full border transition-all duration-200",
+                    isDark
+                      ? "border-amber-400/40 text-amber-300 hover:bg-amber-400/15"
+                      : "border-slate-300 text-slate-700 hover:bg-slate-100"
+                  )}
+                >
+                  <span>Practice Library</span>
+                  <ArrowRight className="size-3" />
+                </Link>
+              </div>
+
+              {/* Integrated Custom IELTS Speaking Question Input Field */}
+              <form
+                onSubmit={handleSpeakingSubmit}
+                className={cn(
+                  "relative flex items-center gap-3 rounded-2xl p-2 sm:p-2.5 backdrop-blur-md transition-all duration-300",
+                  isDark
+                    ? "border border-amber-400/40 bg-slate-950/35 shadow-[inset_0_2px_10px_rgba(0,0,0,0.6)]"
+                    : "border border-slate-300 bg-slate-100/90"
+                )}
+              >
+                <div className="relative flex-1 px-3 py-1">
+                  <input
+                    type="text"
+                    value={customQuestion}
+                    onChange={(e) => setCustomQuestion(e.target.value)}
+                    placeholder="Enter Your Custom IELTS Speaking Question Here:"
+                    className={cn(
+                      "w-full bg-transparent text-sm sm:text-base font-normal outline-none transition-colors",
+                      isDark
+                        ? "text-[#fef3c7] placeholder:text-[#fef3c7]/65"
+                        : "text-slate-900 placeholder:text-slate-400"
+                    )}
+                  />
+                  {/* Blinking cursor simulation if input is empty */}
+                  {!customQuestion && isDark && (
+                    <span
+                      className={cn(
+                        "pointer-events-none absolute top-1 right-4 text-amber-300 font-bold",
+                        cursorVisible ? "opacity-100" : "opacity-0"
+                      )}
+                    >
+                      |
+                    </span>
+                  )}
+                </div>
+
+                {/* Golden Circular Microphone Button Surrounded by Concentric Particle Glow Ring */}
+                <div className="relative shrink-0 flex items-center justify-center p-1">
+                  {/* Concentric Golden Sparkling Ring Halo */}
+                  <div className="absolute inset-0 -m-1.5 rounded-full border border-amber-400/40 animate-spin opacity-75" style={{ animationDuration: "12s" }}>
+                    <span className="absolute -top-1 left-1/2 size-1.5 rounded-full bg-white shadow-[0_0_8px_#fff]" />
+                    <span className="absolute -bottom-1 left-1/4 size-1 rounded-full bg-amber-300 shadow-[0_0_6px_#fde047]" />
+                  </div>
+                  <div className="absolute inset-0 -m-3 rounded-full border border-dashed border-amber-300/30 animate-spin opacity-60" style={{ animationDuration: "20s", animationDirection: "reverse" }} />
+                  <div className="absolute inset-0 rounded-full bg-amber-400/20 blur-md animate-pulse" />
+
+                  {/* Circular Golden Button */}
+                  <button
+                    type="submit"
+                    title="Start Speaking Practice"
+                    className={cn(
+                      "relative flex size-12 sm:size-14 items-center justify-center rounded-full border-2 transition-all duration-300 outline-none cursor-pointer active:scale-95",
+                      isDark
+                        ? "border-[#fef08a] bg-gradient-to-br from-[#fef08a] via-[#f59e0b] to-[#d97706] text-slate-950 shadow-[0_0_24px_rgba(245,158,11,0.85)] hover:shadow-[0_0_36px_rgba(245,158,11,1)] hover:scale-105"
+                        : "border-amber-500 bg-amber-500 text-white shadow-md hover:bg-amber-600"
+                    )}
+                  >
+                    <Mic className="size-6 sm:size-7 drop-shadow-sm text-slate-950" strokeWidth={2.2} />
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+        </div>
+
       </div>
 
-      {/* Secondary widgets */}
-      <ReadingStatsWidget stats={data.readingStats} />
-      <SpeakingPracticeWidget stats={data.speakingStats} />
-      <WhatsNewSection items={data.whatsNew} />
+      {/* ========================================================================= */}
+      {/* SECONDARY DASHBOARD DATA & WIDGETS (Preserved below the main showcase)     */}
+      {/* ========================================================================= */}
+      <div className="w-full max-w-7xl mx-auto space-y-8 pt-6 border-t border-amber-500/15">
+        <MobileDashboardWidgets
+          targetBand={data.success.targetBand}
+          goalProgressPercent={data.success.goalProgressPercent}
+          isPremium={data.subscription.isPremium}
+          premiumDaysRemaining={data.subscription.isPremium ? data.subscription.daysRemaining : null}
+          streakCount={data.streakCount}
+          weeklyActivity={data.weeklyActivity}
+        />
+        <ReadingStatsWidget stats={data.readingStats} />
+        <SpeakingPracticeWidget stats={data.speakingStats} />
+        <WhatsNewSection items={data.whatsNew} />
+      </div>
     </div>
   );
 }

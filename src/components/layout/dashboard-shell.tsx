@@ -39,9 +39,9 @@ export function DashboardShell({
     return (
       <div
         className={cn(
-          "relative min-h-svh w-full overflow-x-hidden transition-colors duration-500",
+          "relative isolate min-h-svh w-full overflow-x-hidden transition-colors duration-500",
           isDark
-            ? "anti-gravity-space-theme dark dark-mode text-amber-100/90 selection:bg-amber-500/25 selection:text-amber-100"
+            ? "anti-gravity-space-theme dark dark-mode bg-transparent text-amber-100/90 selection:bg-amber-500/25 selection:text-amber-100"
             : "light light-mode text-slate-800 selection:bg-amber-500/20 selection:text-amber-900"
         )}
       >
