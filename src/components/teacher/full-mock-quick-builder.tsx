@@ -177,7 +177,15 @@ export function FullMockQuickBuilder() {
   async function uploadPdf(file: File): Promise<string> {
     const contentType = file.type || "application/pdf";
     const prepared = await prepareTestImportPdfUploadAction({ fileName: file.name, fileSize: file.size, contentType });
-    if (!prepared.success) throw new Error(prepared.error);
+    if (!prepared.success) {
+      console.error("[FullMockQuickBuilder: uploadPdf] prepareTestImportPdfUploadAction failed:", {
+        message: prepared.details?.message ?? prepared.error,
+        status: prepared.details?.status ?? null,
+        details: prepared.details?.details ?? null,
+        raw: prepared,
+      });
+      throw new Error(prepared.error);
+    }
     await uploadToSignedUrl(TEST_IMPORT_PDF_BUCKET, prepared.path, prepared.token, file, contentType);
     return prepared.path;
   }

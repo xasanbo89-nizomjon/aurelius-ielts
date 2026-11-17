@@ -4,6 +4,46 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 let cachedClient: SupabaseClient | null = null;
 
 /**
+ * Resolves the Supabase URL across standard environment variable names:
+ * NEXT_PUBLIC_SUPABASE_URL (Next.js client/server), VITE_SUPABASE_URL (Vite conventions),
+ * or SUPABASE_URL (generic).
+ */
+export function getSupabaseUrl(): string {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    process.env.SUPABASE_URL;
+
+  if (!url) {
+    throw new Error(
+      "Supabase Storage is not configured. Set NEXT_PUBLIC_SUPABASE_URL (or VITE_SUPABASE_URL / SUPABASE_URL)."
+    );
+  }
+  return url.replace(/\/+$/, "");
+}
+
+/**
+ * Resolves the Supabase API key across standard environment variable names:
+ * SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SERVICE_KEY, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+ * or VITE_SUPABASE_ANON_KEY.
+ */
+export function getSupabaseServiceRoleKey(): string {
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY;
+
+  if (!serviceRoleKey) {
+    throw new Error(
+      "Supabase Storage key is not configured. Set SUPABASE_SERVICE_ROLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY / VITE_SUPABASE_ANON_KEY)."
+    );
+  }
+  return serviceRoleKey;
+}
+
+/**
  * Lazily creates the admin client on first use (not at module load), so
  * importing this file never crashes pages that don't actually upload
  * anything. Uses the service role key — required for server-side uploads,
@@ -16,15 +56,29 @@ let cachedClient: SupabaseClient | null = null;
 function getSupabaseAdmin(): SupabaseClient {
   if (cachedClient) return cachedClient;
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceRoleKey) {
-    throw new Error("Supabase Storage is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.");
-  }
+  const url = getSupabaseUrl();
+  const serviceRoleKey = getSupabaseServiceRoleKey();
 
   cachedClient = createClient(url, serviceRoleKey, { auth: { persistSession: false } });
   return cachedClient;
+}
+
+type ErrorLike = {
+  name?: string;
+  message?: string;
+  status?: number | string;
+  statusCode?: number | string;
+  details?: unknown;
+  error_description?: string;
+  cause?: unknown;
+  stack?: string;
+};
+
+function parseErrorProperties(err: unknown): ErrorLike {
+  if (err && typeof err === "object") {
+    return err as ErrorLike;
+  }
+  return { message: String(err) };
 }
 
 /**
@@ -33,10 +87,30 @@ function getSupabaseAdmin(): SupabaseClient {
  * path (bucket already exists) never pays this extra round-trip.
  */
 async function ensureBucketExists(client: SupabaseClient, bucket: string): Promise<void> {
-  const { error } = await client.storage.createBucket(bucket, { public: true });
-  // Ignore "already exists" — a benign race if two uploads hit this at once.
-  if (error && !/already exists/i.test(error.message)) {
-    throw error;
+  try {
+    const { error } = await client.storage.createBucket(bucket, { public: true });
+    // Ignore "already exists" — a benign race if two uploads hit this at once.
+    if (error && !/already exists/i.test(error.message)) {
+      const parsed = parseErrorProperties(error);
+      console.error("[Supabase Storage: ensureBucketExists] Failed to create bucket:", {
+        bucket,
+        message: error.message,
+        status: parsed.status ?? parsed.statusCode,
+        details: parsed.details,
+      });
+      throw error;
+    }
+  } catch (err: unknown) {
+    const parsed = parseErrorProperties(err);
+    if (parsed.message && /already exists/i.test(parsed.message)) return;
+    console.error("[Supabase Storage: ensureBucketExists] Network/API exception:", {
+      bucket,
+      message: parsed.message,
+      status: parsed.status ?? parsed.statusCode,
+      details: parsed.details,
+      cause: parsed.cause,
+    });
+    throw err;
   }
 }
 
@@ -46,8 +120,7 @@ async function ensureBucketExists(client: SupabaseClient, bucket: string): Promi
  * object even exists (e.g. right after minting a signed upload URL for it).
  */
 export function getPublicStorageUrl(bucket: string, objectPath: string): string {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url) throw new Error("Supabase Storage is not configured. Set NEXT_PUBLIC_SUPABASE_URL.");
+  const url = getSupabaseUrl();
   return `${url}/storage/v1/object/public/${bucket}/${objectPath}`;
 }
 
@@ -67,18 +140,66 @@ export type SignedUpload = { signedUrl: string; token: string; path: string; pub
 export async function createSignedUploadUrl(bucket: string, objectPath: string): Promise<SignedUpload> {
   const client = getSupabaseAdmin();
 
-  let { data, error } = await client.storage.from(bucket).createSignedUploadUrl(objectPath);
+  let data: { signedUrl: string; token: string; path: string } | null = null;
+  let error: unknown = null;
 
+  try {
+    const res = await client.storage.from(bucket).createSignedUploadUrl(objectPath);
+    data = res.data;
+    error = res.error;
+  } catch (err: unknown) {
+    const parsed = parseErrorProperties(err);
+    console.error("[Supabase Storage: createSignedUploadUrl] Fetch/Network error:", {
+      message: parsed.message,
+      status: parsed.status ?? parsed.statusCode,
+      details: parsed.details ?? parsed.error_description,
+      cause: parsed.cause,
+      stack: parsed.stack,
+      bucket,
+      objectPath,
+      supabaseUrl: getSupabaseUrl(),
+    });
+    const causeObj = parsed.cause && typeof parsed.cause === "object" ? (parsed.cause as { message?: string }) : null;
+    const causeMsg = causeObj?.message || (parsed.cause ? String(parsed.cause) : "");
+    const extra = causeMsg ? ` (${causeMsg})` : "";
+    throw new Error(`Could not prepare Supabase Storage upload: ${parsed.message ?? "fetch failed"}${extra}`);
+  }
+
+  const errProperties = parseErrorProperties(error);
   // createSignedUploadUrl's missing-bucket error reads "The related
   // resource does not exist" — different wording than upload()'s "Bucket
   // not found" below, confirmed directly against the real API response.
-  if (error && /bucket not found|related resource does not exist/i.test(error.message)) {
-    await ensureBucketExists(client, bucket);
-    ({ data, error } = await client.storage.from(bucket).createSignedUploadUrl(objectPath));
+  if (errProperties.message && /bucket not found|related resource does not exist/i.test(errProperties.message)) {
+    try {
+      await ensureBucketExists(client, bucket);
+      const retryRes = await client.storage.from(bucket).createSignedUploadUrl(objectPath);
+      data = retryRes.data;
+      error = retryRes.error;
+    } catch (retryErr: unknown) {
+      const parsedRetry = parseErrorProperties(retryErr);
+      console.error("[Supabase Storage: createSignedUploadUrl] Retry after bucket creation failed:", {
+        message: parsedRetry.message,
+        status: parsedRetry.status ?? parsedRetry.statusCode,
+        details: parsedRetry.details,
+        cause: parsedRetry.cause,
+        bucket,
+        objectPath,
+      });
+      throw retryErr;
+    }
   }
 
   if (error || !data) {
-    throw new Error(`Could not prepare Supabase Storage upload: ${error?.message ?? "unknown error"}`);
+    const finalErr = parseErrorProperties(error);
+    console.error("[Supabase Storage: createSignedUploadUrl] Supabase returned error:", {
+      message: finalErr.message,
+      status: finalErr.status ?? finalErr.statusCode,
+      details: finalErr.details ?? finalErr.error_description,
+      cause: finalErr.cause,
+      bucket,
+      objectPath,
+    });
+    throw new Error(`Could not prepare Supabase Storage upload: ${finalErr.message ?? "unknown error"}`);
   }
 
   return { signedUrl: data.signedUrl, token: data.token, path: objectPath, publicUrl: getPublicStorageUrl(bucket, objectPath) };
@@ -100,17 +221,53 @@ export async function uploadToSupabase(
 ): Promise<string> {
   const client = getSupabaseAdmin();
 
-  let { error: uploadError } = await client.storage
-    .from(bucket)
-    .upload(objectPath, buffer, { contentType, upsert: false });
+  let uploadError: unknown = null;
+  try {
+    const res = await client.storage
+      .from(bucket)
+      .upload(objectPath, buffer, { contentType, upsert: false });
+    uploadError = res.error;
+  } catch (err: unknown) {
+    const parsed = parseErrorProperties(err);
+    console.error("[Supabase Storage: uploadToSupabase] Fetch/Network error:", {
+      message: parsed.message,
+      status: parsed.status ?? parsed.statusCode,
+      details: parsed.details,
+      cause: parsed.cause,
+      bucket,
+      objectPath,
+    });
+    throw err;
+  }
 
-  if (uploadError && /bucket not found/i.test(uploadError.message)) {
+  const parsedUploadErr = parseErrorProperties(uploadError);
+  if (parsedUploadErr.message && /bucket not found/i.test(parsedUploadErr.message)) {
     await ensureBucketExists(client, bucket);
-    ({ error: uploadError } = await client.storage.from(bucket).upload(objectPath, buffer, { contentType, upsert: false }));
+    try {
+      const retryRes = await client.storage.from(bucket).upload(objectPath, buffer, { contentType, upsert: false });
+      uploadError = retryRes.error;
+    } catch (retryErr: unknown) {
+      const parsedRetry = parseErrorProperties(retryErr);
+      console.error("[Supabase Storage: uploadToSupabase] Retry upload failed:", {
+        message: parsedRetry.message,
+        status: parsedRetry.status ?? parsedRetry.statusCode,
+        details: parsedRetry.details,
+        cause: parsedRetry.cause,
+      });
+      throw retryErr;
+    }
   }
 
   if (uploadError) {
-    throw new Error(`Supabase Storage upload failed: ${uploadError.message}`);
+    const finalErr = parseErrorProperties(uploadError);
+    console.error("[Supabase Storage: uploadToSupabase] Upload error response:", {
+      message: finalErr.message,
+      status: finalErr.status ?? finalErr.statusCode,
+      details: finalErr.details,
+      bucket,
+      objectPath,
+    });
+    throw new Error(`Supabase Storage upload failed: ${finalErr.message ?? "unknown error"}`);
   }
 
   const { data } = client.storage.from(bucket).getPublicUrl(objectPath);
@@ -160,12 +317,32 @@ export async function listBucketFolder(bucket: string, folder: string): Promise<
 export async function downloadFromSupabase(bucket: string, objectPath: string): Promise<Buffer> {
   const client = getSupabaseAdmin();
 
-  const { data, error } = await client.storage.from(bucket).download(objectPath);
-  if (error || !data) {
-    throw new Error(`Could not download the file from storage: ${error?.message ?? "unknown error"}`);
+  try {
+    const { data, error } = await client.storage.from(bucket).download(objectPath);
+    if (error || !data) {
+      const parsedErr = parseErrorProperties(error);
+      console.error("[Supabase Storage: downloadFromSupabase] Error downloading file:", {
+        bucket,
+        objectPath,
+        message: parsedErr.message,
+        status: parsedErr.status ?? parsedErr.statusCode,
+        details: parsedErr.details,
+      });
+      throw new Error(`Could not download the file from storage: ${parsedErr.message ?? "unknown error"}`);
+    }
+    return Buffer.from(await data.arrayBuffer());
+  } catch (err: unknown) {
+    const parsed = parseErrorProperties(err);
+    console.error("[Supabase Storage: downloadFromSupabase] Exception:", {
+      bucket,
+      objectPath,
+      message: parsed.message,
+      status: parsed.status ?? parsed.statusCode,
+      details: parsed.details,
+      cause: parsed.cause,
+    });
+    throw err;
   }
-
-  return Buffer.from(await data.arrayBuffer());
 }
 
 const privateBucketsReady = new Set<string>();

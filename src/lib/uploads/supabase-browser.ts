@@ -15,6 +15,30 @@ import {
 let cachedClient: SupabaseClient | null = null;
 
 /**
+ * Resolves Supabase URL and anon key from standard Next.js (NEXT_PUBLIC_*)
+ * and Vite (VITE_*) environment variables.
+ */
+export function getBrowserSupabaseConfig(): { url: string; anonKey: string } {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    process.env.SUPABASE_URL;
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    throw new UploadError(
+      "Supabase Storage is not configured. Set NEXT_PUBLIC_SUPABASE_URL (or VITE_SUPABASE_URL) and NEXT_PUBLIC_SUPABASE_ANON_KEY (or VITE_SUPABASE_ANON_KEY).",
+      "http",
+      0
+    );
+  }
+  return { url: url.replace(/\/+$/, ""), anonKey };
+}
+
+/**
  * The anon-key client, safe to run in the browser. The anon key itself grants
  * nothing on its own; per Supabase's docs a signed upload URL needs no bucket
  * RLS policy at all, since the token is the actual authorization.
@@ -22,12 +46,7 @@ let cachedClient: SupabaseClient | null = null;
 export function getSupabaseBrowserClient(): SupabaseClient {
   if (cachedClient) return cachedClient;
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    throw new Error("Supabase Storage is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
-  }
-
+  const { url, anonKey } = getBrowserSupabaseConfig();
   cachedClient = createClient(url, anonKey, { auth: { persistSession: false } });
   return cachedClient;
 }
@@ -157,11 +176,9 @@ const wait = (ms: number, signal: AbortSignal | undefined) =>
  * Whatever happens, it ends: resolved, or rejected with an `UploadError` whose message is one plain sentence.
  */
 export async function uploadToSignedUrl(bucket: string, path: string, token: string, file: File, contentType: string, options: UploadOptions = {}): Promise<void> {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!base || !anonKey) throw new UploadError("Supabase Storage is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.", "http", 0);
+  const { url: base, anonKey } = getBrowserSupabaseConfig();
 
-  const target = new URL(`${base.replace(/\/+$/, "")}/storage/v1/object/upload/sign/${bucket}/${path}`);
+  const target = new URL(`${base}/storage/v1/object/upload/sign/${bucket}/${path}`);
   target.searchParams.set("token", token);
   // The part keeps the file's own type; when the browser knows none (.m4a on some systems) the type chosen by the extension is used.
   const body = file.type ? file : new File([file], file.name, { type: contentType });
@@ -200,8 +217,26 @@ export async function uploadToSignedUrl(bucket: string, path: string, token: str
     // A try that failed after the storage service had already kept the file: the repeated PUT finds it there. The path is unique to this upload, so it is ours.
     if (attempt > 1 && result.kind === "http" && result.status === 409) return;
     lastError = describeUploadFailure(result.kind, result.status, result.serverMessage);
+    console.warn(`[uploadToSignedUrl] Attempt ${attempt}/${UPLOAD_ATTEMPTS} failed:`, {
+      bucket,
+      path,
+      kind: result.kind,
+      status: result.status,
+      serverMessage: result.serverMessage,
+      error: lastError,
+    });
     const retryable = result.kind !== "http" || isRetryableStatus(result.status);
-    if (!retryable || attempt === UPLOAD_ATTEMPTS) throw new UploadError(lastError, result.kind, result.status);
+    if (!retryable || attempt === UPLOAD_ATTEMPTS) {
+      console.error("[uploadToSignedUrl] Upload failed permanently:", {
+        bucket,
+        path,
+        kind: result.kind,
+        status: result.status,
+        serverMessage: result.serverMessage,
+        error: lastError,
+      });
+      throw new UploadError(lastError, result.kind, result.status);
+    }
   }
   throw new UploadError(describeUploadFailure("network"), "network");
 }

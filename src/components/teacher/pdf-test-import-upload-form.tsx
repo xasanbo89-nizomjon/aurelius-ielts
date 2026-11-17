@@ -51,6 +51,12 @@ export function PdfTestImportUploadForm() {
     const contentType = file.type || "application/pdf";
     const prepared = await prepareTestImportPdfUploadAction({ fileName: file.name, fileSize: file.size, contentType });
     if (!prepared.success) {
+      console.error("[PdfTestImportUploadForm] prepareTestImportPdfUploadAction failed:", {
+        message: prepared.details?.message ?? prepared.error,
+        status: prepared.details?.status ?? null,
+        details: prepared.details?.details ?? null,
+        raw: prepared,
+      });
       toast.error(prepared.error);
       setStage("idle");
       return;
@@ -58,7 +64,15 @@ export function PdfTestImportUploadForm() {
 
     try {
       await uploadToSignedUrl(TEST_IMPORT_PDF_BUCKET, prepared.path, prepared.token, file, contentType);
-    } catch (error) {
+    } catch (error: unknown) {
+      const err = error && typeof error === "object" ? (error as { message?: string; status?: number | string; details?: unknown; cause?: unknown; stack?: string }) : null;
+      console.error("[PdfTestImportUploadForm] uploadToSignedUrl failed:", {
+        message: err?.message ?? String(error),
+        status: err?.status ?? null,
+        details: err?.details ?? null,
+        cause: err?.cause,
+        stack: err?.stack,
+      });
       toast.error(error instanceof Error ? error.message : "Upload failed.");
       setStage("idle");
       return;
@@ -66,6 +80,7 @@ export function PdfTestImportUploadForm() {
 
     const created = await createImportedTestAction({ type, sourceFileName: file.name, pdfPath: prepared.path });
     if (!created.success || !created.importedTestId) {
+      console.error("[PdfTestImportUploadForm] createImportedTestAction failed:", created);
       toast.error(!created.success ? created.error : "Could not start the import.");
       setStage("idle");
       return;
@@ -74,6 +89,7 @@ export function PdfTestImportUploadForm() {
     setStage("analyzing");
     const analyzed = await analyzeImportedTestAction(created.importedTestId);
     if (!analyzed.success) {
+      console.error("[PdfTestImportUploadForm] analyzeImportedTestAction failed:", analyzed);
       toast.error(analyzed.error);
     }
     router.push(`/teacher/tests/import/${created.importedTestId}`);

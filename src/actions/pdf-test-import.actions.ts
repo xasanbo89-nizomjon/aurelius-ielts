@@ -22,7 +22,38 @@ function errorMessage(error: unknown, fallback: string): string {
   return friendlyErrorMessage(error, fallback);
 }
 
-export type PrepareUploadResult = (SignedUpload & { success: true }) | { success: false; error: string };
+function extractErrorDetails(error: unknown) {
+  const err =
+    error && typeof error === "object"
+      ? (error as {
+          message?: string;
+          status?: number | string;
+          statusCode?: number | string;
+          details?: unknown;
+          cause?: unknown;
+          stack?: string;
+        })
+      : null;
+  return {
+    message: err?.message ?? String(error),
+    status: err?.status ?? err?.statusCode ?? null,
+    details: (err?.details ? String(err.details) : null) ?? (err?.cause ? String(err.cause) : null),
+    cause: err?.cause,
+    stack: err?.stack,
+  };
+}
+
+export type PrepareUploadResult =
+  | (SignedUpload & { success: true })
+  | {
+      success: false;
+      error: string;
+      details?: {
+        message: string;
+        status: number | string | null;
+        details: string | null;
+      };
+    };
 
 export async function prepareTestImportPdfUploadAction(input: {
   fileName: string;
@@ -33,8 +64,18 @@ export async function prepareTestImportPdfUploadAction(input: {
     const { profile } = await requireTeacherProfile();
     const upload = await prepareTestImportPdfUpload(profile.id, { name: input.fileName, size: input.fileSize, type: input.contentType });
     return { success: true, ...upload };
-  } catch (error) {
-    return { success: false, error: errorMessage(error, "Could not prepare the PDF upload.") };
+  } catch (error: unknown) {
+    const errorDetails = extractErrorDetails(error);
+    console.error("[prepareTestImportPdfUploadAction] Error caught:", errorDetails);
+    return {
+      success: false,
+      error: errorMessage(error, "Could not prepare the PDF upload."),
+      details: {
+        message: errorDetails.message,
+        status: errorDetails.status,
+        details: errorDetails.details,
+      },
+    };
   }
 }
 
@@ -45,7 +86,8 @@ export async function createImportedTestAction(input: unknown): Promise<ActionRe
     const row = await pdfImport.createImportedTest(profile.id, parsed);
     revalidatePath("/teacher/tests/import");
     return { success: true, importedTestId: row.id };
-  } catch (error) {
+  } catch (error: unknown) {
+    console.error("[createImportedTestAction] Error caught:", extractErrorDetails(error));
     return { success: false, error: errorMessage(error, "Could not start the import.") };
   }
 }
@@ -56,7 +98,8 @@ export async function analyzeImportedTestAction(importedTestId: string): Promise
     await pdfImport.analyzeImportedTest(importedTestId, profile.id);
     revalidatePath(`/teacher/tests/import/${importedTestId}`);
     return { success: true };
-  } catch (error) {
+  } catch (error: unknown) {
+    console.error("[analyzeImportedTestAction] Error caught:", extractErrorDetails(error));
     return { success: false, error: errorMessage(error, "Could not analyze this PDF.") };
   }
 }

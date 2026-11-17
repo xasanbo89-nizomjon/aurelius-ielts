@@ -22,11 +22,9 @@ import { clearSessionAction } from "@/actions/session.actions";
 import { cn } from "@/lib/utils";
 
 export function FloatingStudentNavbar({
-  navItems,
   user,
-  secondaryNavItems,
 }: {
-  navItems: NavItem[];
+  navItems?: NavItem[];
   user: { name?: string | null; email?: string | null; image?: string | null };
   streakCount?: number;
   isPremium?: boolean;
