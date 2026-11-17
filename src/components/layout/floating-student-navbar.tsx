@@ -155,18 +155,6 @@ export function FloatingStudentNavbar({
                     {displayName} - Student
                   </span>
                 </div>
-
-                {/* 3. Floating 3D Royal Imperial Crown on the Top-Right Corner */}
-                <div
-                  className="absolute -top-6 -right-5 pointer-events-none w-16 h-16 sm:w-18 sm:h-18 z-30 transition-transform duration-300 group-hover:scale-105 group-hover:rotate-[12deg] rotate-[8deg]"
-                  aria-hidden="true"
-                >
-                  <img
-                    src="/images/luxury-royal-crown.png?v=2"
-                    alt="Imperial Gold Crown"
-                    className="size-full object-contain drop-shadow-sm"
-                  />
-                </div>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
