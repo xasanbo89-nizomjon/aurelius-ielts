@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -19,7 +18,6 @@ import { Separator } from "@/components/ui/separator";
 import { GoogleButton } from "@/components/auth/google-button";
 
 export function RegisterForm() {
-  const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
   const {
@@ -42,9 +40,15 @@ export function RegisterForm() {
         return;
       }
 
-      router.push(result.role === "TEACHER" ? "/teacher/dashboard" : "/student/dashboard");
-      router.refresh();
+      try {
+        localStorage.setItem("aurelius_session_active", "true");
+        localStorage.setItem("aurelius_user_role", result.role || "STUDENT");
+      } catch {}
+
+      const targetUrl = result.role === "TEACHER" ? "/teacher/dashboard" : "/student/dashboard";
+      window.location.href = targetUrl;
     } catch (error) {
+      console.warn("[RegisterForm Error]", error);
       toast.error(firebaseAuthErrorMessage(error));
       setSubmitting(false);
     }

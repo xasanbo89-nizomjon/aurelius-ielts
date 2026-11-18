@@ -51,7 +51,11 @@ export async function establishSessionAction(idToken: string): Promise<Establish
     });
 
     return { success: true, hasProfile: !!user, role: user?.role ?? null };
-  } catch (error) {
+  } catch (error: unknown) {
+    console.error("[establishSessionAction] Failed to verify token or establish session cookie:", {
+      message: (error as Error)?.message ?? String(error),
+      error,
+    });
     return { success: false, error: friendlyError(error) };
   }
 }

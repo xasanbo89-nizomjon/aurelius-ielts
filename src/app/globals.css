@@ -465,4 +465,29 @@ html.light {
     border: 1px solid rgba(224, 231, 255, 0.7);
     box-shadow: 0 12px 35px -8px rgba(30, 64, 175, 0.08), inset 0 1px 0 0 rgba(255, 255, 255, 0.8);
   }
+
+  /* ---------------------------------------------------------------------- */
+  /* Mobile Hardware Acceleration & Instant Touch ("Bez Otkaz" Performance) */
+  /* ---------------------------------------------------------------------- */
+  html, body {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-overflow-scrolling: touch;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  button, a, input, select, textarea, [role="button"] {
+    touch-action: manipulation;
+  }
+
+  @media (max-width: 640px) {
+    .nebula-glass {
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .sky-glass {
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+  }
 }

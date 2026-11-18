@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 
 export function FloatingStudentNavbar({
   user,
+  streakCount = 0,
 }: {
   navItems?: NavItem[];
   user: { name?: string | null; email?: string | null; image?: string | null };
@@ -119,38 +120,53 @@ export function FloatingStudentNavbar({
                 )}
                 aria-label={`Student account: ${displayName}`}
               >
-                {/* 1. Purple/Magenta Plasma Flame */}
-                <div className="relative flex size-8 shrink-0 items-center justify-center">
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="size-7 drop-shadow-sm"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <defs>
-                      <linearGradient id="purpleFlame" x1="0%" y1="100%" x2="50%" y2="0%">
-                        <stop offset="0%" stopColor="#7c3aed" />
-                        <stop offset="45%" stopColor="#d946ef" />
-                        <stop offset="80%" stopColor="#f0abfc" />
-                        <stop offset="100%" stopColor="#ffffff" />
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d="M12 2C10.5 4.5 9 6.5 9 9C9 10.5 9.8 11.8 11 12.5C9.5 12 7 13.5 7 16C7 19.3 9.7 22 13 22C16.3 22 19 19.3 19 16C19 12.5 15.5 8 15.5 8C15.5 8 14.5 10 13.5 10C12.5 10 11.5 8.5 12 6C12.3 4.5 12 3 12 2Z"
-                      fill="url(#purpleFlame)"
-                    />
-                    <path
-                      d="M12.5 14C11.5 15 11 16 11 17C11 18.1 11.9 19 13 19C14.1 19 15 18.1 15 17C15 15.5 13.8 14.5 12.5 14Z"
-                      fill="#ffffff"
-                      opacity="0.9"
-                    />
-                  </svg>
+                {/* 1. Purple/Magenta Plasma Flame + Streak Counter Badge */}
+                <div className="relative flex items-center gap-2 shrink-0">
+                  <div className="relative flex size-8 shrink-0 items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="size-7 drop-shadow-sm"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <defs>
+                        <linearGradient id="purpleFlame" x1="0%" y1="100%" x2="50%" y2="0%">
+                          <stop offset="0%" stopColor="#7c3aed" />
+                          <stop offset="45%" stopColor="#d946ef" />
+                          <stop offset="80%" stopColor="#f0abfc" />
+                          <stop offset="100%" stopColor="#ffffff" />
+                        </linearGradient>
+                      </defs>
+                      <path
+                        d="M12 2C10.5 4.5 9 6.5 9 9C9 10.5 9.8 11.8 11 12.5C9.5 12 7 13.5 7 16C7 19.3 9.7 22 13 22C16.3 22 19 19.3 19 16C19 12.5 15.5 8 15.5 8C15.5 8 14.5 10 13.5 10C12.5 10 11.5 8.5 12 6C12.3 4.5 12 3 12 2Z"
+                        fill="url(#purpleFlame)"
+                      />
+                      <path
+                        d="M12.5 14C11.5 15 11 16 11 17C11 18.1 11.9 19 13 19C14.1 19 15 18.1 15 17C15 15.5 13.8 14.5 12.5 14Z"
+                        fill="#ffffff"
+                        opacity="0.9"
+                      />
+                    </svg>
+                  </div>
+
+                  {/* Active Streak Days Counter Badge (e.g. 5 days / 🔥 5) */}
+                  <div className="flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-0.5 border border-purple-200/90 shadow-xs">
+                    <span className="font-display text-xs sm:text-sm font-bold text-purple-700">
+                      {streakCount}
+                    </span>
+                    <span className="text-[10px] sm:text-xs font-semibold text-purple-600/90 uppercase tracking-wider">
+                      {streakCount === 1 ? "day" : "days"}
+                    </span>
+                  </div>
                 </div>
 
-                {/* 2. Text: "Xasan - Student" */}
-                <div className="flex items-center text-left">
+                {/* 2. Text: "Xasan - Student" + Streak Subtitle */}
+                <div className="flex flex-col text-left">
                   <span className="font-display text-sm sm:text-base font-semibold tracking-wide text-blue-950">
                     {displayName} - Student
+                  </span>
+                  <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 hidden sm:inline">
+                    {streakCount > 0 ? `🔥 ${streakCount} day streak active` : "Start daily streak"}
                   </span>
                 </div>
               </button>
@@ -196,6 +212,22 @@ export function FloatingStudentNavbar({
               : "border-slate-200 bg-white text-slate-900 shadow-xl"
           )}
         >
+          {/* User profile & active streak counter banner */}
+          <div className="flex items-center justify-between rounded-2xl bg-purple-50/90 border border-purple-200/90 p-3 mb-1">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">🔥</span>
+              <div className="flex flex-col text-left">
+                <span className="font-display text-xs font-semibold text-blue-950">{displayName} - Student</span>
+                <span className="text-[11px] font-medium text-purple-700">
+                  {streakCount > 0 ? `${streakCount} ${streakCount === 1 ? "day" : "days"} streak active` : "Start daily streak"}
+                </span>
+              </div>
+            </div>
+            <span className="rounded-full bg-purple-600 px-2.5 py-1 text-xs font-bold text-white shadow-xs">
+              {streakCount} {streakCount === 1 ? "day" : "days"}
+            </span>
+          </div>
+
           {[
             { label: "Home", href: "/student/dashboard" },
             { label: "Speaking Practice", href: "/student/speaking-practice" },

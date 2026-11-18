@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -20,7 +19,6 @@ import { GoogleButton } from "@/components/auth/google-button";
 import { Separator } from "@/components/ui/separator";
 
 export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
-  const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
   const {
@@ -42,14 +40,18 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
         return;
       }
 
-      if (!result.hasProfile) {
-        router.push("/onboarding");
-        return;
-      }
+      try {
+        localStorage.setItem("aurelius_session_active", "true");
+        localStorage.setItem("aurelius_user_role", result.role || "STUDENT");
+      } catch {}
 
-      router.push(callbackUrl || (result.role === "TEACHER" ? "/teacher/dashboard" : "/student/dashboard"));
-      router.refresh();
+      const targetUrl = !result.hasProfile
+        ? "/onboarding"
+        : callbackUrl || (result.role === "TEACHER" ? "/teacher/dashboard" : "/student/dashboard");
+
+      window.location.href = targetUrl;
     } catch (error) {
+      console.warn("[LoginForm Error]", error);
       toast.error(firebaseAuthErrorMessage(error));
       setSubmitting(false);
     }
