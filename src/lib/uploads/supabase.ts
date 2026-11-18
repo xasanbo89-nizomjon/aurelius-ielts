@@ -1,57 +1,59 @@
 import "server-only";
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let cachedClient: SupabaseClient | null = null;
 
 /**
  * Resolves the Supabase URL across standard environment variable names:
- * NEXT_PUBLIC_SUPABASE_URL (Next.js client/server), VITE_SUPABASE_URL (Vite conventions),
- * or SUPABASE_URL (generic).
+ * Prioritizes VITE_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_URL, and SUPABASE_URL.
  */
 export function getSupabaseUrl(): string {
   const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_URL;
 
   if (!url) {
     throw new Error(
-      "Supabase Storage is not configured. Set NEXT_PUBLIC_SUPABASE_URL (or VITE_SUPABASE_URL / SUPABASE_URL)."
+      "Supabase Storage is not configured. Set VITE_SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL / SUPABASE_URL)."
     );
   }
-  return url.replace(/\/+$/, "");
+  return url.trim().replace(/\/+$/, "");
 }
 
 /**
  * Resolves the Supabase API key across standard environment variable names:
- * SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SERVICE_KEY, NEXT_PUBLIC_SUPABASE_ANON_KEY,
- * or VITE_SUPABASE_ANON_KEY.
+ * SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SERVICE_KEY, VITE_SUPABASE_ANON_KEY,
+ * NEXT_PUBLIC_SUPABASE_ANON_KEY, or SUPABASE_ANON_KEY.
  */
 export function getSupabaseServiceRoleKey(): string {
+  // If VITE_SUPABASE_URL was explicitly set, check if matching VITE_SUPABASE_ANON_KEY exists
+  if (process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_ANON_KEY) {
+    return process.env.VITE_SUPABASE_ANON_KEY.trim();
+  }
+
   const serviceRoleKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.SUPABASE_ANON_KEY;
 
   if (!serviceRoleKey) {
     throw new Error(
-      "Supabase Storage key is not configured. Set SUPABASE_SERVICE_ROLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY / VITE_SUPABASE_ANON_KEY)."
+      "Supabase Storage key is not configured. Set VITE_SUPABASE_ANON_KEY (or SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_ANON_KEY)."
     );
   }
-  return serviceRoleKey;
+  return serviceRoleKey.trim();
 }
 
 /**
  * Lazily creates the admin client on first use (not at module load), so
  * importing this file never crashes pages that don't actually upload
- * anything. Uses the service role key — required for server-side uploads,
- * and bypasses Row Level Security entirely, which is what actually enforces
- * "teacher uploads only" here: every call site is a Server Action already
- * gated by requireTeacherProfile()/requireRole("TEACHER") before this module
- * is ever reached, and the service role key never touches the browser (only
- * the project URL is NEXT_PUBLIC_ — a project URL isn't a secret).
+ * anything.
  */
 function getSupabaseAdmin(): SupabaseClient {
   if (cachedClient) return cachedClient;
@@ -59,7 +61,15 @@ function getSupabaseAdmin(): SupabaseClient {
   const url = getSupabaseUrl();
   const serviceRoleKey = getSupabaseServiceRoleKey();
 
-  cachedClient = createClient(url, serviceRoleKey, { auth: { persistSession: false } });
+  cachedClient = createClient(url, serviceRoleKey, {
+    auth: { persistSession: false },
+    global: {
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+    },
+  });
   return cachedClient;
 }
 
@@ -75,10 +85,55 @@ type ErrorLike = {
 };
 
 function parseErrorProperties(err: unknown): ErrorLike {
-  if (err && typeof err === "object") {
-    return err as ErrorLike;
+  if (!err || typeof err !== "object") {
+    return { message: String(err) };
   }
-  return { message: String(err) };
+
+  const obj = err as Record<string, unknown>;
+  const original = (obj.originalError && typeof obj.originalError === "object" ? obj.originalError : null) as Record<string, unknown> | null;
+  const cause = (obj.cause ?? original?.cause ?? original) as Record<string, unknown> | undefined;
+
+  let causeMsg = "";
+  if (cause && typeof cause === "object") {
+    causeMsg = ((cause.message as string) || (cause.code as string) || (cause.hostname ? `host: ${cause.hostname}` : "")) as string;
+  } else if (cause) {
+    causeMsg = String(cause);
+  }
+
+  const status = (obj.status ?? obj.statusCode ?? original?.status ?? original?.statusCode ?? null) as number | string | null;
+  const details = (obj.details ?? obj.error_description ?? original?.details ?? (causeMsg || null)) as unknown;
+
+  return {
+    name: (obj.name as string) || (original?.name as string) || "Error",
+    message: (obj.message as string) || (original?.message as string) || "Unknown error",
+    status: status ?? undefined,
+    statusCode: status ?? undefined,
+    details,
+    error_description: (obj.error_description as string) || undefined,
+    cause: cause ?? undefined,
+    stack: (obj.stack as string) || (original?.stack as string) || undefined,
+  };
+}
+
+function getLocalCacheFilePath(bucket: string, objectPath: string): string {
+  const sanitizedPath = objectPath.replace(/\.\./g, "");
+  return path.join(os.tmpdir(), "aurelius-storage-cache", bucket, sanitizedPath);
+}
+
+export async function saveLocalFileCache(bucket: string, objectPath: string, buffer: Buffer): Promise<string> {
+  const targetPath = getLocalCacheFilePath(bucket, objectPath);
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.writeFile(targetPath, buffer);
+  return targetPath;
+}
+
+export async function getLocalFileCache(bucket: string, objectPath: string): Promise<Buffer | null> {
+  try {
+    const targetPath = getLocalCacheFilePath(bucket, objectPath);
+    return await fs.readFile(targetPath);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -162,7 +217,13 @@ export async function createSignedUploadUrl(bucket: string, objectPath: string):
     const causeObj = parsed.cause && typeof parsed.cause === "object" ? (parsed.cause as { message?: string }) : null;
     const causeMsg = causeObj?.message || (parsed.cause ? String(parsed.cause) : "");
     const extra = causeMsg ? ` (${causeMsg})` : "";
-    throw new Error(`Could not prepare Supabase Storage upload: ${parsed.message ?? "fetch failed"}${extra}`);
+    const customErr = new Error(`Could not prepare Supabase Storage upload: ${parsed.message ?? "fetch failed"}${extra}`);
+    Object.assign(customErr, {
+      status: parsed.status ?? null,
+      details: parsed.details ?? causeMsg ?? null,
+      cause: parsed.cause ?? null,
+    });
+    throw customErr;
   }
 
   const errProperties = parseErrorProperties(error);
@@ -191,15 +252,27 @@ export async function createSignedUploadUrl(bucket: string, objectPath: string):
 
   if (error || !data) {
     const finalErr = parseErrorProperties(error);
+    const causeObj = finalErr.cause && typeof finalErr.cause === "object" ? (finalErr.cause as { message?: string }) : null;
+    const causeMsg = causeObj?.message || (finalErr.cause ? String(finalErr.cause) : (finalErr.details ? String(finalErr.details) : ""));
+    const extra = causeMsg ? ` (${causeMsg})` : "";
+
     console.error("[Supabase Storage: createSignedUploadUrl] Supabase returned error:", {
       message: finalErr.message,
       status: finalErr.status ?? finalErr.statusCode,
-      details: finalErr.details ?? finalErr.error_description,
+      details: finalErr.details ?? finalErr.error_description ?? causeMsg,
       cause: finalErr.cause,
       bucket,
       objectPath,
+      supabaseUrl: getSupabaseUrl(),
     });
-    throw new Error(`Could not prepare Supabase Storage upload: ${finalErr.message ?? "unknown error"}`);
+
+    const customErr = new Error(`Could not prepare Supabase Storage upload: ${finalErr.message ?? "unknown error"}${extra}`);
+    Object.assign(customErr, {
+      status: finalErr.status ?? finalErr.statusCode ?? null,
+      details: finalErr.details ?? causeMsg ?? null,
+      cause: finalErr.cause ?? null,
+    });
+    throw customErr;
   }
 
   return { signedUrl: data.signedUrl, token: data.token, path: objectPath, publicUrl: getPublicStorageUrl(bucket, objectPath) };
@@ -315,6 +388,12 @@ export async function listBucketFolder(bucket: string, folder: string): Promise<
  * because pdf-parse needs the actual buffer, not a URL.
  */
 export async function downloadFromSupabase(bucket: string, objectPath: string): Promise<Buffer> {
+  // 1. Check local file cache first (instant response, zero network dependency)
+  const cached = await getLocalFileCache(bucket, objectPath);
+  if (cached && cached.length > 0) {
+    return cached;
+  }
+
   const client = getSupabaseAdmin();
 
   try {
@@ -330,8 +409,19 @@ export async function downloadFromSupabase(bucket: string, objectPath: string): 
       });
       throw new Error(`Could not download the file from storage: ${parsedErr.message ?? "unknown error"}`);
     }
-    return Buffer.from(await data.arrayBuffer());
+    const buf = Buffer.from(await data.arrayBuffer());
+    await saveLocalFileCache(bucket, objectPath, buf).catch(() => {});
+    return buf;
   } catch (err: unknown) {
+    // 2. If Supabase fails, check if the file was written to public/uploads
+    try {
+      const publicPath = path.join(process.cwd(), "public", "uploads", bucket, objectPath);
+      const publicBuf = await fs.readFile(publicPath);
+      if (publicBuf.length > 0) return publicBuf;
+    } catch {
+      // ignore
+    }
+
     const parsed = parseErrorProperties(err);
     console.error("[Supabase Storage: downloadFromSupabase] Exception:", {
       bucket,

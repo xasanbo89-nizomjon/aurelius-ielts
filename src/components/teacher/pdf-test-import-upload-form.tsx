@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { FileUp, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
-import { analyzeImportedTestAction, createImportedTestAction, prepareTestImportPdfUploadAction } from "@/actions/pdf-test-import.actions";
+import {
+  analyzeImportedTestAction,
+  createImportedTestAction,
+  directUploadTestImportPdfAction,
+  prepareTestImportPdfUploadAction,
+} from "@/actions/pdf-test-import.actions";
 import { DOCUMENT_INPUT_ACCEPT, MAX_DOCUMENT_FILE_SIZE_LABEL, validateDocumentFile } from "@/lib/uploads/document-constraints";
 import { uploadToSignedUrl } from "@/lib/uploads/supabase-browser";
 import { TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
@@ -50,15 +55,29 @@ export function PdfTestImportUploadForm() {
     setStage("uploading");
     const contentType = file.type || "application/pdf";
     const prepared = await prepareTestImportPdfUploadAction({ fileName: file.name, fileSize: file.size, contentType });
+
+    // If Supabase Storage signed URL fails (e.g. Supabase paused, network drop, fetch failed):
     if (!prepared.success) {
-      console.error("[PdfTestImportUploadForm] prepareTestImportPdfUploadAction failed:", {
+      console.warn("[PdfTestImportUploadForm] Supabase Storage signed upload unavailable, switching to direct upload:", {
         message: prepared.details?.message ?? prepared.error,
         status: prepared.details?.status ?? null,
         details: prepared.details?.details ?? null,
         raw: prepared,
       });
-      toast.error(prepared.error);
-      setStage("idle");
+
+      setStage("analyzing");
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", type);
+
+      const directResult = await directUploadTestImportPdfAction(formData);
+      if (!directResult.success || !directResult.importedTestId) {
+        toast.error(!directResult.success ? directResult.error : "Could not analyze this PDF.");
+        setStage("idle");
+        return;
+      }
+
+      router.push(`/teacher/tests/import/${directResult.importedTestId}`);
       return;
     }
 
@@ -66,15 +85,27 @@ export function PdfTestImportUploadForm() {
       await uploadToSignedUrl(TEST_IMPORT_PDF_BUCKET, prepared.path, prepared.token, file, contentType);
     } catch (error: unknown) {
       const err = error && typeof error === "object" ? (error as { message?: string; status?: number | string; details?: unknown; cause?: unknown; stack?: string }) : null;
-      console.error("[PdfTestImportUploadForm] uploadToSignedUrl failed:", {
+      console.warn("[PdfTestImportUploadForm] Signed upload failed, switching to direct upload:", {
         message: err?.message ?? String(error),
         status: err?.status ?? null,
         details: err?.details ?? null,
         cause: err?.cause,
         stack: err?.stack,
       });
-      toast.error(error instanceof Error ? error.message : "Upload failed.");
-      setStage("idle");
+
+      setStage("analyzing");
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", type);
+
+      const directResult = await directUploadTestImportPdfAction(formData);
+      if (!directResult.success || !directResult.importedTestId) {
+        toast.error(!directResult.success ? directResult.error : "Could not analyze this PDF.");
+        setStage("idle");
+        return;
+      }
+
+      router.push(`/teacher/tests/import/${directResult.importedTestId}`);
       return;
     }
 

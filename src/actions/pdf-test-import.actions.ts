@@ -1,10 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "crypto";
 
 import { requireTeacherProfile } from "@/lib/session";
 import * as pdfImport from "@/lib/pdf-test-import";
 import { prepareTestImportPdfUpload } from "@/lib/uploads/library-storage";
+import { validateDocumentFile } from "@/lib/uploads/document-constraints";
+import { TEST_IMPORT_PDF_BUCKET } from "@/lib/uploads/bucket-names";
+import { saveLocalFileCache, uploadToSupabase, type SignedUpload } from "@/lib/uploads/supabase";
 import {
   createImportedTestSchema,
   updateImportedTestSchema,
@@ -14,7 +18,6 @@ import {
   confirmImportSchema,
 } from "@/lib/validations/pdf-test-import";
 import { friendlyErrorMessage } from "@/lib/validation-error";
-import type { SignedUpload } from "@/lib/uploads/supabase";
 
 export type ActionResult = { success: true } | { success: false; error: string };
 
@@ -76,6 +79,51 @@ export async function prepareTestImportPdfUploadAction(input: {
         details: errorDetails.details,
       },
     };
+  }
+}
+
+export async function directUploadTestImportPdfAction(formData: FormData): Promise<ActionResult & { importedTestId?: string }> {
+  try {
+    const { profile } = await requireTeacherProfile();
+    const file = formData.get("file");
+    const rawType = formData.get("type");
+    const type = rawType === "LISTENING" ? "LISTENING" : "READING";
+
+    if (!file || !(file instanceof File)) {
+      return { success: false, error: "Please choose a PDF file to upload." };
+    }
+
+    const validation = validateDocumentFile(file);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+
+    const objectPath = `${profile.id}/${randomUUID()}${validation.extension}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Save to local disk cache first so extraction can read it immediately
+    await saveLocalFileCache(TEST_IMPORT_PDF_BUCKET, objectPath, buffer);
+
+    // Attempt background sync to Supabase Storage if configured/reachable
+    uploadToSupabase(TEST_IMPORT_PDF_BUCKET, objectPath, buffer, file.type || "application/pdf").catch((err) => {
+      console.warn("[directUploadTestImportPdfAction] Background Supabase upload skipped:", (err as Error)?.message ?? err);
+    });
+
+    const row = await pdfImport.createImportedTest(profile.id, {
+      type,
+      sourceFileName: file.name,
+      pdfPath: objectPath,
+    });
+
+    await pdfImport.analyzeImportedTest(row.id, profile.id);
+
+    revalidatePath("/teacher/tests/import");
+    revalidatePath(`/teacher/tests/import/${row.id}`);
+    return { success: true, importedTestId: row.id };
+  } catch (error: unknown) {
+    const details = extractErrorDetails(error);
+    console.error("[directUploadTestImportPdfAction] Error caught:", details);
+    return { success: false, error: errorMessage(error, "Could not upload and analyze this PDF.") };
   }
 }
 
