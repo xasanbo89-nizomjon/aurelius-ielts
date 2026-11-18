@@ -78,14 +78,19 @@ export function SpeakingHubCard({
 
         {/* Title and Description */}
         <div className="space-y-1.5">
-          <h3
-            className={cn(
-              "font-display text-xl sm:text-2xl font-bold tracking-tight transition-colors",
-              isDark ? "text-slate-100" : "text-blue-950"
-            )}
-          >
-            {title}
-          </h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3
+              className={cn(
+                "font-display text-xl sm:text-2xl font-bold tracking-tight transition-colors",
+                isDark ? "text-slate-100" : "text-blue-950"
+              )}
+            >
+              {title}
+            </h3>
+            <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/60 flex items-center gap-1">
+              <Sparkles className="size-2.5" /> Live AI Examiner
+            </span>
+          </div>
           <p
             className={cn(
               "text-xs sm:text-sm leading-relaxed",

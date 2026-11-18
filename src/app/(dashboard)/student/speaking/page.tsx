@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Mic } from "lucide-react";
+import { Mic, Sparkles, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 import { requireStudentProfile } from "@/lib/session";
 import { hasActiveAccess } from "@/lib/subscription";
@@ -36,6 +37,27 @@ export default async function StudentSpeakingPage() {
         title="Speaking"
         description="Enter the code your teacher gave you, record your response, and get an instant AI band score. Your recording is never stored."
       />
+
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border border-blue-200/80 bg-gradient-to-r from-blue-50/80 via-sky-50/60 to-indigo-50/80 dark:from-slate-900/80 dark:via-blue-950/40 dark:to-slate-900/80 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="size-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+            <Sparkles className="size-5" />
+          </div>
+          <div>
+            <h3 className="font-display font-semibold text-sm text-blue-950 dark:text-blue-100">
+              AI Live Examiner Mode (GoPrep Style)
+            </h3>
+            <p className="text-xs text-blue-900/70 dark:text-blue-200/70">
+              Practice real-time spoken conversation with AI Examiner Sarah and get instant IELTS Band Scores.
+            </p>
+          </div>
+        </div>
+        <Button asChild size="sm" className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 gap-1.5 shadow">
+          <Link href="/student/speaking-practice">
+            Launch Live Examiner <ArrowRight className="size-3.5" />
+          </Link>
+        </Button>
+      </div>
 
       <SpeakingCodeEntry />
 

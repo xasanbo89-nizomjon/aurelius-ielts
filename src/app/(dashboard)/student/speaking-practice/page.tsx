@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PremiumLockScreen } from "@/components/dashboard/premium-lock-screen";
+import { AiLiveExaminerStudio } from "@/components/student/ai-live-examiner-studio";
 
 export const metadata: Metadata = { title: "Speaking Practice" };
 
@@ -57,7 +58,7 @@ export default async function SpeakingPracticePage({
     <>
       <PageHeader
         title="Speaking Practice"
-        description="Practice IELTS Speaking questions and get instant AI feedback — this is practice only, not an official score."
+        description="Live conversational IELTS Speaking practice with AI Examiner Sarah. Speak into your microphone and receive instant band evaluation."
       />
 
       {error === "no-content" && (
@@ -65,6 +66,9 @@ export default async function SpeakingPracticePage({
           Your teacher hasn&apos;t published any questions for that part yet. Try a different part, or check back soon.
         </div>
       )}
+
+      {/* AI Live Examiner Mode (GoPrep Style) */}
+      <AiLiveExaminerStudio />
 
       {/* Phase Q-B - the spoken practice with an AI assessment of the real recording sits above the typed practice below it. */}
       <Card className="border-accent/30 bg-accent/5" data-testid="record-card">
